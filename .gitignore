@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Data and generated outputs
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.bag
+*.db3
+*.pcd
+*.bin
+*.npy
+*.npz
+outputs/
+results/
+runs/
+logs/
+
+# Model checkpoints
+*.pt
+*.pth
+*.ckpt
+*.onnx
+checkpoints/
+weights/
