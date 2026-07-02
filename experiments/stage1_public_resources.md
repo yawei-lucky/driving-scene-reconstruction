@@ -4,7 +4,7 @@ Last updated: 2026-07-02
 
 ## 1. Execution Goal
 
-Run the first real experiment using openly available autonomous-driving resources and mature open-source reconstruction tools.
+Run the first real experiment using public / openly available autonomous-driving resources and mature open-source reconstruction tools.
 
 The first-stage loop is:
 
@@ -20,30 +20,99 @@ The priority is experimental output, not building a custom system from scratch.
 
 ## 2. Resource Eligibility Decision
 
-### Primary path: PandaSet + neurad-studio
+The project should distinguish three things:
 
-Use this first because it is the strongest match for the requirement that resources be open / openly available.
+```text
+open-source code: software repository license, such as MIT or Apache-2.0
+public research dataset: dataset is downloadable / usable for research, but may be non-commercial
+commercial-friendly dataset: dataset terms are broader and more product-friendly
+```
+
+The previous version over-penalized WayveScenes101 because its dataset license is non-commercial. That was too strict for the current research stage. WayveScenes101 is public, directly designed for autonomous-driving novel-view synthesis, and should be the first experimental path.
+
+### Primary path A: WayveScenes101 + Nerfstudio / Splatfacto
+
+Use this first for view extrapolation and held-out/off-axis evaluation.
 
 | Resource | Role | Availability / license status | Stage-1 decision |
 |---|---|---|---|
-| PandaSet | Dataset | Official site describes it as an open-source AV dataset for academic and commercial use. HuggingFace mirror lists `cc-by-4.0`. | Use first |
-| neurad-studio | Model codebase | Public GitHub repo, Apache-2.0. Official code for NeuRAD and SplatAD. | Use first |
-| SplatAD | 3DGS-based AD renderer | Included in neurad-studio. Designed for camera + lidar rendering in AD scenes. | First baseline |
-| NeuRAD | NeRF-based AD renderer | Included in neurad-studio. Dynamic AD neural rendering baseline. | Second baseline |
-| Nerfstudio | Framework dependency | Public GitHub repo, Apache-2.0. neurad-studio builds on it. | Dependency / fallback |
+| WayveScenes101 code | Dataset tooling | Public GitHub repo, MIT license | Use first |
+| WayveScenes101 dataset | NVS / reconstruction dataset | Publicly downloadable, non-commercial research license | Use first for research experiments |
+| Nerfstudio | Reconstruction framework | Public GitHub repo, Apache-2.0 | Primary framework |
+| Splatfacto | 3DGS baseline | Included in Nerfstudio | First baseline |
+| Nerfacto | NeRF-style baseline | Included in Nerfstudio | Fallback baseline |
+
+### Primary path B: PandaSet + neurad-studio
+
+Run this in parallel or immediately after the first WayveScenes101 result.
+
+| Resource | Role | Availability / license status | Stage-1 decision |
+|---|---|---|---|
+| PandaSet | Dataset | Official site describes it as an open-source AV dataset for academic and commercial use. HuggingFace mirror lists `cc-by-4.0`. | Use as commercial-friendly / multi-sensor track |
+| neurad-studio | Model codebase | Public GitHub repo, Apache-2.0. Official code for NeuRAD and SplatAD. | Use as dynamic AD baseline |
+| SplatAD | 3DGS-based AD renderer | Included in neurad-studio. Designed for camera + lidar rendering in AD scenes. | First PandaSet baseline |
+| NeuRAD | NeRF-based AD renderer | Included in neurad-studio. Dynamic AD neural rendering baseline. | Second PandaSet baseline |
 | PandaSet devkit | Dataset reader | Public GitHub repo with documented camera, lidar, pose, timestamp, cuboid access. | Optional utility |
 
-### Secondary path: WayveScenes101 + Nerfstudio / Splatfacto
+## 3. Verified Resource Inventory
 
-WayveScenes101 is highly relevant for novel-view synthesis because it provides held-out off-axis evaluation cameras and Nerfstudio integration. However, its dataset license is non-commercial. Therefore:
+### WayveScenes101
+
+Source URL:
 
 ```text
-WayveScenes101 = research-only secondary track, not the strict open-source first path.
+https://github.com/wayveai/wayve_scenes
 ```
 
-Use it after the PandaSet / neurad-studio path is running, or when the task specifically needs held-out off-axis evaluation.
+Useful facts:
 
-## 3. Verified Resource Inventory
+```text
+- codebase is MIT licensed
+- dataset is publicly downloadable from Google Drive through the repo
+- dataset license is non-commercial research use
+- 101 scenes
+- 20 seconds per scene
+- 101,000 images
+- 5 time-synchronized cameras
+- 10 Hz camera stream
+- COLMAP-format camera poses / calibration
+- separate held-out evaluation camera for off-axis reconstruction measurement
+- simple Nerfstudio integration
+```
+
+Stage-1 local target:
+
+```text
+/data/external/driving_scene_reconstruction/datasets/wayve_scenes_101
+```
+
+Stage-1 decision:
+
+```text
+Use first for novel-view synthesis and off-axis view-extrapolation experiments.
+```
+
+### Nerfstudio
+
+Source URL:
+
+```text
+https://github.com/nerfstudio-project/nerfstudio
+```
+
+Useful facts:
+
+```text
+- Apache-2.0 license
+- provides training, viewer, rendering, and evaluation CLI
+- provides Splatfacto and Nerfacto baselines
+```
+
+Stage-1 local target:
+
+```text
+/data/external/driving_scene_reconstruction/code/nerfstudio
+```
 
 ### PandaSet
 
@@ -99,81 +168,38 @@ Stage-1 local target:
 /data/external/driving_scene_reconstruction/code/neurad-studio
 ```
 
-### Nerfstudio
-
-Source URL:
-
-```text
-https://github.com/nerfstudio-project/nerfstudio
-```
-
-Useful facts:
-
-```text
-- Apache-2.0 license
-- provides training, viewer, rendering, and evaluation CLI
-- provides Splatfacto and Nerfacto baselines
-```
-
-### WayveScenes101
-
-Source URL:
-
-```text
-https://github.com/wayveai/wayve_scenes
-```
-
-Useful facts:
-
-```text
-- codebase is MIT licensed
-- dataset license is non-commercial
-- 101 scenes
-- 20 seconds per scene
-- 5 synchronized cameras
-- COLMAP-format camera poses
-- held-out off-axis evaluation camera
-- simple Nerfstudio integration
-```
-
-Stage-1 decision:
-
-```text
-Keep as secondary research-only track.
-```
-
 ## 4. First Execution Commands
 
-Fetch open resources:
+Fetch the primary WayveScenes101 research resources:
 
 ```bash
-bash scripts/fetch_stage1_resources.sh --all-open
+bash scripts/fetch_stage1_resources.sh --wayvescenes101
 ```
 
-This should clone:
-
-```text
-neurad-studio
-nerfstudio
-pandaset-devkit
-```
-
-and download:
-
-```text
-georghess/pandaset:pandaset.zip
-```
-
-Run the first baseline:
+Run the first WayveScenes101 baseline:
 
 ```bash
+bash scripts/run_stage1_wayvescenes101_nerfstudio.sh --method splatfacto
+```
+
+Fallback WayveScenes101 baseline:
+
+```bash
+bash scripts/run_stage1_wayvescenes101_nerfstudio.sh --method nerfacto
+```
+
+Fetch and run the PandaSet / neurad-studio track:
+
+```bash
+UNZIP_PANDASET=1 bash scripts/fetch_stage1_resources.sh --pandaset
 bash scripts/run_stage1_pandaset_neurad_studio.sh --method splatad
+bash scripts/run_stage1_pandaset_neurad_studio.sh --method neurad
 ```
 
-Fallback baseline:
+Fetch both tracks:
 
 ```bash
-bash scripts/run_stage1_pandaset_neurad_studio.sh --method neurad
+UNZIP_PANDASET=1 bash scripts/fetch_stage1_resources.sh --all-public
 ```
 
 ## 5. Expected Local Output
@@ -182,39 +208,54 @@ Do not commit these directories:
 
 ```text
 /data/external/driving_scene_reconstruction/
+outputs/stage1_wayvescenes101_nerfstudio/
 outputs/stage1_pandaset_neurad_studio/
 ```
 
-Expected local artifacts:
+Expected local WayveScenes101 artifacts:
+
+```text
+outputs/stage1_wayvescenes101_nerfstudio/
+  stage1_wayvescenes101_splatfacto/
+    run_commands.sh
+    environment.txt
+    train.log
+    render_help.txt
+    result_summary.md
+    failure_notes.md
+```
+
+Expected local PandaSet artifacts:
 
 ```text
 outputs/stage1_pandaset_neurad_studio/
-  run_commands.sh
-  environment.txt
-  train.log
-  render_help.txt
-  eval.json              # if ns-eval succeeds
-  result_summary.md
-  failure_notes.md
+  stage1_pandaset_splatad/
+    run_commands.sh
+    environment.txt
+    train.log
+    render_help.txt
+    eval.json              # if evaluation succeeds
+    result_summary.md
+    failure_notes.md
 ```
 
 ## 6. First Result Criteria
 
-The first successful result is:
+The first successful result should be:
 
 ```text
-PandaSet sequence
-+ SplatAD or NeuRAD trained with neurad-studio
-+ at least one rendered output or viewer-confirmed reconstruction
-+ notes on visual failures and dynamic-object failures
+WayveScenes101 scene
++ Splatfacto or Nerfacto trained with Nerfstudio
++ at least one rendered novel / held-out / off-axis view
++ notes on visual failures, geometry failures, and dynamic-object failures
 ```
 
 A stronger result is:
 
 ```text
-SplatAD result
-+ NeuRAD result
-+ side-by-side comparison
+WayveScenes101 Splatfacto result
++ WayveScenes101 Nerfacto result
++ PandaSet SplatAD or NeuRAD result
 + short judgment on which baseline is better for driving-scene view extrapolation
 ```
 
@@ -246,9 +287,11 @@ next_best_action:
 
 ```text
 status: ready_to_download_and_run
-primary_dataset: PandaSet
-primary_codebase: neurad-studio
-primary_method: splatad
-fallback_method: neurad
-secondary_dataset: WayveScenes101 research-only
+primary_dataset: WayveScenes101
+primary_codebase: Nerfstudio
+primary_method: splatfacto
+fallback_method: nerfacto
+parallel_dataset: PandaSet
+parallel_codebase: neurad-studio
+parallel_methods: splatad, neurad
 ```
