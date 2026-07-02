@@ -176,16 +176,24 @@ Fetch the primary WayveScenes101 research resources:
 bash scripts/fetch_stage1_resources.sh --wayvescenes101
 ```
 
-Run the first WayveScenes101 baseline:
+Select one downloaded scene directory and train the first mature baseline:
 
 ```bash
-bash scripts/run_stage1_wayvescenes101_nerfstudio.sh --method splatfacto
+export WAYVE_SCENE_DIR=/data/external/driving_scene_reconstruction/datasets/wayve_scenes_101/<scene_dir>
+ns-train splatfacto --data "$WAYVE_SCENE_DIR"
 ```
 
 Fallback WayveScenes101 baseline:
 
 ```bash
-bash scripts/run_stage1_wayvescenes101_nerfstudio.sh --method nerfacto
+ns-train nerfacto --data "$WAYVE_SCENE_DIR"
+```
+
+Render and evaluate after Nerfstudio writes a config:
+
+```bash
+ns-render interpolate --load-config <config.yml> --output-path outputs/stage1_wayvescenes101_nerfstudio/interpolate.mp4
+ns-eval --load-config <config.yml> --output-path outputs/stage1_wayvescenes101_nerfstudio/eval.json
 ```
 
 Fetch and run the PandaSet / neurad-studio track:
@@ -216,13 +224,12 @@ Expected local WayveScenes101 artifacts:
 
 ```text
 outputs/stage1_wayvescenes101_nerfstudio/
-  stage1_wayvescenes101_splatfacto/
-    run_commands.sh
-    environment.txt
-    train.log
-    render_help.txt
-    result_summary.md
-    failure_notes.md
+  run_commands.sh
+  environment.txt
+  train.log
+  render_help.txt
+  result_summary.md
+  failure_notes.md
 ```
 
 Expected local PandaSet artifacts:
