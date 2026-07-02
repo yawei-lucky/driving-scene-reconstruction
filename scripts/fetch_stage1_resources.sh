@@ -201,8 +201,13 @@ Code root:
 Dataset root:
   ${DATASET_ROOT}
 
-Primary next command:
-  bash scripts/run_stage1_wayvescenes101_nerfstudio.sh --method splatfacto
+Primary next steps:
+  1. Select one WayveScenes101 scene directory under:
+       ${WAYVE_DATA_DIR}
+  2. Train a mature baseline with Nerfstudio, for example:
+       ns-train splatfacto --data <WAYVE_SCENE_DIR>
+  3. Render with ns-render and record outputs under:
+       outputs/stage1_wayvescenes101_nerfstudio/
 
 Parallel PandaSet command:
   bash scripts/run_stage1_pandaset_neurad_studio.sh --method splatad
