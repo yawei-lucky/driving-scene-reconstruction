@@ -3,29 +3,38 @@ set -euo pipefail
 
 # Fetch Stage-1 public resources for driving scene reconstruction.
 #
-# Default open-resource path:
+# Primary research path:
+#   WayveScenes101 + Nerfstudio / Splatfacto
+#
+# Parallel commercial-friendly / multi-sensor path:
 #   PandaSet + neurad-studio + SplatAD / NeuRAD
 #
 # Usage:
-#   bash scripts/fetch_stage1_resources.sh --all-open
-#   RESOURCE_ROOT=/data/external/driving_scene_reconstruction bash scripts/fetch_stage1_resources.sh --all-open
-#   UNZIP_PANDASET=1 bash scripts/fetch_stage1_resources.sh --pandaset
+#   bash scripts/fetch_stage1_resources.sh --wayvescenes101
+#   bash scripts/fetch_stage1_resources.sh --pandaset
+#   UNZIP_PANDASET=1 bash scripts/fetch_stage1_resources.sh --all-public
+#   SKIP_WAYVE_DATA_DOWNLOAD=1 bash scripts/fetch_stage1_resources.sh --wayvescenes101
 #
 # Notes:
 #   - This script downloads large external resources. Do not commit them to GitHub.
+#   - WayveScenes101 dataset is public and research-usable, but non-commercial.
 #   - PandaSet on HuggingFace is about 44.5 GB.
-#   - WayveScenes101 is useful but non-commercial; it is not included in --all-open.
 
 RESOURCE_ROOT="${RESOURCE_ROOT:-/data/external/driving_scene_reconstruction}"
 CODE_ROOT="${CODE_ROOT:-${RESOURCE_ROOT}/code}"
 DATASET_ROOT="${DATASET_ROOT:-${RESOURCE_ROOT}/datasets}"
+
+WAYVE_CODE_DIR="${WAYVE_CODE_DIR:-${CODE_ROOT}/wayve_scenes}"
+WAYVE_DATA_DIR="${WAYVE_DATA_DIR:-${DATASET_ROOT}/wayve_scenes_101}"
+SKIP_WAYVE_DATA_DOWNLOAD="${SKIP_WAYVE_DATA_DOWNLOAD:-0}"
+
 PANDASET_HF_ROOT="${PANDASET_HF_ROOT:-${DATASET_ROOT}/pandaset_hf}"
 PANDASET_DIR="${PANDASET_DIR:-${DATASET_ROOT}/pandaset}"
 UNZIP_PANDASET="${UNZIP_PANDASET:-0}"
 
-FETCH_CODE=0
+FETCH_WAYVE=0
 FETCH_PANDASET=0
-FETCH_WAYVE_RESEARCH=0
+FETCH_CODE_COMMON=0
 
 print_usage() {
   cat <<'USAGE'
@@ -33,21 +42,32 @@ Usage:
   bash scripts/fetch_stage1_resources.sh [options]
 
 Options:
-  --all-open          Fetch open first-path resources: code + PandaSet.
-  --code              Clone / update code repositories only.
-  --pandaset          Download PandaSet from HuggingFace only.
-  --wayve-research    Clone WayveScenes101 code and print dataset download command.
-                      Note: WayveScenes101 dataset is non-commercial.
-  -h, --help          Show this message.
+  --wayvescenes101  Fetch primary research path:
+                    WayveScenes101 code + Nerfstudio, then run upstream dataset download.
+  --pandaset        Fetch PandaSet / neurad-studio path.
+  --all-public      Fetch both WayveScenes101 and PandaSet tracks.
+  --all-open        Backward-compatible alias for --all-public.
+  --code            Clone / update common code repositories only.
+  -h, --help        Show this message.
 
 Environment variables:
-  RESOURCE_ROOT       Root directory for external resources.
-                      Default: /data/external/driving_scene_reconstruction
-  CODE_ROOT           Code checkout directory.
-  DATASET_ROOT        Dataset directory.
-  PANDASET_HF_ROOT    HuggingFace snapshot target.
-  PANDASET_DIR        Unzipped PandaSet target.
-  UNZIP_PANDASET      Set to 1 to unzip pandaset.zip after download.
+  RESOURCE_ROOT                 Root directory for external resources.
+                                Default: /data/external/driving_scene_reconstruction
+  CODE_ROOT                     Code checkout directory.
+  DATASET_ROOT                  Dataset directory.
+
+  WAYVE_CODE_DIR                WayveScenes101 code checkout path.
+  WAYVE_DATA_DIR                WayveScenes101 dataset target path.
+  SKIP_WAYVE_DATA_DOWNLOAD      Set to 1 to clone Wayve code but skip dataset download.
+
+  PANDASET_HF_ROOT              HuggingFace snapshot target.
+  PANDASET_DIR                  Unzipped PandaSet target.
+  UNZIP_PANDASET                Set to 1 to unzip pandaset.zip after download.
+
+License notes:
+  WayveScenes101 code is MIT licensed. The dataset is public and research-usable,
+  but under a non-commercial dataset license.
+  PandaSet is the broader commercial-friendly / multi-sensor path.
 USAGE
 }
 
@@ -58,21 +78,24 @@ fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --all-open)
-      FETCH_CODE=1
-      FETCH_PANDASET=1
-      shift
-      ;;
-    --code)
-      FETCH_CODE=1
+    --wayvescenes101)
+      FETCH_WAYVE=1
+      FETCH_CODE_COMMON=1
       shift
       ;;
     --pandaset)
       FETCH_PANDASET=1
+      FETCH_CODE_COMMON=1
       shift
       ;;
-    --wayve-research)
-      FETCH_WAYVE_RESEARCH=1
+    --all-public|--all-open)
+      FETCH_WAYVE=1
+      FETCH_PANDASET=1
+      FETCH_CODE_COMMON=1
+      shift
+      ;;
+    --code)
+      FETCH_CODE_COMMON=1
       shift
       ;;
     -h|--help)
@@ -110,13 +133,32 @@ mkdir -p "${CODE_ROOT}" "${DATASET_ROOT}"
 need_cmd git
 need_cmd python
 
-if [[ "${FETCH_CODE}" -eq 1 ]]; then
-  clone_or_update "https://github.com/georghess/neurad-studio.git" "${CODE_ROOT}/neurad-studio"
+if [[ "${FETCH_CODE_COMMON}" -eq 1 ]]; then
   clone_or_update "https://github.com/nerfstudio-project/nerfstudio.git" "${CODE_ROOT}/nerfstudio"
-  clone_or_update "https://github.com/scaleapi/pandaset-devkit.git" "${CODE_ROOT}/pandaset-devkit"
+fi
+
+if [[ "${FETCH_WAYVE}" -eq 1 ]]; then
+  clone_or_update "https://github.com/wayveai/wayve_scenes.git" "${WAYVE_CODE_DIR}"
+
+  if [[ "${SKIP_WAYVE_DATA_DOWNLOAD}" == "1" ]]; then
+    echo "[wayvescenes101] Skipping dataset download because SKIP_WAYVE_DATA_DOWNLOAD=1"
+  else
+    echo "[wayvescenes101] Installing gdown if needed"
+    python -m pip install -U gdown
+
+    echo "[wayvescenes101] Downloading dataset with upstream download.sh -> ${WAYVE_DATA_DIR}"
+    mkdir -p "${WAYVE_DATA_DIR}"
+    (
+      cd "${WAYVE_CODE_DIR}"
+      bash download.sh "${WAYVE_DATA_DIR}"
+    )
+  fi
 fi
 
 if [[ "${FETCH_PANDASET}" -eq 1 ]]; then
+  clone_or_update "https://github.com/georghess/neurad-studio.git" "${CODE_ROOT}/neurad-studio"
+  clone_or_update "https://github.com/scaleapi/pandaset-devkit.git" "${CODE_ROOT}/pandaset-devkit"
+
   echo "[pandaset] Installing HuggingFace download client if needed"
   python -m pip install -U huggingface_hub
 
@@ -146,20 +188,6 @@ PY
   fi
 fi
 
-if [[ "${FETCH_WAYVE_RESEARCH}" -eq 1 ]]; then
-  clone_or_update "https://github.com/wayveai/wayve_scenes.git" "${CODE_ROOT}/wayve_scenes"
-  cat <<EOF
-
-[wayvescenes101]
-WayveScenes101 code is MIT licensed, but the dataset license is non-commercial.
-Use it as a secondary research-only track.
-
-To download manually after reviewing the license:
-  cd ${CODE_ROOT}/wayve_scenes
-  bash download.sh ${DATASET_ROOT}/wayve_scenes_101
-EOF
-fi
-
 cat <<EOF
 
 Done.
@@ -173,6 +201,9 @@ Code root:
 Dataset root:
   ${DATASET_ROOT}
 
-Next command:
+Primary next command:
+  bash scripts/run_stage1_wayvescenes101_nerfstudio.sh --method splatfacto
+
+Parallel PandaSet command:
   bash scripts/run_stage1_pandaset_neurad_studio.sh --method splatad
 EOF
