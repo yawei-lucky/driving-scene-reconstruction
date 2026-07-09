@@ -1,5 +1,319 @@
 # Stage 1A Codex Execution Notes
 
+Date: 2026-07-09
+
+## 2026-07-09 Linux Workspace Check
+
+Task: verify public resources and prepare the first WayveScenes101 run from the local Linux checkout.
+
+Repository checkout:
+
+```text
+path: /home/yawei/driving-scene-reconstruction
+branch: main
+remote: https://github.com/yawei-lucky/driving-scene-reconstruction.git
+initial git status: clean
+```
+
+Important license distinction:
+
+- WayveScenes101 code is public and MIT licensed.
+- WayveScenes101 dataset is public / downloadable for non-commercial research use.
+- The dataset license is separate from the code license.
+- No raw datasets, videos, checkpoints, rendered outputs, or large binaries were committed.
+
+### Environment Summary
+
+```text
+pwd before repo switch: /home/yawei
+repo path: /home/yawei/driving-scene-reconstruction
+python --version: Python 3.13.12
+git: /usr/bin/git
+python: /home/yawei/miniforge3/bin/python
+ns-train: not found
+ns-render: not found
+ns-eval: not found
+nvidia-smi: /usr/bin/nvidia-smi
+gpu status: nvidia-smi failed because it could not communicate with the NVIDIA driver
+root disk: /dev/nvme1n1p2, 1.9T total, 331G available
+data disk: /dev/nvme0n1p2 mounted at /data, 1.9T total, 11G available
+stage1_external size: 190M
+```
+
+The root filesystem has enough free space for the 200GB threshold, but the script default resource root is under `/data`, where only 11G is available. Heavy dataset download should therefore not run with the default path. GPU training is also blocked because the NVIDIA driver is not usable from this environment.
+
+GitHub issue #1 was requested for context, but `gh` is not installed:
+
+```text
+/bin/bash: line 1: gh: command not found
+```
+
+### Commands Run
+
+Environment inspection:
+
+```bash
+pwd
+ls
+git status
+python --version
+df -h
+which git
+which python
+which ns-train
+which nvidia-smi
+nvidia-smi
+```
+
+Results:
+
+```text
+PASS: /home/yawei exists and contains driving-scene-reconstruction
+PASS: repo git status is clean on main and up to date with origin/main
+PASS: Python 3.13.12 is available
+PASS: git is available
+FAIL/BLOCKER: ns-train is not on PATH
+FAIL/BLOCKER: nvidia-smi exists but cannot communicate with the NVIDIA driver
+CAUTION: /data has only 11G available
+```
+
+Script validation:
+
+```bash
+bash -n scripts/fetch_stage1_resources.sh
+bash -n scripts/run_stage1_pandaset_neurad_studio.sh
+bash scripts/fetch_stage1_resources.sh --help
+```
+
+Results:
+
+```text
+PASS: bash -n scripts/fetch_stage1_resources.sh
+PASS: bash -n scripts/run_stage1_pandaset_neurad_studio.sh
+PASS: fetch script help printed expected options and license notes
+```
+
+WayveScenes101 lightweight public code-path check:
+
+```bash
+SKIP_WAYVE_DATA_DOWNLOAD=1 RESOURCE_ROOT=/home/yawei/stage1_external bash scripts/fetch_stage1_resources.sh --wayvescenes101
+```
+
+The first sandboxed attempt failed because outbound GitHub access was blocked:
+
+```text
+[update] /home/yawei/stage1_external/code/nerfstudio
+fatal: unable to access 'https://github.com/nerfstudio-project/nerfstudio.git/': Couldn't connect to server
+```
+
+After approved network access, the same command passed:
+
+```text
+[update] /home/yawei/stage1_external/code/nerfstudio
+Already up to date.
+[update] /home/yawei/stage1_external/code/wayve_scenes
+Already up to date.
+[wayvescenes101] Skipping dataset download because SKIP_WAYVE_DATA_DOWNLOAD=1
+```
+
+This confirms internet access to GitHub when allowed and confirms that the WayveScenes101 public code path is reachable. The full dataset was intentionally not downloaded.
+
+### Upstream WayveScenes101 Inspection
+
+Cloned upstream paths:
+
+```text
+WayveScenes101: /home/yawei/stage1_external/code/wayve_scenes
+Nerfstudio: /home/yawei/stage1_external/code/nerfstudio
+WayveScenes101 commit: 2fc2fa9606b328cfa3dbfa11ae1c6ace99c240eb
+Nerfstudio commit: 50e0e3c70c775e89333256213363badbf074f29d
+```
+
+Files inspected:
+
+```text
+README.md
+download.sh
+tutorial/dataset_usage.ipynb
+tutorial/nerfstudio_adapter.ipynb
+tutorial/evaluate.ipynb
+src/wayve_scenes/evaluation.py
+```
+
+Exact upstream dataset download command:
+
+```bash
+bash download.sh /path/to/wayve_scenes_101
+```
+
+Repository wrapper command:
+
+```bash
+RESOURCE_ROOT=/data/external/driving_scene_reconstruction bash scripts/fetch_stage1_resources.sh --wayvescenes101
+```
+
+Expected dataset directory after download and extraction:
+
+```text
+wayve_scenes_101/
+  scene_001/
+    colmap_sparse/rig/
+    images/
+      front-forward/
+      left-forward/
+      right-forward/
+      left-backward/
+      right-backward/
+    masks/
+      front-forward/
+      left-forward/
+      right-forward/
+      left-backward/
+      right-backward/
+```
+
+Subset download status:
+
+```text
+The upstream README says users may download all scenes or only a subset from the official Google Drive folder.
+The upstream download.sh itself has a fixed LINKS array and no subset flag.
+For a scripted subset run, use the official Google Drive file links for selected scenes or copy/edit the LINKS array in a local scratch script outside the repo.
+```
+
+Official extraction command from the dataset usage tutorial:
+
+```bash
+export DATA_ROOT=/path/to/wayve_scenes_101/
+unzip "$DATA_ROOT/*.zip"
+```
+
+Nerfstudio preparation from the upstream adapter tutorial:
+
+```python
+from pathlib import Path
+from wayve_scenes.utils import colmap_utils
+
+dataset_root = "/path/to/wayve_scenes_101"
+scene_name = "scene_096"
+
+recon_dir = Path(f"{dataset_root}/{scene_name}/colmap_sparse/rig/")
+output_dir = Path(f"{dataset_root}/{scene_name}/")
+
+colmap_utils.colmap_to_json(recon_dir=recon_dir, output_dir=output_dir, use_masks=True)
+```
+
+Official tutorial training command:
+
+```bash
+export DATASET_ROOT=/path/to/wayve_scenes_101/
+export SCENE_NAME=scene_096
+export SCENE_PATH=$DATASET_ROOT/$SCENE_NAME
+
+ns-train nerfacto --data $SCENE_PATH --pipeline.model.camera-optimizer.mode off
+```
+
+Stage-1 first Splatfacto command, matching this repository's priority:
+
+```bash
+export WAYVE_SCENE_DIR=/data/external/driving_scene_reconstruction/datasets/wayve_scenes_101/<scene_dir>
+ns-train splatfacto --data "$WAYVE_SCENE_DIR" --pipeline.model.camera-optimizer.mode off
+```
+
+Render and Nerfstudio evaluation after training writes a config:
+
+```bash
+ns-render interpolate --load-config <config.yml> --output-path outputs/stage1_wayvescenes101_nerfstudio/interpolate.mp4
+ns-eval --load-config <config.yml> --output-path outputs/stage1_wayvescenes101_nerfstudio/eval.json
+```
+
+Official WayveScenes101 evaluation expects predictions to mirror the dataset tree:
+
+```text
+/path/to/model_predictions/<scene_name>/images/<camera>/<image_name>.jpeg
+```
+
+Then run:
+
+```python
+from wayve_scenes.evaluation import evaluate_submission
+
+metrics_dict_all, metrics_dict_train, metrics_dict_test = evaluate_submission(
+    dir_pred="/path/to/model_predictions/",
+    dir_target="/path/to/wayve_scenes_101/",
+)
+```
+
+The official train cameras are:
+
+```text
+left-forward
+right-forward
+left-backward
+right-backward
+```
+
+The held-out test camera is:
+
+```text
+front-forward
+```
+
+### Blockers
+
+Heavy execution should not start in this environment.
+
+```text
+1. nvidia-smi cannot communicate with the NVIDIA driver, so GPU training is blocked.
+2. ns-train, ns-render, and ns-eval are not on PATH.
+3. /data has only 11G available, which is below the 200GB threshold for full WayveScenes101 download.
+4. GitHub issue #1 could not be inspected because gh is not installed.
+5. jq is not installed, so notebook inspection used rg text search instead of structured notebook extraction.
+```
+
+### Exact Next Command For A GPU Machine
+
+On a GPU machine with a working NVIDIA driver, at least 200GB free disk at the selected resource root, Python 3, and Nerfstudio / WayveScenes101 dependencies available:
+
+```bash
+cd ~/driving-scene-reconstruction
+RESOURCE_ROOT=/data/external/driving_scene_reconstruction \
+SKIP_WAYVE_DATA_DOWNLOAD=0 \
+bash scripts/fetch_stage1_resources.sh --wayvescenes101
+```
+
+After the official download finishes, extract the downloaded scene zips and prepare one scene for Nerfstudio:
+
+```bash
+export DATA_ROOT=/data/external/driving_scene_reconstruction/datasets/wayve_scenes_101
+unzip "$DATA_ROOT/*.zip"
+
+export SCENE_NAME=scene_096
+python - <<'PY'
+from pathlib import Path
+from wayve_scenes.utils import colmap_utils
+import os
+
+dataset_root = os.environ["DATA_ROOT"]
+scene_name = os.environ["SCENE_NAME"]
+recon_dir = Path(f"{dataset_root}/{scene_name}/colmap_sparse/rig/")
+output_dir = Path(f"{dataset_root}/{scene_name}/")
+colmap_utils.colmap_to_json(recon_dir=recon_dir, output_dir=output_dir, use_masks=True)
+PY
+
+export WAYVE_SCENE_DIR="$DATA_ROOT/$SCENE_NAME"
+ns-train splatfacto --data "$WAYVE_SCENE_DIR" --pipeline.model.camera-optimizer.mode off
+```
+
+Fallback baseline:
+
+```bash
+ns-train nerfacto --data "$WAYVE_SCENE_DIR" --pipeline.model.camera-optimizer.mode off
+```
+
+### Next Best Action
+
+Run the exact next command on a GPU machine with working NVIDIA drivers and a writable resource root with at least 200GB free space. Keep using WayveScenes101 + Nerfstudio / Splatfacto as the first path; use PandaSet + neurad-studio only as the backup / parallel track.
+
 Date: 2026-07-04
 
 ## Scope
