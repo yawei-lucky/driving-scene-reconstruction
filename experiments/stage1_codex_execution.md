@@ -30,23 +30,31 @@ repo path: /home/yawei/driving-scene-reconstruction
 python --version: Python 3.13.12
 git: /usr/bin/git
 python: /home/yawei/miniforge3/bin/python
+conda: /home/yawei/miniforge3/bin/conda
+conda environments: base, navila-server
+navila-server python: Python 3.10.20
 ns-train: not found
 ns-render: not found
 ns-eval: not found
+nerfstudio pip package in active environment: not installed
+nerfstudio pip package in navila-server: not installed
 nvidia-smi: /usr/bin/nvidia-smi
 gpu status in sandbox: nvidia-smi failed because it could not communicate with the NVIDIA driver
 gpu status outside sandbox: NVIDIA GeForce RTX 4090 D, driver 580.95.05, CUDA 13.0
-root/home disk: /dev/nvme1n1p2, 1.9T total, 330G available
+root/home disk: /dev/nvme1n1p2, 1.9T total, 326G available
 data disk: /dev/nvme0n1p2 mounted at /data, 1.9T total, 11G available
 stage1_external size: 190M
 ```
 
 The `/home/yawei` filesystem has enough free space for the 200GB threshold. The script default resource root is under `/data`, where only 11G is available, so heavy dataset download should use `/home/yawei/stage1_external` instead of the default path. GPU access is available outside the Codex sandbox; the sandboxed `nvidia-smi` failure should not be treated as a machine-level GPU blocker.
 
-GitHub issue #1 was requested for context, but `gh` is not installed:
+GitHub issue #1 was visible through the GitHub connector. Local `gh` is still not installed, but the connector returned:
 
 ```text
-/bin/bash: line 1: gh: command not found
+title: Stage 1: Run public driving scene reconstruction baselines on WayveScenes101 and PandaSet
+state: open
+url: https://github.com/yawei-lucky/driving-scene-reconstruction/issues/1
+priority: WayveScenes101 + Nerfstudio / Splatfacto first; PandaSet + neurad-studio as parallel track
 ```
 
 ### Commands Run
@@ -73,11 +81,15 @@ PASS: /home/yawei exists and contains driving-scene-reconstruction
 PASS: repo git status is clean on main and up to date with origin/main
 PASS: Python 3.13.12 is available
 PASS: git is available
+PASS: conda is available
+PASS: GitHub issue #1 is visible through the GitHub connector
 FAIL/BLOCKER: ns-train is not on PATH
+FAIL/BLOCKER: active Python environment does not have nerfstudio installed
+FAIL/BLOCKER: existing navila-server conda environment also does not have nerfstudio installed
 PASS: nvidia-smi works outside sandbox: RTX 4090 D, driver 580.95.05, CUDA 13.0
 CAUTION: sandboxed nvidia-smi cannot communicate with the NVIDIA driver
 CAUTION: /data has only 11G available
-PASS: /home/yawei has about 330G available
+PASS: /home/yawei has about 326G available
 ```
 
 Script validation:
@@ -273,15 +285,27 @@ Heavy execution should not start until Nerfstudio is installed / activated and d
 
 ```text
 1. ns-train, ns-render, and ns-eval are not on PATH.
-2. /data has only 11G available, which is below the 200GB threshold for full WayveScenes101 download.
-3. Use /home/yawei/stage1_external for heavy resources; /home/yawei has about 330G available.
-4. GitHub issue #1 could not be inspected because gh is not installed.
-5. jq is not installed, so notebook inspection used rg text search instead of structured notebook extraction.
+2. The active Python environment does not have nerfstudio installed.
+3. The existing navila-server conda environment also does not have nerfstudio installed.
+4. /data has only 11G available, which is below the 200GB threshold for full WayveScenes101 download.
+5. Use /home/yawei/stage1_external for heavy resources; /home/yawei has about 326G available.
+6. jq is not installed, so notebook inspection used rg text search instead of structured notebook extraction.
 ```
 
 ### Exact Next Command For A GPU Machine
 
-On this machine, after activating/installing the needed Python/Nerfstudio/WayveScenes101 environment, use the `/home/yawei` resource root because `/data` is full:
+On this machine, first create or activate a Nerfstudio-capable environment. The upstream WayveScenes101 environment is Python 3.10 and can be used as the starting point:
+
+```bash
+cd /home/yawei/stage1_external/code/wayve_scenes
+conda env create -f environment.yml
+conda activate wayve_scenes_env
+python -m pip install -e src
+python -m pip install nerfstudio
+which ns-train
+```
+
+Then use the `/home/yawei` resource root because `/data` is full:
 
 ```bash
 cd ~/driving-scene-reconstruction
@@ -321,7 +345,242 @@ ns-train nerfacto --data "$WAYVE_SCENE_DIR" --pipeline.model.camera-optimizer.mo
 
 ### Next Best Action
 
-Install or activate the Nerfstudio / WayveScenes101 Python environment, then run the exact next command above using `/home/yawei/stage1_external`. Keep using WayveScenes101 + Nerfstudio / Splatfacto as the first path; use PandaSet + neurad-studio only as the backup / parallel track.
+This was superseded by the continuation below: the Nerfstudio / WayveScenes101 environment was created, `scene_094` was downloaded and prepared, and a 1-iteration Splatfacto smoke run succeeded. The current next command is the `scene_094_splatfacto` command in the continuation section.
+
+## 2026-07-09 Continuation: First WayveScenes101 Smoke Run
+
+After confirming that GPU and disk were available outside the Codex sandbox, the first WayveScenes101 path was pushed further from resource verification into a real smoke run.
+
+### Additional Setup
+
+Created the upstream WayveScenes101 environment:
+
+```bash
+cd /home/yawei/stage1_external/code/wayve_scenes
+conda env create -f environment.yml
+```
+
+Result:
+
+```text
+PASS: created conda environment wayve_scenes_env
+python: Python 3.10.14 from the upstream environment.yml
+torch: 2.3.1+cu118
+```
+
+Installed WayveScenes101 and the local Nerfstudio checkout:
+
+```bash
+conda run -n wayve_scenes_env python -m pip install -e src
+conda run -n wayve_scenes_env python -m pip install -e /home/yawei/stage1_external/code/nerfstudio
+```
+
+Results:
+
+```text
+PASS: installed wayve_scenes-0.3
+PASS: installed nerfstudio-1.1.5
+PASS: ns-train found at /home/yawei/miniforge3/envs/wayve_scenes_env/bin/ns-train
+PASS: ns-render found at /home/yawei/miniforge3/envs/wayve_scenes_env/bin/ns-render
+PASS: ns-eval found at /home/yawei/miniforge3/envs/wayve_scenes_env/bin/ns-eval
+PASS: imports_ok for wayve_scenes, nerfstudio, and wayve_scenes.utils.colmap_utils
+PASS: torch.cuda.is_available() outside sandbox returned True
+PASS: torch CUDA device is NVIDIA GeForce RTX 4090 D
+```
+
+Validated Nerfstudio CLI entry points without training:
+
+```bash
+conda run -n wayve_scenes_env ns-train splatfacto --help
+conda run -n wayve_scenes_env ns-render interpolate --help
+conda run -n wayve_scenes_env ns-eval --help
+```
+
+Results:
+
+```text
+PASS: ns-train splatfacto --help prints Splatfacto options
+PASS: ns-render interpolate --help prints render options
+PASS: ns-eval --help prints evaluation options
+CAUTION: sandboxed help commands still print "Can't initialize NVML"; non-sandbox GPU checks pass
+```
+
+### Single-Scene Official Subset
+
+Instead of downloading the full 101-scene dataset, downloaded one official scene link from upstream `download.sh`:
+
+```bash
+conda run -n wayve_scenes_env gdown "https://drive.google.com/uc?id=1nrpBYGhJZwPtoIwAef5tMKJz69fJFg18" \
+  -O /home/yawei/stage1_external/datasets/wayve_scenes_101/
+```
+
+Results:
+
+```text
+PASS: downloaded /home/yawei/stage1_external/datasets/wayve_scenes_101/scene_094.zip
+downloaded zip size: 548M
+source: official Google Drive file ID from upstream WayveScenes101 download.sh
+dataset license: public / downloadable for non-commercial research use; not the same as the MIT code license
+```
+
+Extracted the scene:
+
+```bash
+unzip -n /home/yawei/stage1_external/datasets/wayve_scenes_101/scene_094.zip \
+  -d /home/yawei/stage1_external/datasets/wayve_scenes_101
+```
+
+Results:
+
+```text
+PASS: extracted scene_094
+scene_094 extracted size: 670M
+images: 1000
+masks: 1000
+structure: colmap_sparse/rig, images/<camera>, masks/<camera>
+```
+
+Prepared `scene_094` for Nerfstudio:
+
+```bash
+conda run -n wayve_scenes_env python scripts/prepare_stage1_wayvescenes101_nerfstudio.py \
+  --scene-dir /home/yawei/stage1_external/datasets/wayve_scenes_101/scene_094
+```
+
+Results:
+
+```text
+PASS: generated transforms.json
+PASS: generated sparse_pc.ply
+PASS: frames=1000
+PASS: top_level_camera_model=OPENCV_FISHEYE
+```
+
+The helper script was added because current Nerfstudio versions read `camera_model` from the root of `transforms.json`. The upstream Wayve adapter writes per-frame `camera_model` values in multi-camera scenes, so the script preserves upstream conversion and adds a top-level `camera_model` when all frames share the same camera model.
+
+### Splatfacto Smoke Runs
+
+First smoke command:
+
+```bash
+conda run -n wayve_scenes_env ns-train splatfacto \
+  --data /home/yawei/stage1_external/datasets/wayve_scenes_101/scene_094 \
+  --max-num-iterations 10 \
+  --vis tensorboard \
+  --output-dir outputs/stage1_wayvescenes101_nerfstudio \
+  --experiment-name scene_094_splatfacto_smoke \
+  --pipeline.model.camera-optimizer.mode off
+```
+
+Result:
+
+```text
+FAIL: Nerfstudio treated OPENCV_FISHEYE frames as perspective because transforms.json had no top-level camera_model.
+failure: AssertionError: We don't support the 4th Brown parameter for image undistortion
+fix: add top-level camera_model=OPENCV_FISHEYE when all frames are OPENCV_FISHEYE
+```
+
+Second smoke command after adding top-level `camera_model`:
+
+```bash
+conda run -n wayve_scenes_env ns-train splatfacto \
+  --data /home/yawei/stage1_external/datasets/wayve_scenes_101/scene_094 \
+  --max-num-iterations 10 \
+  --vis tensorboard \
+  --output-dir outputs/stage1_wayvescenes101_nerfstudio \
+  --experiment-name scene_094_splatfacto_smoke_fisheye_top_level \
+  --pipeline.model.camera-optimizer.mode off
+```
+
+Result:
+
+```text
+FAIL: passed fisheye undistortion, then failed while JIT-building gsplat_cuda.
+failure: nvcc fatal: Unsupported gpu architecture 'compute_89'
+cause: default /usr/bin/nvcc is CUDA 11.5, which does not support RTX 4090 / sm_89
+```
+
+CUDA toolkit check:
+
+```bash
+which nvcc
+nvcc --version
+/usr/local/cuda-12.1/bin/nvcc --version
+/usr/local/cuda-13.0/bin/nvcc --version
+```
+
+Results:
+
+```text
+default nvcc: /usr/bin/nvcc, CUDA 11.5.119
+available nvcc: /usr/local/cuda-12.1/bin/nvcc, CUDA 12.1.66
+available nvcc: /usr/local/cuda-13.0/bin/nvcc, CUDA 13.0.88
+torch build: torch 2.3.1+cu118, torch.version.cuda 11.8
+```
+
+Successful smoke command:
+
+```bash
+CUDA_HOME=/usr/local/cuda-12.1 \
+PATH=/usr/local/cuda-12.1/bin:$PATH \
+TORCH_CUDA_ARCH_LIST=8.9 \
+conda run -n wayve_scenes_env ns-train splatfacto \
+  --data /home/yawei/stage1_external/datasets/wayve_scenes_101/scene_094 \
+  --max-num-iterations 1 \
+  --vis tensorboard \
+  --output-dir outputs/stage1_wayvescenes101_nerfstudio \
+  --experiment-name scene_094_splatfacto_smoke_cuda121 \
+  --pipeline.model.camera-optimizer.mode off
+```
+
+Results:
+
+```text
+PASS: Splatfacto training started on scene_094
+PASS: fisheye undistortion completed
+PASS: gsplat_cuda built successfully with CUDA 12.1 nvcc
+PASS: 1 training iteration completed
+config: outputs/stage1_wayvescenes101_nerfstudio/scene_094_splatfacto_smoke_cuda121/splatfacto/2026-07-09_123611/config.yml
+checkpoint: outputs/stage1_wayvescenes101_nerfstudio/scene_094_splatfacto_smoke_cuda121/splatfacto/2026-07-09_123611/nerfstudio_models/step-000000000.ckpt
+```
+
+Local artifact sizes:
+
+```text
+outputs/stage1_wayvescenes101_nerfstudio: 310M, ignored by git
+/home/yawei/stage1_external/datasets/wayve_scenes_101: 1.2G, outside repo
+/home/yawei/miniforge3/envs/wayve_scenes_env: 9.3G, outside repo
+/home/yawei free disk after smoke run: about 308G
+```
+
+### Current Next Command
+
+The environment is now ready for a real first run on `scene_094`. Use CUDA 12.1 for gsplat JIT and the prepared scene:
+
+```bash
+cd ~/driving-scene-reconstruction
+CUDA_HOME=/usr/local/cuda-12.1 \
+PATH=/usr/local/cuda-12.1/bin:$PATH \
+TORCH_CUDA_ARCH_LIST=8.9 \
+conda run -n wayve_scenes_env ns-train splatfacto \
+  --data /home/yawei/stage1_external/datasets/wayve_scenes_101/scene_094 \
+  --vis tensorboard \
+  --output-dir outputs/stage1_wayvescenes101_nerfstudio \
+  --experiment-name scene_094_splatfacto \
+  --pipeline.model.camera-optimizer.mode off
+```
+
+After training writes a usable checkpoint/config:
+
+```bash
+CONFIG=outputs/stage1_wayvescenes101_nerfstudio/scene_094_splatfacto/splatfacto/<timestamp>/config.yml
+conda run -n wayve_scenes_env ns-render interpolate --load-config "$CONFIG" \
+  --output-path outputs/stage1_wayvescenes101_nerfstudio/scene_094_splatfacto/interpolate.mp4
+conda run -n wayve_scenes_env ns-eval --load-config "$CONFIG" \
+  --output-path outputs/stage1_wayvescenes101_nerfstudio/scene_094_splatfacto/eval.json
+```
+
+Do not commit the downloaded scene, zip file, checkpoint, rendered video, TensorBoard events, or `outputs/`.
 
 Date: 2026-07-04
 
