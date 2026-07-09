@@ -34,13 +34,14 @@ ns-train: not found
 ns-render: not found
 ns-eval: not found
 nvidia-smi: /usr/bin/nvidia-smi
-gpu status: nvidia-smi failed because it could not communicate with the NVIDIA driver
-root disk: /dev/nvme1n1p2, 1.9T total, 331G available
+gpu status in sandbox: nvidia-smi failed because it could not communicate with the NVIDIA driver
+gpu status outside sandbox: NVIDIA GeForce RTX 4090 D, driver 580.95.05, CUDA 13.0
+root/home disk: /dev/nvme1n1p2, 1.9T total, 330G available
 data disk: /dev/nvme0n1p2 mounted at /data, 1.9T total, 11G available
 stage1_external size: 190M
 ```
 
-The root filesystem has enough free space for the 200GB threshold, but the script default resource root is under `/data`, where only 11G is available. Heavy dataset download should therefore not run with the default path. GPU training is also blocked because the NVIDIA driver is not usable from this environment.
+The `/home/yawei` filesystem has enough free space for the 200GB threshold. The script default resource root is under `/data`, where only 11G is available, so heavy dataset download should use `/home/yawei/stage1_external` instead of the default path. GPU access is available outside the Codex sandbox; the sandboxed `nvidia-smi` failure should not be treated as a machine-level GPU blocker.
 
 GitHub issue #1 was requested for context, but `gh` is not installed:
 
@@ -73,8 +74,10 @@ PASS: repo git status is clean on main and up to date with origin/main
 PASS: Python 3.13.12 is available
 PASS: git is available
 FAIL/BLOCKER: ns-train is not on PATH
-FAIL/BLOCKER: nvidia-smi exists but cannot communicate with the NVIDIA driver
+PASS: nvidia-smi works outside sandbox: RTX 4090 D, driver 580.95.05, CUDA 13.0
+CAUTION: sandboxed nvidia-smi cannot communicate with the NVIDIA driver
 CAUTION: /data has only 11G available
+PASS: /home/yawei has about 330G available
 ```
 
 Script validation:
@@ -152,6 +155,12 @@ Repository wrapper command:
 RESOURCE_ROOT=/data/external/driving_scene_reconstruction bash scripts/fetch_stage1_resources.sh --wayvescenes101
 ```
 
+Writable local resource-root command for this machine:
+
+```bash
+RESOURCE_ROOT=/home/yawei/stage1_external bash scripts/fetch_stage1_resources.sh --wayvescenes101
+```
+
 Expected dataset directory after download and extraction:
 
 ```text
@@ -215,7 +224,7 @@ ns-train nerfacto --data $SCENE_PATH --pipeline.model.camera-optimizer.mode off
 Stage-1 first Splatfacto command, matching this repository's priority:
 
 ```bash
-export WAYVE_SCENE_DIR=/data/external/driving_scene_reconstruction/datasets/wayve_scenes_101/<scene_dir>
+export WAYVE_SCENE_DIR=/home/yawei/stage1_external/datasets/wayve_scenes_101/<scene_dir>
 ns-train splatfacto --data "$WAYVE_SCENE_DIR" --pipeline.model.camera-optimizer.mode off
 ```
 
@@ -260,23 +269,23 @@ front-forward
 
 ### Blockers
 
-Heavy execution should not start in this environment.
+Heavy execution should not start until Nerfstudio is installed / activated and data download is intentionally launched into `/home/yawei/stage1_external`.
 
 ```text
-1. nvidia-smi cannot communicate with the NVIDIA driver, so GPU training is blocked.
-2. ns-train, ns-render, and ns-eval are not on PATH.
-3. /data has only 11G available, which is below the 200GB threshold for full WayveScenes101 download.
+1. ns-train, ns-render, and ns-eval are not on PATH.
+2. /data has only 11G available, which is below the 200GB threshold for full WayveScenes101 download.
+3. Use /home/yawei/stage1_external for heavy resources; /home/yawei has about 330G available.
 4. GitHub issue #1 could not be inspected because gh is not installed.
 5. jq is not installed, so notebook inspection used rg text search instead of structured notebook extraction.
 ```
 
 ### Exact Next Command For A GPU Machine
 
-On a GPU machine with a working NVIDIA driver, at least 200GB free disk at the selected resource root, Python 3, and Nerfstudio / WayveScenes101 dependencies available:
+On this machine, after activating/installing the needed Python/Nerfstudio/WayveScenes101 environment, use the `/home/yawei` resource root because `/data` is full:
 
 ```bash
 cd ~/driving-scene-reconstruction
-RESOURCE_ROOT=/data/external/driving_scene_reconstruction \
+RESOURCE_ROOT=/home/yawei/stage1_external \
 SKIP_WAYVE_DATA_DOWNLOAD=0 \
 bash scripts/fetch_stage1_resources.sh --wayvescenes101
 ```
@@ -284,7 +293,7 @@ bash scripts/fetch_stage1_resources.sh --wayvescenes101
 After the official download finishes, extract the downloaded scene zips and prepare one scene for Nerfstudio:
 
 ```bash
-export DATA_ROOT=/data/external/driving_scene_reconstruction/datasets/wayve_scenes_101
+export DATA_ROOT=/home/yawei/stage1_external/datasets/wayve_scenes_101
 unzip "$DATA_ROOT/*.zip"
 
 export SCENE_NAME=scene_096
@@ -312,7 +321,7 @@ ns-train nerfacto --data "$WAYVE_SCENE_DIR" --pipeline.model.camera-optimizer.mo
 
 ### Next Best Action
 
-Run the exact next command on a GPU machine with working NVIDIA drivers and a writable resource root with at least 200GB free space. Keep using WayveScenes101 + Nerfstudio / Splatfacto as the first path; use PandaSet + neurad-studio only as the backup / parallel track.
+Install or activate the Nerfstudio / WayveScenes101 Python environment, then run the exact next command above using `/home/yawei/stage1_external`. Keep using WayveScenes101 + Nerfstudio / Splatfacto as the first path; use PandaSet + neurad-studio only as the backup / parallel track.
 
 Date: 2026-07-04
 
