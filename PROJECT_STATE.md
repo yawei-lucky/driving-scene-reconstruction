@@ -1,111 +1,195 @@
 # Project State — Driving Scene Reconstruction
 
-## 1. Project Positioning
+## 1. Current Project Positioning
 
-This repository focuses on **real-driving scene reconstruction and view extrapolation**.
+This repository focuses on **log-driven driving scene reconstruction for a human-drivable panoramic simulator**.
 
-The core problem is:
+The core goal is:
 
-> Given limited real sensor observations from a driving scene, reconstruct or synthesize additional views that are useful for 360-degree visualization, teleoperation, and downstream autonomous-driving evaluation.
+> Given a real driving log, reconstruct a scene representation that can render updated 360-degree / multi-view driving observations while a human controls the ego vehicle.
 
-This is related to credibility auditing, but it is broader than auditing. The main project object is the reconstruction / extrapolation system itself.
+The intended first-stage loop is:
 
-## 2. Current Motivation
+```text
+real driving log
+→ scene reconstruction / scene representation
+→ human control input
+→ ego state update
+→ 360-degree / multi-view rendering
+→ human-drivable simulation loop
+```
+
+This project is related to credibility auditing, but credibility audit is only an evaluation function. The main object is a human-drivable simulator built on reconstructed real driving scenes.
+
+## 2. What Changed
+
+Earlier project notes emphasized novel-view synthesis and leave-one-camera-out evaluation. That remains useful, but it is now treated as a **renderer-backend baseline**, not the whole project.
+
+The corrected interpretation is:
+
+```text
+not only: generate a missing camera view
+not only: train NeRF / 3DGS
+not only: generate a fixed driving video
+
+instead: reconstruct a log-based scene that a human can drive through, with 360 / multi-view observations updating in closed loop
+```
+
+Autonomous-driving model integration is deferred. The first driver is a human.
+
+World-model generation is not part of the immediate next step.
+
+## 3. Current Motivation
 
 The immediate motivation comes from a practical failure case:
 
-- original-view 360-degree rendering has heavy artifacts;
-- diffusion-based view extrapolation was attempted;
-- generated extrapolated views remain blurry or unstable;
-- overall effect is still not good enough for real application.
+- a human drives while viewing a reconstructed / generated 360-degree scene;
+- the current 360 rotation or extrapolated views show artifacts;
+- generated views may become blurry, distorted, or unstable;
+- this is not only an image-quality problem, because wrong geometry, occlusion, lane structure, or object position can mislead the driver.
 
-This suggests that the problem should be treated as a real scene reconstruction and novel-view extrapolation task, not merely as front-end visualization.
+Therefore, the project should build toward:
 
-## 3. Current Research Questions
+```text
+human-drivable log-based panoramic simulator
+```
 
-### RQ1 — Reconstruction
+rather than only a visual demo.
 
-How can a real driving scene be reconstructed from multi-camera logs, ego poses, calibration, and optional LiDAR / depth / 3D boxes?
+## 4. System Layers
 
-### RQ2 — View Extrapolation
+### Layer 1 — Log Scene Layer
 
-How far can the system extrapolate views beyond observed camera viewpoints before visual, geometric, or task-level consistency breaks?
+Input may include:
 
-### RQ3 — 360-degree Driving Visualization
+- multi-camera video or panoramic video;
+- ego pose / odometry;
+- CAN signals such as speed, steering, throttle, brake;
+- camera calibration;
+- optional LiDAR, depth, 3D boxes, map, or lane annotations.
 
-Can the reconstructed scene support stable 360-degree visualization for human teleoperation or monitoring?
+Output:
 
-### RQ4 — Driving-Relevant Consistency
+```text
+scene representation that can be queried by ego pose and camera rig
+```
 
-Do reconstructed views preserve lane structure, object positions, occlusion relations, left-right relations, and temporal continuity?
+### Layer 2 — Human Control Layer
 
-### RQ5 — Credibility Function
+Input:
 
-When should a generated view be accepted, down-weighted, or rejected for downstream use?
+- keyboard;
+- gamepad;
+- steering wheel;
+- throttle / brake controls.
 
-## 4. Initial Technical Direction
+Initial implementation can use synthetic scripted controls for smoke testing.
 
-The first stage should stay minimal and data-driven:
+### Layer 3 — Ego State Update Layer
 
-1. collect or identify a short multi-camera driving log;
-2. prepare camera calibration and synchronized image streams;
-3. define a leave-one-camera-out evaluation;
-4. generate or approximate the held-out view using a baseline method;
-5. analyze failures using image, geometry, temporal, and task-level criteria.
+Initial state fields:
 
-No large reconstruction system is required for the first version.
+```text
+x, y, yaw, speed, timestamp
+```
 
-## 5. Initial Evaluation Layers
+Initial vehicle model:
 
-### Image Layer
+```text
+simple kinematic bicycle model or yaw-rate approximation
+```
 
-- blur;
-- smear;
-- ghosting;
-- color / exposure mismatch;
-- local texture artifacts.
+The first version does not need full vehicle dynamics.
 
-### Geometry Layer
+### Layer 4 — Rendering Layer
 
-- lane-line bending;
-- road-boundary distortion;
-- object-position drift;
-- scale inconsistency;
-- broken static structure.
+Given the scene, ego state, and camera rig, render:
 
-### Temporal Layer
+- front view;
+- left view;
+- right view;
+- rear view;
+- panorama / 360-degree view;
+- multi-screen driving display.
 
-- flicker;
-- object popping;
-- inconsistent motion;
-- unstable background;
-- view-to-view discontinuity.
+Candidate renderers:
 
-### Driving-Task Layer
+```text
+ReplayRenderer
+PanoramaRenderer
+ReconstructionRenderer
+HybridRenderer
+```
 
-- wrong same-lane / adjacent-lane relation;
-- wrong front / rear / left / right relation;
-- wrong approaching / receding relation;
-- wrong occlusion relation;
-- false obstacle or missing obstacle;
-- misleading free-space judgment.
+Do not add a world-model renderer in the immediate next step.
 
-## 6. Minimal Repository Files
+### Layer 5 — Evaluation / Credibility Layer
 
-Current minimal files:
+Checks include:
 
-- `README.md`
-- `PROJECT_STATE.md`
-- `docs/problem_statement.md`
-- `docs/mvp_leave_one_camera_out.md`
-- `experiments/README.md`
-- `scripts/README.md`
-- `data/README.md`
+- image artifacts;
+- geometry distortion;
+- temporal instability;
+- lane / road-boundary consistency;
+- left / right / front / rear relation consistency;
+- object disappearance or hallucination;
+- occlusion errors;
+- whether the generated view is safe enough for a human driver to use.
 
-## 7. Next Minimal Action
+## 5. Role of NeRF / 3DGS / Splatfacto
 
-Write the first concrete MVP design:
+NeRF / 3DGS / Splatfacto are **not** the final objective.
 
-> leave-one-camera-out view extrapolation evaluation on a short multi-camera driving clip.
+They are possible reconstruction renderer backends:
 
-The purpose is to make the problem measurable before choosing NeRF, 3DGS, diffusion, or any specific reconstruction model.
+```text
+real driving log images + camera poses
+→ per-scene reconstruction / fitting
+→ render observations for nearby ego poses
+```
+
+The existing WayveScenes101 + Splatfacto smoke run is useful because it verified that one reconstruction backend can be set up. However, a full Splatfacto training run should not be the next project step until the human-drivable simulator interface is defined.
+
+## 6. Current Codex Result Summary
+
+Codex has already verified more than the original Stage 1A resource check:
+
+- WayveScenes101 and Nerfstudio code paths were reachable;
+- the project uses `/home/yawei/stage1_external` instead of `/data` because `/data` has too little free space;
+- a WayveScenes101 environment was created;
+- `scene_094` was downloaded from an official WayveScenes101 source link;
+- the scene was converted for Nerfstudio;
+- a compatibility helper was added for top-level `camera_model=OPENCV_FISHEYE`;
+- Splatfacto completed a 1-iteration smoke run using CUDA 12.1 and `TORCH_CUDA_ARCH_LIST=8.9`.
+
+This proves that the reconstruction-backend path is feasible. It does not yet produce a useful simulator or a useful visual result.
+
+## 7. Current Next Minimal Action
+
+Next action:
+
+```text
+Stage H0: define human-drivable log-based panoramic simulator MVP
+```
+
+Do this before continuing heavy reconstruction training.
+
+Expected deliverables:
+
+```text
+docs/human_drivable_simulator_project.md
+docs/codex_next_task_stage_h0.md
+src/driving_scene_reconstruction/sim/
+examples/sim_loop_smoke.py
+```
+
+The next Codex task should implement only lightweight simulator interfaces:
+
+- `EgoState` dataclass;
+- `HumanControl` dataclass;
+- simple vehicle model step function;
+- renderer interface;
+- camera rig / camera spec dataclasses if useful;
+- dummy renderer smoke example.
+
+No dataset download, model training, world-model integration, checkpoint generation, or large output generation should happen in the next task.
