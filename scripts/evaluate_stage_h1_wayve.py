@@ -8,8 +8,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+import torch
 from PIL import Image
-from wayve_scenes.evaluation import evaluate_submission
+from torchmetrics.image.fid import FrechetInceptionDistance
+import wayve_scenes.evaluation as wayve_evaluation
 
 TRAIN_CAMERAS = (
     "left-forward",
@@ -25,6 +28,7 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--render-root", required=True, type=Path)
+    parser.add_argument("--transforms", required=True, type=Path)
     parser.add_argument("--prediction-root", required=True, type=Path)
     parser.add_argument("--target-root", required=True, type=Path)
     parser.add_argument("--output-path", required=True, type=Path)
@@ -40,15 +44,17 @@ def json_default(value: Any) -> Any:
     raise TypeError(f"Cannot serialize {type(value).__name__}")
 
 
-def rendered_images(render_root: Path, camera: str) -> list[Path]:
+def rendered_images(render_root: Path, camera: str, expected_stems: set[str]) -> list[Path]:
     split = "test" if camera == TEST_CAMERA else "train"
     directory = render_root / split / "rgb" / camera
+    if not directory.is_dir():
+        directory = render_root / split / "rgb"
     if not directory.is_dir():
         raise FileNotFoundError(directory)
     images = sorted(
         path
         for path in directory.iterdir()
-        if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
+        if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES and path.stem in expected_stems
     )
     if len(images) != 200:
         raise RuntimeError(f"Expected 200 renders for {camera}, got {len(images)}")
@@ -82,14 +88,30 @@ def validate_decodable_pair(prediction: Path, target: Path) -> None:
         )
 
 
+def streaming_fid(predictions: list[str], targets: list[str]) -> float:
+    """Equivalent official FID computation without stacking full-resolution inputs."""
+    metric = FrechetInceptionDistance(feature=64)
+    for start in range(0, len(predictions), 8):
+        prediction_batch = torch.from_numpy(
+            np.stack([np.asarray(Image.open(path).convert("RGB")) for path in predictions[start : start + 8]])
+        ).permute(0, 3, 1, 2)
+        target_batch = torch.from_numpy(
+            np.stack([np.asarray(Image.open(path).convert("RGB")) for path in targets[start : start + 8]])
+        ).permute(0, 3, 1, 2)
+        metric.update(target_batch, real=True)
+        metric.update(prediction_batch, real=False)
+    return torch.clamp(metric.compute(), min=0.0).item()
+
+
 def arrange_predictions(
     render_root: Path,
     prediction_root: Path,
     target_root: Path,
     scene: str,
+    stems_by_camera: dict[str, set[str]],
 ) -> None:
     for camera in CAMERAS:
-        sources = rendered_images(render_root, camera)
+        sources = rendered_images(render_root, camera, stems_by_camera[camera])
         source_by_stem = {source.stem: source for source in sources}
         targets = indexed_images(target_root / scene / "images" / camera)
         if set(source_by_stem) != set(targets):
@@ -118,6 +140,12 @@ def main() -> None:
     prediction_root = args.prediction_root.expanduser().resolve()
     target_root = args.target_root.expanduser().resolve()
     output_path = args.output_path.expanduser().resolve()
+    transforms = json.loads(args.transforms.expanduser().resolve().read_text(encoding="utf-8"))
+    stems_by_camera: dict[str, set[str]] = {camera: set() for camera in CAMERAS}
+    for frame in transforms["frames"]:
+        path = Path(frame["file_path"])
+        if path.parent.name in stems_by_camera:
+            stems_by_camera[path.parent.name].add(path.stem)
     repo_root = Path(__file__).resolve().parents[1]
     for label, path in (("prediction root", prediction_root), ("output path", output_path)):
         if path == repo_root or repo_root in path.parents:
@@ -130,8 +158,9 @@ def main() -> None:
 
     if prediction_root.exists() and any(prediction_root.iterdir()):
         raise RuntimeError(f"Prediction root must be fresh: {prediction_root}")
-    arrange_predictions(render_root, prediction_root, target_root, args.scene)
-    metrics_all, metrics_train, metrics_test = evaluate_submission(
+    arrange_predictions(render_root, prediction_root, target_root, args.scene, stems_by_camera)
+    wayve_evaluation.get_fid_metric = streaming_fid
+    metrics_all, metrics_train, metrics_test = wayve_evaluation.evaluate_submission(
         dir_pred=str(prediction_root),
         dir_target=str(target_root),
         scene_list=[args.scene],
@@ -145,6 +174,7 @@ def main() -> None:
             "train_cameras": list(TRAIN_CAMERAS),
             "test_cameras": [TEST_CAMERA],
         },
+        "fid_implementation": "official feature=64 metric with memory-safe batches of 8",
         "all": metrics_all,
         "train": metrics_train,
         "test": metrics_test,

@@ -111,6 +111,7 @@ fi
 
 "$PYTHON" "$REPO_ROOT/scripts/build_stage_h1_reference_videos.py" \
   --render-root "$ARTIFACT_ROOT/dataset" \
+  --transforms /home/yawei/stage1_external/datasets/wayve_scenes_101/scene_094_official_split/transforms.json \
   --output-dir "$ARTIFACT_ROOT/videos" \
   --video-width 960 \
   --fps "$FPS" \
@@ -119,7 +120,8 @@ fi
 if [[ "$RUN_WAYVE_EVAL" == "1" ]]; then
   "$PYTHON" "$REPO_ROOT/scripts/evaluate_stage_h1_wayve.py" \
     --render-root "$ARTIFACT_ROOT/dataset" \
-    --prediction-root "$ARTIFACT_ROOT/predictions" \
+    --transforms /home/yawei/stage1_external/datasets/wayve_scenes_101/scene_094_official_split/transforms.json \
+    --prediction-root "$ARTIFACT_ROOT/predictions_streaming_fid" \
     --target-root /home/yawei/stage1_external/datasets/wayve_scenes_101 \
     --output-path "$ARTIFACT_ROOT/metrics/wayve_metrics.json" \
     --scene scene_094

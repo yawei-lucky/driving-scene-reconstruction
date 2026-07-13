@@ -20,12 +20,14 @@ DEFAULT_CAMERAS = (
     "left-backward",
     "right-backward",
 )
+TEST_CAMERA = "front-forward"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--render-root", required=True, type=Path)
+    parser.add_argument("--transforms", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--fps", type=float, default=10.0)
     parser.add_argument("--cameras", nargs="+", default=list(DEFAULT_CAMERAS))
@@ -48,13 +50,32 @@ def timestamp_key(path: Path) -> tuple[int, str]:
         return 0, path.name
 
 
-def image_map(root: Path, split: str, output_name: str, camera: str) -> dict[str, Path]:
+def camera_stems(transforms: Path) -> dict[str, set[str]]:
+    data = json.loads(transforms.read_text(encoding="utf-8"))
+    result: dict[str, set[str]] = {camera: set() for camera in DEFAULT_CAMERAS}
+    for frame in data["frames"]:
+        path = Path(frame["file_path"])
+        camera = path.parent.name
+        if camera in result:
+            result[camera].add(path.stem)
+    return result
+
+
+def image_map(
+    root: Path,
+    split: str,
+    output_name: str,
+    camera: str,
+    expected_stems: set[str],
+) -> dict[str, Path]:
     directory = root / split / output_name / camera
+    if not directory.is_dir():
+        directory = root / split / output_name
     if not directory.is_dir():
         return {}
     images: dict[str, Path] = {}
     for path in directory.iterdir():
-        if not path.is_file() or path.suffix.lower() not in IMAGE_SUFFIXES:
+        if not path.is_file() or path.suffix.lower() not in IMAGE_SUFFIXES or path.stem not in expected_stems:
             continue
         if path.stem in images:
             raise RuntimeError(f"Duplicate image stem for {camera}: {path.stem}")
@@ -62,13 +83,13 @@ def image_map(root: Path, split: str, output_name: str, camera: str) -> dict[str
     return images
 
 
-def merged_camera_frames(root: Path, camera: str) -> list[Path]:
+def merged_camera_frames(root: Path, camera: str, expected_stems: set[str]) -> list[Path]:
     frames: dict[str, Path] = {}
-    for split in ("train", "test"):
-        for stem, path in image_map(root, split, "rgb", camera).items():
-            if stem in frames:
-                raise RuntimeError(f"Duplicate rendered timestamp for {camera}: {stem}")
-            frames[stem] = path
+    split = "test" if camera == TEST_CAMERA else "train"
+    for stem, path in image_map(root, split, "rgb", camera, expected_stems).items():
+        if stem in frames:
+            raise RuntimeError(f"Duplicate rendered timestamp for {camera}: {stem}")
+        frames[stem] = path
     return sorted(frames.values(), key=timestamp_key)
 
 
@@ -232,9 +253,11 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def comparison_frames(root: Path, camera: str) -> tuple[list[Path], list[Path]]:
-    prediction_map = image_map(root, "test", "rgb", camera)
-    target_map = image_map(root, "test", "gt-rgb", camera)
+def comparison_frames(
+    root: Path, camera: str, expected_stems: set[str]
+) -> tuple[list[Path], list[Path]]:
+    prediction_map = image_map(root, "test", "rgb", camera, expected_stems)
+    target_map = image_map(root, "test", "gt-rgb", camera, expected_stems)
     common = sorted(set(prediction_map) & set(target_map), key=lambda value: (int(value), value))
     if set(prediction_map) != set(target_map):
         raise RuntimeError(f"Prediction/target frame mismatch for {camera}")
@@ -248,6 +271,7 @@ def main() -> None:
     if args.video_width <= 0:
         raise ValueError("--video-width must be positive")
     render_root = args.render_root.expanduser().resolve()
+    stems_by_camera = camera_stems(args.transforms.expanduser().resolve())
     output_dir = args.output_dir.expanduser().resolve()
     repo_root = Path(__file__).resolve().parents[1]
     if output_dir == repo_root or repo_root in output_dir.parents:
@@ -261,7 +285,7 @@ def main() -> None:
 
     reference_stems: set[str] | None = None
     for camera in args.cameras:
-        frames = merged_camera_frames(render_root, camera)
+        frames = merged_camera_frames(render_root, camera, stems_by_camera[camera])
         stems = {frame.stem for frame in frames}
         if len(frames) != 200 or len(stems) != 200:
             raise RuntimeError(f"Expected exactly 200 unique frames for {camera}, got {len(stems)}")
@@ -283,7 +307,9 @@ def main() -> None:
             }
         )
 
-    predictions, targets = comparison_frames(render_root, args.comparison_camera)
+    predictions, targets = comparison_frames(
+        render_root, args.comparison_camera, stems_by_camera[args.comparison_camera]
+    )
     if len(predictions) != 200:
         raise RuntimeError(
             f"Expected exactly 200 comparison frames, got {len(predictions)}"
