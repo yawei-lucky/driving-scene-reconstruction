@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:
+    if not math.isfinite(value):
+        raise ValueError("control values must be finite")
     return max(minimum, min(maximum, value))
 
 
@@ -31,11 +34,17 @@ class HumanControl:
         )
 
     def validate(self) -> None:
-        """Raise ``ValueError`` if any control is outside its valid range."""
+        """Raise ``ValueError`` for non-finite or out-of-range controls."""
 
+        if not math.isfinite(self.steer):
+            raise ValueError("steer must be finite")
         if not -1.0 <= self.steer <= 1.0:
             raise ValueError("steer must be between -1.0 and 1.0")
+        if not math.isfinite(self.throttle):
+            raise ValueError("throttle must be finite")
         if not 0.0 <= self.throttle <= 1.0:
             raise ValueError("throttle must be between 0.0 and 1.0")
+        if not math.isfinite(self.brake):
+            raise ValueError("brake must be finite")
         if not 0.0 <= self.brake <= 1.0:
             raise ValueError("brake must be between 0.0 and 1.0")

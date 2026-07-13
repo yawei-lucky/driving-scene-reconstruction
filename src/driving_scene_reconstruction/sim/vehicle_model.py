@@ -30,6 +30,15 @@ class SimpleVehicleModel:
     linear_drag: float = 0.1
 
     def __post_init__(self) -> None:
+        parameters = {
+            "wheelbase": self.wheelbase,
+            "max_steer_angle": self.max_steer_angle,
+            "max_acceleration": self.max_acceleration,
+            "max_braking": self.max_braking,
+            "linear_drag": self.linear_drag,
+        }
+        if not all(math.isfinite(value) for value in parameters.values()):
+            raise ValueError("vehicle model parameters must be finite")
         if self.wheelbase <= 0.0:
             raise ValueError("wheelbase must be positive")
         if self.max_steer_angle <= 0.0:
@@ -49,8 +58,11 @@ class SimpleVehicleModel:
     ) -> EgoState:
         """Advance ``state`` by ``dt`` seconds and return a new state."""
 
-        if dt <= 0.0:
-            raise ValueError("dt must be positive")
+        if not math.isfinite(dt) or dt <= 0.0:
+            raise ValueError("dt must be finite and positive")
+        state_values = (state.x, state.y, state.yaw, state.speed, state.time)
+        if not all(math.isfinite(value) for value in state_values):
+            raise ValueError("ego state values must be finite")
 
         control = control.clamped()
         acceleration = (

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import sys
 import unittest
 from pathlib import Path
@@ -61,6 +62,56 @@ class SimpleVehicleModelTest(unittest.TestCase):
         oversized = model.step(EgoState(), HumanControl(throttle=3.0), dt=0.5)
 
         self.assertEqual(oversized, clamped)
+
+    def test_steering_changes_heading_and_lateral_position(self) -> None:
+        next_state = SimpleVehicleModel().step(
+            EgoState(speed=5.0),
+            HumanControl(steer=0.5),
+            dt=0.5,
+        )
+
+        self.assertGreater(next_state.yaw, 0.0)
+        self.assertGreater(next_state.y, 0.0)
+
+    def test_step_is_deterministic(self) -> None:
+        model = SimpleVehicleModel()
+        state = EgoState(x=1.0, y=2.0, yaw=0.3, speed=4.0, time=5.0)
+        control = HumanControl(steer=-0.2, throttle=0.4)
+
+        first = model.step(state, control, dt=0.1)
+        second = model.step(state, control, dt=0.1)
+
+        self.assertEqual(first, second)
+
+    def test_non_finite_control_is_rejected(self) -> None:
+        controls = (
+            HumanControl(steer=math.nan),
+            HumanControl(throttle=math.inf),
+            HumanControl(brake=-math.inf),
+        )
+
+        for control in controls:
+            with self.subTest(control=control):
+                with self.assertRaises(ValueError):
+                    SimpleVehicleModel().step(EgoState(), control, dt=0.1)
+
+    def test_non_finite_timestep_is_rejected(self) -> None:
+        for dt in (math.nan, math.inf, -math.inf):
+            with self.subTest(dt=dt):
+                with self.assertRaises(ValueError):
+                    SimpleVehicleModel().step(EgoState(), HumanControl(), dt=dt)
+
+    def test_non_finite_model_parameter_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            SimpleVehicleModel(wheelbase=math.nan)
+
+    def test_non_finite_state_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            SimpleVehicleModel().step(
+                EgoState(x=math.nan),
+                HumanControl(),
+                dt=0.1,
+            )
 
 
 class RendererInterfaceTest(unittest.TestCase):

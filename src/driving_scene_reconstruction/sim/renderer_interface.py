@@ -10,7 +10,10 @@ from .state import EgoState
 
 @dataclass(frozen=True)
 class CameraSpec:
-    """One camera's orientation relative to the ego frame."""
+    """One camera's orientation relative to the ego frame.
+
+    Yaw, pitch, and roll use radians; horizontal field of view uses degrees.
+    """
 
     name: str
     yaw: float = 0.0
@@ -45,7 +48,7 @@ class CameraRig:
 
 @dataclass(frozen=True)
 class RenderedObservation:
-    """Renderer output keyed by camera name plus backend metadata."""
+    """Renderer output at a timestamp in seconds, keyed by camera name."""
 
     timestamp: float
     frames: Mapping[str, object]
