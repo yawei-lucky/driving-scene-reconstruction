@@ -1,195 +1,121 @@
 # Project State — Driving Scene Reconstruction
 
-## 1. Current Project Positioning
+Last updated: 2026-07-17
 
-This repository focuses on **log-driven driving scene reconstruction for a human-drivable panoramic simulator**.
+## 1. Product Goal
 
-The core goal is:
-
-> Given a real driving log, reconstruct a scene representation that can render updated 360-degree / multi-view driving observations while a human controls the ego vehicle.
-
-The intended first-stage loop is:
+Build a human-drivable simulator from reconstructed real driving logs:
 
 ```text
 real driving log
-→ scene reconstruction / scene representation
-→ human control input
-→ ego state update
-→ 360-degree / multi-view rendering
-→ human-drivable simulation loop
+→ scene reconstruction
+→ human steering / throttle / brake
+→ ego-state update
+→ nearby-pose multi-camera rendering
+→ human observes and continues driving
 ```
 
-This project is related to credibility auditing, but credibility audit is only an evaluation function. The main object is a human-drivable simulator built on reconstructed real driving scenes.
+Autonomous-agent and world-model integration remain later extensions. The
+current system is geometry-grounded and human-controlled.
 
-## 2. What Changed
+## 2. Completed Stages
 
-Earlier project notes emphasized novel-view synthesis and leave-one-camera-out evaluation. That remains useful, but it is now treated as a **renderer-backend baseline**, not the whole project.
+### Stage H0 — Simulator interfaces
 
-The corrected interpretation is:
+Completed and independently reviewed:
+
+- immutable `EgoState` and normalized `HumanControl`;
+- deterministic kinematic bicycle `SimpleVehicleModel`;
+- `CameraSpec`, `CameraRig`, `RenderedObservation`, and `Renderer`;
+- dependency-free smoke loop;
+- finite-value validation and 16 current unit tests.
+
+### Stage H1 — Offline reconstruction baseline
+
+Completed on WayveScenes101 `scene_094`:
+
+- official split: 800 side/rear training images, 200 held-out front images;
+- Nerfstudio 1.1.5 `splatfacto-big`;
+- fresh 8,000-step run and 2.41 GB checkpoint;
+- Nerfstudio held-out metrics: PSNR 15.5961, SSIM 0.5343, LPIPS 0.5630;
+- official Wayve metrics: PSNR 13.2109, SSIM 0.3022, LPIPS 0.7058,
+  FID 10.5488;
+- 2,000 rendered/reference images and six validated 200-frame videos.
+
+Large artifacts stay outside Git under `/home/yawei/stage1_external`. The
+WayveScenes101 dataset is restricted to non-commercial research use.
+
+### Stage H2 — Simulator/reconstruction connection
+
+Implemented:
+
+- `SceneReferenceFrame` derives a z-up ego basis from the processed front
+  camera and the five-camera rig center;
+- physical displacement in meters is converted with Nerfstudio's
+  `dataparser_scale`;
+- the same planar rigid transform is applied to every camera, preserving rig
+  baselines and camera rotations;
+- `NerfstudioRenderer` lazily loads a config/checkpoint and clones complete
+  dataset camera calibration, including fisheye distortion;
+- nearby-pose safety limits reject queries beyond ±2 m forward, ±0.5 m left,
+  or ±5° yaw;
+- one-shot render plus Tk and browser keyboard/display examples are available;
+- a headless interaction mode supports automated validation.
+
+GPU validation used the existing `run_v2` checkpoint:
 
 ```text
-not only: generate a missing camera view
-not only: train NeRF / 3DGS
-not only: generate a fixed driving video
-
-instead: reconstruct a log-based scene that a human can drive through, with 360 / multi-view observations updating in closed loop
+reference frame: 100
+reference render: front-forward, 240x135
+offset render: +0.5m forward, +0.2m left, +2deg yaw
+offset cameras: all five Wayve cameras
+result: all five RGB frames rendered successfully
+warm headless loop: three five-view mosaics generated successfully
+browser loop: page, JPEG frame, and W-control HTTP request verified
 ```
 
-Autonomous-driving model integration is deferred. The first driver is a human.
+The first render triggered a one-time `gsplat` CUDA extension build. It required
+CUDA 12.1 and `TORCH_CUDA_ARCH_LIST=8.9`, matching the H1 training setup.
 
-World-model generation is not part of the immediate next step.
-
-## 3. Current Motivation
-
-The immediate motivation comes from a practical failure case:
-
-- a human drives while viewing a reconstructed / generated 360-degree scene;
-- the current 360 rotation or extrapolated views show artifacts;
-- generated views may become blurry, distorted, or unstable;
-- this is not only an image-quality problem, because wrong geometry, occlusion, lane structure, or object position can mislead the driver.
-
-Therefore, the project should build toward:
+## 3. What The System Can Do Now
 
 ```text
-human-drivable log-based panoramic simulator
+HumanControl
+→ SimpleVehicleModel
+→ EgoState near one logged reference pose
+→ SceneReferenceFrame transform
+→ NerfstudioRenderer
+→ front / side / rear RGB arrays
+→ Tk multi-view display
 ```
 
-rather than only a visual demo.
+This is the first repository state where simulated ego motion changes pixels
+produced by the trained reconstruction checkpoint.
 
-## 4. System Layers
+## 4. Important Limitations
 
-### Layer 1 — Log Scene Layer
+- `EgoState` is relative to one fixed logged reference rig, not yet composed
+  with a time-varying logged ego trajectory.
+- The nearby-pose limits are conservative engineering bounds, not empirically
+  certified safe regions.
+- Static Splatfacto blurs moving vehicles and pedestrians.
+- There is no collision, road-boundary, traffic-agent, or map constraint.
+- The camera basis is inferred from the reference front camera; a future log
+  adapter should use an explicit calibrated ego pose.
+- Full-resolution H1 evaluation was about 1.52 FPS. Low-resolution warmed
+  rendering is interactive, but systematic latency benchmarking is still
+  required.
+- The current examples depend on the machine-specific H1 checkpoint and
+  Nerfstudio environment.
+- Geometry, temporal, and driving-task metrics have not yet been implemented.
 
-Input may include:
+## 5. Current Next Action — Stage H3
 
-- multi-camera video or panoramic video;
-- ego pose / odometry;
-- CAN signals such as speed, steering, throttle, brake;
-- camera calibration;
-- optional LiDAR, depth, 3D boxes, map, or lane annotations.
+Prioritize measurement and time progression before simply extending training:
 
-Output:
-
-```text
-scene representation that can be queried by ego pose and camera rig
-```
-
-### Layer 2 — Human Control Layer
-
-Input:
-
-- keyboard;
-- gamepad;
-- steering wheel;
-- throttle / brake controls.
-
-Initial implementation can use synthetic scripted controls for smoke testing.
-
-### Layer 3 — Ego State Update Layer
-
-Initial state fields:
-
-```text
-x, y, yaw, speed, timestamp
-```
-
-Initial vehicle model:
-
-```text
-simple kinematic bicycle model or yaw-rate approximation
-```
-
-The first version does not need full vehicle dynamics.
-
-### Layer 4 — Rendering Layer
-
-Given the scene, ego state, and camera rig, render:
-
-- front view;
-- left view;
-- right view;
-- rear view;
-- panorama / 360-degree view;
-- multi-screen driving display.
-
-Candidate renderers:
-
-```text
-ReplayRenderer
-PanoramaRenderer
-ReconstructionRenderer
-HybridRenderer
-```
-
-Do not add a world-model renderer in the immediate next step.
-
-### Layer 5 — Evaluation / Credibility Layer
-
-Checks include:
-
-- image artifacts;
-- geometry distortion;
-- temporal instability;
-- lane / road-boundary consistency;
-- left / right / front / rear relation consistency;
-- object disappearance or hallucination;
-- occlusion errors;
-- whether the generated view is safe enough for a human driver to use.
-
-## 5. Role of NeRF / 3DGS / Splatfacto
-
-NeRF / 3DGS / Splatfacto are **not** the final objective.
-
-They are possible reconstruction renderer backends:
-
-```text
-real driving log images + camera poses
-→ per-scene reconstruction / fitting
-→ render observations for nearby ego poses
-```
-
-The existing WayveScenes101 + Splatfacto smoke run is useful because it verified that one reconstruction backend can be set up. However, a full Splatfacto training run should not be the next project step until the human-drivable simulator interface is defined.
-
-## 6. Current Codex Result Summary
-
-Codex has already verified more than the original Stage 1A resource check:
-
-- WayveScenes101 and Nerfstudio code paths were reachable;
-- the project uses `/home/yawei/stage1_external` instead of `/data` because `/data` has too little free space;
-- a WayveScenes101 environment was created;
-- `scene_094` was downloaded from an official WayveScenes101 source link;
-- the scene was converted for Nerfstudio;
-- a compatibility helper was added for top-level `camera_model=OPENCV_FISHEYE`;
-- Splatfacto completed a 1-iteration smoke run using CUDA 12.1 and `TORCH_CUDA_ARCH_LIST=8.9`.
-
-This proves that the reconstruction-backend path is feasible. It does not yet produce a useful simulator or a useful visual result.
-
-## 7. Current Next Minimal Action
-
-Next action:
-
-```text
-Stage H0: define human-drivable log-based panoramic simulator MVP
-```
-
-Do this before continuing heavy reconstruction training.
-
-Expected deliverables:
-
-```text
-docs/human_drivable_simulator_project.md
-docs/codex_next_task_stage_h0.md
-src/driving_scene_reconstruction/sim/
-examples/sim_loop_smoke.py
-```
-
-The next Codex task should implement only lightweight simulator interfaces:
-
-- `EgoState` dataclass;
-- `HumanControl` dataclass;
-- simple vehicle model step function;
-- renderer interface;
-- camera rig / camera spec dataclasses if useful;
-- dummy renderer smoke example.
-
-No dataset download, model training, world-model integration, checkpoint generation, or large output generation should happen in the next task.
+1. evaluate a grid covering forward, left, and yaw offsets;
+2. record per-view latency after explicit warm-up;
+3. compare displaced renders for lane, road boundary, and object consistency;
+4. compose control deviations with the original logged trajectory over time;
+5. investigate dynamic-object-aware reconstruction;
+6. only then compare 15k/30k checkpoints against the fixed H1/H2 protocol.

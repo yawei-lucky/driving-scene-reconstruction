@@ -62,36 +62,73 @@ ReconstructionRenderer: 3DGS / NeRF / NeuRAD / SplatAD scene rendering
 HybridRenderer: geometry-based rendering plus repair / inpainting
 ```
 
-For now, do **not** add a world-model renderer path. The immediate priority is to define and implement the human-drivable simulator interface.
+For now, do **not** add a world-model renderer path. The immediate priority is
+to measure nearby-pose quality and add logged-trajectory time progression.
 
-## Existing Stage-1 Baseline Status
+## Current Status
 
-A previous Codex run verified the WayveScenes101 + Nerfstudio / Splatfacto path as a reconstruction backend smoke test:
+The repository now has three connected results:
 
 ```text
-WayveScenes101 scene_094
-→ Nerfstudio preparation
-→ Splatfacto 1-iteration smoke run
-→ fisheye camera compatibility issue fixed
-→ CUDA / gsplat issue resolved with CUDA 12.1
+Stage H0
+→ dependency-free human-control, ego-state, vehicle-model, and renderer interfaces
+
+Stage H1
+→ WayveScenes101 scene_094 Splatfacto baseline trained for 8,000 steps
+→ official held-out front-camera metrics and validated reference videos
+
+Stage H2
+→ EgoState nearby-pose displacement mapped into Nerfstudio scene coordinates
+→ real checkpoint rendering through the Renderer protocol
+→ five-camera keyboard/display loop with a headless validation mode
 ```
 
-This is useful as a future renderer-backend experiment. It is **not** the main product objective by itself.
+The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
+and rig extrinsics at a selected reference frame. It currently enforces a
+conservative nearby-pose envelope of ±2 m forward, ±0.5 m left, and ±5° yaw.
+
+The current baseline is still not production quality: dynamic vehicles remain
+blurred, time is fixed to one reference frame, and no collision or responsive
+traffic model exists.
+
+## Run
+
+The lightweight simulator and tests use the standard library:
+
+```bash
+python3 examples/sim_loop_smoke.py
+python3 -m unittest discover -s tests -v
+```
+
+On the machine containing the Stage H1 checkpoint:
+
+```bash
+scripts/run_stage_h2_scene_094.sh smoke \
+  --forward 0.5 --left 0.2 --yaw-degrees 2 \
+  --cameras front-forward left-forward right-forward left-backward right-backward
+
+scripts/run_stage_h2_scene_094.sh interactive
+```
+
+Interactive controls are `W/S/A/D`, `R` to reset, and `Q` or Escape to quit.
+For an SSH or other display-less session, use the browser viewer:
+
+```bash
+scripts/run_stage_h2_scene_094.sh interactive --web --output-scale 0.125
+```
+
+See `docs/stage_h2_reconstruction_renderer.md` for coordinate conventions,
+validation evidence, and limitations.
 
 ## Current Next Step
 
-The next task is:
+Stage H3 should make the integration scientifically measurable:
 
-```text
-Stage H0: define human-drivable log-based panoramic simulator MVP
-```
-
-See:
-
-```text
-docs/human_drivable_simulator_project.md
-docs/codex_next_task_stage_h0.md
-```
+- quantify quality across a nearby-pose grid;
+- compare reference and displaced views for temporal and geometric stability;
+- separate model warm-up, per-view latency, and display-loop latency;
+- investigate dynamic-object-aware reconstruction;
+- add logged-trajectory time progression instead of a fixed reference frame.
 
 ## Repository Structure
 
@@ -99,11 +136,16 @@ docs/codex_next_task_stage_h0.md
 .
 ├── README.md
 ├── PROJECT_STATE.md
+├── pyproject.toml
 ├── docs/
 │   ├── human_drivable_simulator_project.md
 │   ├── codex_next_task_stage_h0.md
+│   ├── stage_h2_reconstruction_renderer.md
 │   ├── problem_statement.md
 │   └── mvp_leave_one_camera_out.md
+├── src/driving_scene_reconstruction/sim/
+├── examples/
+├── tests/
 ├── experiments/
 ├── scripts/
 └── data/

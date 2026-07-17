@@ -180,46 +180,25 @@ Do not prioritize these in the immediate next step:
 - large output video generation;
 - committing datasets, checkpoints, or rendered videos.
 
-## 8. How Existing Codex Work Fits
+## 8. Implemented Progress
 
-Codex already verified that the reconstruction-backend path is technically feasible:
+The original H0 interface task is complete. The repository has since:
 
 ```text
-WayveScenes101 scene_094
-→ Nerfstudio conversion
-→ fisheye camera_model compatibility fix
-→ Splatfacto 1-iteration smoke run
+Stage H1
+→ trained scene_094 Splatfacto for 8,000 steps
+→ evaluated the held-out front camera
+
+Stage H2
+→ connected EgoState to the trained checkpoint
+→ rendered nearby poses through the Renderer protocol
+→ added a five-camera keyboard/display loop
 ```
 
-This should be treated as a renderer-backend smoke test.
-
-Do not continue heavy Splatfacto training until the human-drivable simulator interface exists.
+See `PROJECT_STATE.md` and `docs/stage_h2_reconstruction_renderer.md`.
 
 ## 9. Immediate Next Step
 
-The next task is Stage H0:
-
-```text
-Define the human-drivable log-based panoramic simulator MVP.
-```
-
-Expected result:
-
-```text
-src/driving_scene_reconstruction/sim/
-  state.py
-  control.py
-  vehicle_model.py
-  renderer_interface.py
-examples/sim_loop_smoke.py
-```
-
-The smoke loop should:
-
-```text
-initialize ego state
-apply fake human controls
-update ego state for several steps
-call dummy renderer
-print updated state and placeholder frame metadata
-```
+Stage H3 should measure the useful nearby-pose envelope, add logged-trajectory
+time progression, and investigate dynamic-object-aware reconstruction. A world
+model remains out of scope.

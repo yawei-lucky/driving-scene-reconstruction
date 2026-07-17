@@ -2,6 +2,10 @@
 
 Last updated: 2026-07-01
 
+Status note: this is the initial research roadmap. H0, the first WayveScenes101
+baseline, and the H2 renderer integration are now complete. See
+`PROJECT_STATE.md` for current execution status.
+
 ## 1. Working Goal
 
 Build a runnable research pipeline for **real-driving scene reconstruction and view extrapolation**.

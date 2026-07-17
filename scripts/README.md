@@ -1,14 +1,41 @@
 # Scripts
 
-This directory will contain utility scripts for data preparation, frame extraction, calibration handling, baseline generation, and evaluation.
+The scripts now cover four workflows:
 
-Possible future scripts:
+- public-resource acquisition and initial Wayve/PandaSet preparation;
+- Stage H1 WayveScenes101 split, Splatfacto training, rendering, and evaluation;
+- reference-video construction and integrity validation;
+- Stage H2 nearby-pose checkpoint rendering and interactive display.
 
-- extract frames from driving videos;
-- synchronize multi-camera images;
-- load camera intrinsics and extrinsics;
-- run a baseline view-synthesis method;
-- compute image / geometry / temporal / task-level metrics;
-- generate case reports.
+## Stage H2
 
-Scripts should be added only after the MVP data format is fixed.
+The wrapper selects the existing `wayve_scenes_env`, CUDA 12.1, and RTX 4090
+architecture settings:
+
+```bash
+scripts/run_stage_h2_scene_094.sh smoke
+scripts/run_stage_h2_scene_094.sh interactive
+```
+
+All arguments after the mode are forwarded to the corresponding example.
+
+Examples:
+
+```bash
+scripts/run_stage_h2_scene_094.sh smoke \
+  --forward 0.5 --left 0.2 --yaw-degrees 2 \
+  --cameras front-forward left-forward right-forward
+
+scripts/run_stage_h2_scene_094.sh interactive \
+  --output-scale 0.125
+
+scripts/run_stage_h2_scene_094.sh interactive \
+  --web \
+  --output-scale 0.125
+
+scripts/run_stage_h2_scene_094.sh interactive \
+  --headless-steps 2 \
+  --output-dir /tmp/dsr_stage_h2_interactive
+```
+
+Generated images remain outside Git by default.

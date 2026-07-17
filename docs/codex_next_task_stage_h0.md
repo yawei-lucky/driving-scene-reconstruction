@@ -1,5 +1,9 @@
 # Codex Next Task — Stage H0
 
+Status: completed and independently reviewed. This file is retained as the
+historical H0 implementation specification; see `PROJECT_STATE.md` for the
+current stage.
+
 ## Task Title
 
 Stage H0: define human-drivable log-based panoramic simulator MVP
