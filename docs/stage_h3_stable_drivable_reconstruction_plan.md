@@ -78,11 +78,81 @@ gate before investing in cockpit UI and input-device polish.
 
 ## Workstreams
 
-### H3-0 — Multi-Sensor Data Foundation
+### H3-0A — Reproducible Training And Test Environment
 
-Before spending more GPU time on the current camera-only baseline, run one
-narrow pilot on a driving dataset that supplies synchronized cameras, LiDAR,
-ego motion, and dynamic annotations.
+This is the first H3 task. Do not begin a long dataset download or model run
+until the environment passes a small, repeatable acceptance check.
+
+Host observations on 2026-07-18:
+
+- NVIDIA GeForce RTX 4090 D with 24 GB VRAM is visible on the host;
+- NVIDIA driver version is `580.95.05`;
+- the existing `wayve_scenes_env` uses Python 3.10.14 and PyTorch
+  2.3.1+cu118, and can access the GPU on the host;
+- about 292 GB was free on the project filesystem at inspection time;
+- PandaSet and neurad-studio were not present under the currently documented
+  external artifact roots;
+- the historical Stage-1 PandaSet scripts default to `/data/external`, while
+  the working H1 artifacts are under `/home/yawei/stage1_external`;
+- the historical fetch script downloads the full PandaSet archive, so it must
+  not be run unchanged as an environment-only preparation command.
+
+Environment strategy:
+
+- preserve `wayve_scenes_env` so the verified H1/H2 checkpoint remains
+  reproducible;
+- create a separate pinned H3 environment for neurad-studio, SplatAD, NeuRAD,
+  the PandaSet devkit, and their CUDA extensions;
+- pin the neurad-studio and custom gsplat commits instead of tracking moving
+  upstream branches;
+- use SplatAD as the first multi-sensor 3DGS method because neurad-studio
+  already implements camera/LiDAR rendering and autonomous-driving
+  dataparsers;
+- keep NeuRAD as the second method only when SplatAD results require a
+  quality-oriented comparison;
+- use one configured external root for code, data, checkpoints, logs, and
+  renders; do not put heavy artifacts in Git.
+
+Environment tasks:
+
+1. inspect upstream installation requirements and choose compatible pinned
+   Python, PyTorch, CUDA toolkit, neurad-studio, and custom gsplat versions;
+2. create the isolated Conda environment without modifying
+   `wayve_scenes_env`;
+3. clone and pin neurad-studio and PandaSet devkit revisions under the selected
+   external code root;
+4. provide one environment check command that reports host, GPU, driver,
+   Python, PyTorch/CUDA, package versions, pinned commits, disk space, and
+   artifact root;
+5. verify imports and CUDA kernels without downloading PandaSet;
+6. verify the PandaSet dataparser command and SplatAD/NeuRAD command-line
+   entrypoints;
+7. run a minimal synthetic or packaged-fixture check for camera transforms,
+   LiDAR points, and rasterization;
+8. document the exact environment creation and recovery commands.
+
+Environment acceptance gate:
+
+- CUDA is visible from the new environment;
+- custom CUDA extensions compile and execute once;
+- neurad-studio exposes `splatad`, `neurad`, and `pandaset-data`;
+- an environment report can be regenerated with one command;
+- a no-data or tiny-fixture smoke test passes;
+- the existing H1/H2 environment and checkpoint still load unchanged;
+- the external artifact root has a recorded storage budget before PandaSet is
+  downloaded and extracted.
+
+Expected lightweight artifacts:
+
+```text
+scripts/check_stage_h3_environment.sh
+experiments/stage_h3_environment.md
+```
+
+### H3-0B — Multi-Sensor Data Foundation
+
+After H3-0A passes, run one narrow pilot on a driving dataset that supplies
+synchronized cameras, LiDAR, ego motion, and dynamic annotations.
 
 The first pilot dataset is **PandaSet**. Its official documentation describes
 camera images, two LiDAR sensors, GPS/IMU data, 3D cuboid annotations, and
@@ -91,7 +161,10 @@ testing geometry-constrained reconstruction and dynamic-background separation.
 WayveScenes101 remains the known camera-only baseline; it is not discarded.
 
 Only one short PandaSet scene or time window should be integrated initially.
-Do not download or convert the full dataset before the pilot passes its gates.
+First check whether the selected distribution supports per-scene access. If the
+source packages all scenes in one archive, download the archive only after the
+access, license, checksum, extraction-size, and free-space checks pass; train
+and preprocess only the selected pilot window.
 
 Tasks:
 
@@ -161,10 +234,87 @@ Primary dataset reference, accessed 2026-07-18:
 
 - PandaSet official site: <https://pandaset.org/>
 
-If the PandaSet pilot exposes a blocking limitation, evaluate nuScenes next.
-Argoverse 2 is reserved for stronger map and lane-geometry work, and Waymo Open
-Dataset for a later larger-scale experiment. Do not integrate several new
-datasets in parallel during H3-0.
+### Dataset Priority And Roles
+
+Use one dataset at a time. The order is based on the current goal of reaching a
+stable drivable reconstruction quickly, not on which dataset is largest.
+
+| Priority | Dataset | Relevant official contents | Role in this project |
+| --- | --- | --- | --- |
+| 1 | PandaSet | 6 cameras, a mechanical 360-degree LiDAR, a forward-facing LiDAR, GPS/IMU, 3D cuboids, and point-cloud semantic labels | First H3 pilot for multi-sensor reconstruction and dynamic-object separation |
+| 2 | nuScenes | 6 cameras, 1 LiDAR, 5 radar sensors, ego localization/CAN-bus data, maps, and 3D boxes | Second adapter after PandaSet; start with the mini split for ecosystem and standard-dataset comparison |
+| 3 | Argoverse 2 Sensor | 7 panoramic ring cameras, 2 stereo cameras, two 32-beam LiDARs, 6-DOF ego poses, 3D cuboids, and per-log maps; about 1 TB extracted for the full dataset | Later lane, curb, road-boundary, and map-consistency evaluation |
+| 4 | Waymo Open Dataset | Perception data with 5 cameras, 5 LiDARs, calibrations, vehicle poses, and tracked 2D/3D labels; a separate End-to-End dataset has 8-camera 360-degree coverage | Later large-scale and higher-complexity validation, not the first migration target |
+
+Primary references, accessed 2026-07-18:
+
+- PandaSet: <https://pandaset.org/>
+- nuScenes: <https://www.nuscenes.org/nuscenes>
+- Argoverse 2 Sensor Dataset:
+  <https://argoverse.github.io/user-guide/datasets/sensor.html>
+- Waymo Open Dataset: <https://waymo.com/open/about/>
+- neurad-studio/SplatAD/NeuRAD:
+  <https://github.com/georghess/neurad-studio>
+
+If the PandaSet pilot exposes a blocking dataset limitation, evaluate nuScenes
+mini next. Do not integrate several new datasets in parallel during H3.
+
+### H3-0C — Checkpoint Reuse And Training Budget
+
+Avoid repeated full training. In this project, "pretrained weights" can refer to
+two different things:
+
+1. general-purpose perception weights, such as segmentation, detection,
+   tracking, or monocular-depth networks, which can often be reused across
+   scenes;
+2. a reconstructed NeRF/3DGS checkpoint, which stores the geometry, appearance,
+   dynamic actors, and coordinate system of one particular driving scene.
+
+The second type is scene-specific. The current Wayve `scene_094` checkpoint can
+be reused for rendering, evaluation, UI development, and regression testing on
+that scene, but it cannot represent a new PandaSet street. A PandaSet checkpoint
+can be reused without retraining only when the scene, sensor calibration,
+coordinate convention, preprocessing, model configuration, and checkpoint
+format match the intended run.
+
+Before training, search the selected upstream release for a compatible
+checkpoint of the exact PandaSet sequence. If one exists, load and evaluate it
+first. Treat it as a baseline rather than assuming it matches this project's
+preprocessing or stability target.
+
+Every run should have a reproducibility key containing:
+
+```text
+dataset version
++ scene and frame window
++ calibration/preprocessing version
++ dynamic-mask version
++ method and configuration
++ code commit
++ environment version
+```
+
+If that key already has a valid checkpoint, reuse it. Retraining is justified
+only when the scene data, calibration, masks, model/loss, or relevant
+configuration changed, or when a checkpoint is missing or incompatible.
+
+Use a staged budget:
+
+- **Level 0 — no training:** environment, dataparser, synchronization,
+  calibration overlay, one-batch loading, and checkpoint-loading checks;
+- **Level 1 — smoke:** at most about 100 iterations to prove the complete GPU
+  path and artifact writing;
+- **Level 2 — pilot:** about 1k-2k iterations on one short window for fast
+  visual failure diagnosis;
+- **Level 3 — baseline:** 8k steps only after data, calibration, geometry, and
+  visual gates pass;
+- **Level 4 — longer run:** 15k/30k only when fixed metrics and visual evidence
+  show that optimization time, rather than data or modeling, is the remaining
+  limitation.
+
+Save and reuse checkpoints, cached masks, LiDAR projections, processed sensor
+manifests, and evaluation camera paths. UI, controller, and renderer development
+must use a fixed accepted checkpoint instead of triggering training.
 
 ### H3a — Scene And Segment Triage
 
@@ -197,8 +347,8 @@ leave-one-camera-out stress testing.
 
 Tasks:
 
-- train the first geometry-constrained all-camera PandaSet baseline only after
-  H3-0 calibration and export gates pass;
+- train the first geometry-constrained all-camera PandaSet SplatAD baseline
+  only after H3-0A/H3-0B environment, calibration, and export gates pass;
 - create a non-mutating split builder that trains with all five Wayve cameras;
 - hold out frames by time or sparse frame index for evaluation rather than
   holding out the full front camera;
@@ -299,20 +449,29 @@ reconstruction:
 
 ## First Concrete Task
 
-Start H3 with a narrow, evidence-producing task:
+Start H3 by preparing and freezing the environment:
 
-1. audit PandaSet access, terms, sensor files, annotations, and local storage
-   requirements without downloading the full dataset;
-2. select one short pilot scene or frame window;
-3. load and synchronize cameras, LiDAR, fused ego poses, and dynamic
+1. create a separate pinned neurad-studio/SplatAD Conda environment;
+2. make the existing PandaSet scripts use the actual external artifact root and
+   add an environment-only path that performs no dataset download;
+3. verify CUDA extensions, command entrypoints, checkpoint loading, and a tiny
+   no-data or packaged-fixture smoke path;
+4. record exact versions, commits, commands, GPU observation, disk budget, and
+   pass/fail evidence in `experiments/stage_h3_environment.md`;
+5. audit PandaSet access, terms, packaging, checksums, sensor files,
+   annotations, and extraction size;
+6. only after the environment and storage gates pass, acquire the data and
+   select one short pilot scene or frame window;
+7. load and synchronize cameras, LiDAR, fused ego poses, and dynamic
    annotations;
-4. produce camera/LiDAR calibration overlays and a documented common
+8. produce camera/LiDAR calibration overlays and a documented common
    coordinate system;
-5. export a minimal Nerfstudio/3DGS-ready static-background dataset;
-6. run a short image-only versus LiDAR-assisted reconstruction comparison;
-7. write the result, visual evidence, commands, artifact paths, and failure
-   cases in `experiments/stage_h3_dataset_foundation.md`.
+9. search for and test any exact-sequence compatible upstream checkpoint before
+   starting a new optimization;
+10. if no compatible checkpoint exists, run Level 1 smoke and Level 2 pilot
+    training before deciding on the 8k baseline.
 
-Only after the H3-0 gates pass should we spend GPU time on the longer all-camera
-baseline. The next comparison then uses PandaSet as the geometry-grounded
-candidate and Wayve `scene_094` as the known camera-only hard baseline.
+Only after the H3-0A/H3-0B gates pass should we spend GPU time on the longer
+all-camera baseline. The next comparison then uses PandaSet as the
+geometry-grounded candidate and Wayve `scene_094` as the known camera-only hard
+baseline.

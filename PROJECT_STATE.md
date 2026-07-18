@@ -118,23 +118,42 @@ can later support a video-like human-drivable simulator.
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
 
-1. start with a narrow PandaSet pilot rather than another long camera-only
+1. first create and freeze a separate neurad-studio/SplatAD training and test
+   environment; do not modify the verified Wayve environment;
+2. verify GPU/CUDA extensions, method/dataparser entrypoints, checkpoint
+   loading, artifact paths, and a no-data or tiny-fixture smoke test;
+3. then start a narrow PandaSet pilot rather than another long camera-only
    training run;
-2. synchronize multi-camera images, LiDAR, calibrated/fused ego poses, and
+4. synchronize multi-camera images, LiDAR, calibrated/fused ego poses, and
    dynamic annotations in one metric coordinate system;
-3. verify camera/LiDAR calibration visually, then compare image-only and
+5. verify camera/LiDAR calibration visually, then compare image-only and
    LiDAR-assisted static-background reconstruction;
-4. use 3D boxes or semantic labels to keep moving vehicles and pedestrians from
+6. use 3D boxes or semantic labels to keep moving vehicles and pedestrians from
    contaminating the static background;
-5. retain WayveScenes101 `scene_094` as the known camera-only hard baseline and
-   regression comparison;
-6. only after the pilot gates pass, train a longer all-camera baseline and
-   measure nearby-pose geometry, road artifacts, temporal stability, and
-   latency;
-7. add logged-trajectory progression using fused ego poses, followed by small
+7. retain WayveScenes101 `scene_094` and its existing checkpoint as the known
+   camera-only hard baseline and regression comparison;
+8. reuse a checkpoint whenever its scene, preprocessing, calibration, model
+   configuration, code, and environment key match; use no-training, <=100-step,
+   1k-2k, and 8k gates instead of repeatedly launching full training;
+9. add logged-trajectory progression using fused ego poses, followed by small
    human-control offsets.
 
 In this plan, camera images remain the source of visual appearance. LiDAR
 anchors depth, metric scale, and ground geometry; ego pose/IMU anchors
 time-varying sensor placement and gravity; annotations support dynamic-object
 separation.
+
+### H3 environment preflight observation
+
+Observed on the project host on 2026-07-18:
+
+- RTX 4090 D, 24 GB VRAM, driver `580.95.05`;
+- `wayve_scenes_env`: Python 3.10.14, PyTorch 2.3.1+cu118, GPU accessible;
+- approximately 292 GB free on the project filesystem at inspection time;
+- PandaSet and neurad-studio are not present in the documented external roots;
+- historical PandaSet scripts exist, but their `/data/external` default and
+  full-archive download behavior do not match the current H3 environment-first
+  workflow.
+
+Therefore, the immediate implementation action is environment preparation and
+script correction, not dataset training.

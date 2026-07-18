@@ -135,13 +135,18 @@ validation evidence, and limitations.
 Stage H3 should produce a stable drivable reconstruction baseline before UI or
 input-device polish:
 
-- run a small PandaSet multi-sensor pilot before another long camera-only
+- first freeze a separate neurad-studio/SplatAD training and test environment;
+- verify GPU/CUDA, dataparser and method entrypoints, checkpoint loading,
+  artifact paths, and a tiny smoke path without downloading the dataset;
+- then run a small PandaSet multi-sensor pilot before another long camera-only
   training run;
 - combine camera appearance with LiDAR metric geometry, fused ego poses/IMU,
   and dynamic-object annotations;
 - verify synchronization and camera/LiDAR calibration on one short scene;
 - compare image-only and LiDAR-assisted static-background reconstruction;
 - keep WayveScenes101 `scene_094` as the camera-only hard baseline;
+- reuse matching scene checkpoints and escalate from no-training checks to
+  <=100-step smoke, 1k-2k pilot, and 8k baseline runs;
 - reduce dynamic-object ghosts using 3D boxes or semantic labels;
 - quantify nearby-pose stability, road-region artifacts, multi-camera
   consistency, depth/scale consistency, temporal flicker, and latency;
