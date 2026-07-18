@@ -26,8 +26,9 @@ remain downstream work until the reconstructed scene itself is trustworthy.
 
 The rendered appearance still comes from camera images. LiDAR supplies sparse
 metric geometry, ego pose/IMU supplies vehicle motion and gravity orientation,
-and 3D boxes or semantic labels identify dynamic regions. These signals support
-visual reconstruction; they do not replace it.
+and 3D cuboids provide the primary dynamic actor tracks. Available point-cloud
+semantic labels are supplemental. These signals support visual reconstruction;
+they do not replace it.
 
 ## Current Diagnosis
 
@@ -80,10 +81,11 @@ gate before investing in cockpit UI and input-device polish.
 
 ### H3-0A — Reproducible Training And Test Environment
 
-This is the first H3 task. Do not begin a long dataset download or model run
-until the environment passes a small, repeatable acceptance check.
+Status: **completed and accepted on 2026-07-18**. Do not begin a long dataset
+download or model run until the remaining H3-0B data and calibration gates
+pass.
 
-Host observations on 2026-07-18:
+Initial host observations on 2026-07-18:
 
 - NVIDIA GeForce RTX 4090 D with 24 GB VRAM is visible on the host;
 - NVIDIA driver version is `580.95.05`;
@@ -96,6 +98,24 @@ Host observations on 2026-07-18:
   the working H1 artifacts are under `/home/yawei/stage1_external`;
 - the historical fetch script downloads the full PandaSet archive, so it must
   not be run unchanged as an environment-only preparation command.
+
+Implemented result:
+
+- created `/home/yawei/stage3_external/envs/h3_splatad` without modifying
+  `wayve_scenes_env`;
+- pinned neurad-studio, custom SplatAD gsplat, custom viser, PandaSet devkit,
+  and tiny-cuda-nn revisions;
+- accepted Python 3.10.20, PyTorch 2.0.1+cu118, and CUDA toolkit 11.8;
+- executed tiny-cuda-nn, camera rasterization, and LiDAR rasterization CUDA
+  kernels on the RTX 4090 D;
+- verified `splatad`, `neurad`, and `pandaset-data`;
+- added `scripts/setup_stage_h3_environment.sh` and
+  `scripts/check_stage_h3_environment.sh`;
+- preserved an H1 checkpoint render as a post-install regression check;
+- left PandaSet data and all new model training untouched.
+
+See `experiments/stage_h3_environment.md` for exact revisions, failure
+recovery, output shapes, and the current 264 GiB free-space observation.
 
 Environment strategy:
 
@@ -154,11 +174,27 @@ experiments/stage_h3_environment.md
 After H3-0A passes, run one narrow pilot on a driving dataset that supplies
 synchronized cameras, LiDAR, ego motion, and dynamic annotations.
 
+Acquisition-audit status on 2026-07-18:
+
+- the neurad-linked mirror contains one 44,520,528,731-byte ZIP at a recorded
+  repository revision and LFS SHA-256 oid;
+- archive plus full extraction needs about 83.12 GiB, while archive plus the
+  largest single-scene extraction needs about 41.91 GiB;
+- its central directory contains 103 scenes, 75,758 entries, and 76 scenes with
+  point-cloud semantics;
+- the standard mirror does not expose per-sequence packages;
+- the official page's visible download link returned HTTP 404 during the audit;
+- the archive uses CC BY 4.0 plus additional terms, so no data was downloaded
+  without explicit acceptance.
+
+See `experiments/stage_h3_dataset_foundation.md`.
+
 The first pilot dataset is **PandaSet**. Its official documentation describes
 camera images, two LiDAR sensors, GPS/IMU data, 3D cuboid annotations, and
-semantic-segmentation labels. This is a manageable first integration target for
-testing geometry-constrained reconstruction and dynamic-background separation.
-WayveScenes101 remains the known camera-only baseline; it is not discarded.
+point-cloud semantic-segmentation labels for selected scenes. This is a
+manageable first integration target for testing geometry-constrained
+reconstruction and dynamic-background separation. WayveScenes101 remains the
+known camera-only baseline; it is not discarded.
 
 Only one short PandaSet scene or time window should be integrated initially.
 First check whether the selected distribution supports per-scene access. If the
@@ -185,6 +221,14 @@ Tasks:
 - compare image-only initialization against LiDAR-assisted initialization
   and/or LiDAR depth supervision before choosing the permanent method.
 
+The accepted first SplatAD sensor path is six cameras plus `Pandar64`. Although
+PandaSet also contains the forward-facing `PandarGT`, the audited parser
+defaults to Pandar64 and its elevation map, azimuth resolution, missing-point
+logic, and raster assumptions are mature only for that sensor. The upstream
+multi-LiDAR missing-point path still contains a TODO. PandarGT therefore needs
+a separate timing, calibration, raster-layout, and ablation check; it is not
+part of the first reliable baseline.
+
 LiDAR should initially serve three concrete purposes:
 
 1. initialize or anchor scene geometry in metric coordinates;
@@ -206,10 +250,12 @@ or fused ego poses when available, because unaided acceleration and angular-rate
 integration drifts over time.
 
 Dynamic objects require a separate treatment. LiDAR alone does not remove
-vehicle or pedestrian ghosts. Use 3D boxes, semantic labels, or instance tracks
-to exclude or down-weight moving-object pixels and points when training the
-static background. Object-layer reconstruction can follow after the background
-is stable.
+vehicle or pedestrian ghosts. SplatAD already supports actor Gaussians and
+trajectories built from 3D cuboids, so the dynamic-aware object layer is the
+primary pilot path. Use masking or down-weighting as a static-background
+diagnostic and fallback, not as an assumed replacement for the implemented
+actor model. Point-cloud semantic labels are supplemental; they are not dense
+image masks.
 
 Pilot gates:
 
@@ -278,9 +324,12 @@ coordinate convention, preprocessing, model configuration, and checkpoint
 format match the intended run.
 
 Before training, search the selected upstream release for a compatible
-checkpoint of the exact PandaSet sequence. If one exists, load and evaluate it
-first. Treat it as a baseline rather than assuming it matches this project's
-preprocessing or stability target.
+checkpoint of the exact PandaSet sequence. The H3-0A source audit found resume
+instructions but no exact-sequence model-zoo catalog in the inspected
+neurad-studio README or documentation. Continue the search when the sequence is
+chosen; if a compatible checkpoint exists, load and evaluate it first. Treat it
+as a baseline rather than assuming it matches this project's preprocessing or
+stability target.
 
 Every run should have a reproducibility key containing:
 
@@ -449,29 +498,29 @@ reconstruction:
 
 ## First Concrete Task
 
-Start H3 by preparing and freezing the environment:
+H3-0A and the read-only H3-0B acquisition audit are complete. Continue with the
+licensed data and calibration gate:
 
-1. create a separate pinned neurad-studio/SplatAD Conda environment;
-2. make the existing PandaSet scripts use the actual external artifact root and
-   add an environment-only path that performs no dataset download;
-3. verify CUDA extensions, command entrypoints, checkpoint loading, and a tiny
-   no-data or packaged-fixture smoke path;
-4. record exact versions, commits, commands, GPU observation, disk budget, and
-   pass/fail evidence in `experiments/stage_h3_environment.md`;
-5. audit PandaSet access, terms, packaging, checksums, sensor files,
-   annotations, and extraction size;
-6. only after the environment and storage gates pass, acquire the data and
+1. keep `scripts/check_stage_h3_environment.sh` as the H3 environment
+   acceptance command;
+2. obtain explicit approval for the recorded PandaSet dataset terms and the
+   44.5-GB download;
+3. acquire the pinned full archive, validate its size and SHA-256, and extract
+   only the selected scene under the H3 external root;
+4. maintain at least the recorded output/checkpoint headroom and avoid a second
+   processed full copy;
+5. after the access, integrity, and storage gates pass, inspect the data and
    select one short pilot scene or frame window;
-7. load and synchronize cameras, LiDAR, fused ego poses, and dynamic
-   annotations;
-8. produce camera/LiDAR calibration overlays and a documented common
+6. load and synchronize six cameras, Pandar64, fused ego poses, and 3D cuboid
+   actor tracks;
+7. produce camera/LiDAR calibration overlays and a documented common
    coordinate system;
-9. search for and test any exact-sequence compatible upstream checkpoint before
+8. search for and test any exact-sequence compatible upstream checkpoint before
    starting a new optimization;
-10. if no compatible checkpoint exists, run Level 1 smoke and Level 2 pilot
+9. if no compatible checkpoint exists, run Level 1 smoke and Level 2 pilot
     training before deciding on the 8k baseline.
 
-Only after the H3-0A/H3-0B gates pass should we spend GPU time on the longer
-all-camera baseline. The next comparison then uses PandaSet as the
-geometry-grounded candidate and Wayve `scene_094` as the known camera-only hard
-baseline.
+Only after the H3-0B gates pass should we spend GPU time on the longer
+all-camera baseline. The next comparison then uses PandaSet SplatAD as the
+geometry- and actor-aware candidate and Wayve `scene_094` as the known
+camera-only hard baseline.

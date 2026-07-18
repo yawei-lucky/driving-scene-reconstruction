@@ -68,7 +68,7 @@ cockpit-style simulator.
 
 ## Current Status
 
-The repository now has three connected results:
+The repository now has four connected results:
 
 ```text
 Stage H0
@@ -82,6 +82,11 @@ Stage H2
 → EgoState nearby-pose displacement mapped into Nerfstudio scene coordinates
 → real checkpoint rendering through the Renderer protocol
 → five-camera keyboard/display loop with a headless validation mode
+
+Stage H3-0A
+→ isolated, pinned neurad-studio/SplatAD environment
+→ synthetic camera and LiDAR CUDA kernels verified on RTX 4090 D
+→ six-camera PandaSet parser and dynamic-aware methods ready for a data pilot
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -133,27 +138,40 @@ validation evidence, and limitations.
 ## Current Next Step
 
 Stage H3 should produce a stable drivable reconstruction baseline before UI or
-input-device polish:
+input-device polish. The isolated environment is now ready; the next gate is a
+small, auditable PandaSet data pilot:
 
-- first freeze a separate neurad-studio/SplatAD training and test environment;
-- verify GPU/CUDA, dataparser and method entrypoints, checkpoint loading,
-  artifact paths, and a tiny smoke path without downloading the dataset;
-- then run a small PandaSet multi-sensor pilot before another long camera-only
-  training run;
+- keep the verified Wayve and H3 environments separate;
+- use the completed PandaSet source/archive audit: the current neurad-linked
+  mirror is one 44.5-GB ZIP; full extraction would make 83.12 GiB, while
+  selectively extracting one scene keeps the pilot near 41.91 GiB; explicit
+  acceptance of its CC BY 4.0 plus additional terms is still needed;
+- acquire the pinned archive but extract and inspect only one 80-frame scene;
+- use six cameras, the mature Pandar64 path, fused poses, and 3D cuboid actor
+  tracks for the first reliable SplatAD baseline;
+- treat the forward PandarGT sensor as a later audited extension rather than
+  claiming two-LiDAR support immediately;
 - combine camera appearance with LiDAR metric geometry, fused ego poses/IMU,
   and dynamic-object annotations;
 - verify synchronization and camera/LiDAR calibration on one short scene;
-- compare image-only and LiDAR-assisted static-background reconstruction;
+- compare dynamic-aware SplatAD with a static-background diagnostic;
 - keep WayveScenes101 `scene_094` as the camera-only hard baseline;
 - reuse matching scene checkpoints and escalate from no-training checks to
   <=100-step smoke, 1k-2k pilot, and 8k baseline runs;
-- reduce dynamic-object ghosts using 3D boxes or semantic labels;
+- reduce dynamic-object ghosts using cuboid actor tracks, with point-cloud
+  semantics or image masks as supplemental diagnostics;
 - quantify nearby-pose stability, road-region artifacts, multi-camera
   consistency, depth/scale consistency, temporal flicker, and latency;
 - add logged-trajectory time progression from fused ego poses once the static
   reconstruction is stable enough.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
+
+Environment acceptance can be regenerated without PandaSet:
+
+```bash
+scripts/check_stage_h3_environment.sh
+```
 
 ## Repository Structure
 

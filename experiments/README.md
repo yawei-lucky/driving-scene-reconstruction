@@ -11,9 +11,14 @@ Recorded experiments:
 - `stage1_codex_execution.md`: environment preparation and early smoke runs;
 - `stage_h1_scene_094_reconstruction.md`: 8,000-step WayveScenes101 baseline,
   held-out metrics, visual findings, and external artifact inventory.
+- `stage_h3_environment.md`: isolated neurad-studio/SplatAD environment,
+  pinned revisions, synthetic camera/LiDAR GPU acceptance, and direction risks.
+- `stage_h3_dataset_foundation.md`: PandaSet source, license, archive/storage,
+  per-sequence packaging, and semantic-coverage acquisition audit.
 
 Stage H2 connects that H1 checkpoint to the simulator interface. Its design and
 GPU validation record live in `docs/stage_h2_reconstruction_renderer.md`.
 
-The next experiment should evaluate a fixed grid of nearby ego poses and record
-quality, geometry failures, and warmed rendering latency.
+The next H3 experiment should audit and load one PandaSet sequence, preserve
+camera/LiDAR calibration overlays, and pass the data and geometry gates before
+any long training run.
