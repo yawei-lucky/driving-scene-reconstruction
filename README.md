@@ -114,7 +114,16 @@ Interactive controls are `W/S/A/D`, `R` to reset, and `Q` or Escape to quit.
 For an SSH or other display-less session, use the browser viewer:
 
 ```bash
-scripts/run_stage_h2_scene_094.sh interactive --web --output-scale 0.125
+scripts/run_stage_h2_scene_094.sh interactive --web --output-scale 0.25
+```
+
+For a larger detailed front view:
+
+```bash
+scripts/run_stage_h2_scene_094.sh interactive \
+  --web \
+  --output-scale 0.5 \
+  --cameras front-forward
 ```
 
 See `docs/stage_h2_reconstruction_renderer.md` for coordinate conventions,

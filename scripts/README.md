@@ -31,7 +31,12 @@ scripts/run_stage_h2_scene_094.sh interactive \
 
 scripts/run_stage_h2_scene_094.sh interactive \
   --web \
-  --output-scale 0.125
+  --output-scale 0.25
+
+scripts/run_stage_h2_scene_094.sh interactive \
+  --web \
+  --output-scale 0.5 \
+  --cameras front-forward
 
 scripts/run_stage_h2_scene_094.sh interactive \
   --headless-steps 2 \

@@ -80,7 +80,13 @@ def make_mosaic(
         draw = image_draw_module.Draw(image)
         draw.text((10, 8), name, fill=(0, 255, 0), stroke_width=2, stroke_fill=(0, 0, 0))
         images.append(image)
-    columns = 3
+    camera_count = len(images)
+    if camera_count == 1:
+        columns = 1
+    elif camera_count in (2, 4):
+        columns = 2
+    else:
+        columns = 3
     width, height = images[0].size
     blank = image_module.new("RGB", (width, height), color=(0, 0, 0))
     while len(images) % columns:
@@ -143,7 +149,10 @@ WEB_PAGE = """<!doctype html>
     <button data-key="s">S 刹车</button>
     <button data-key="d">D 右转</button>
   </div>
-  <div><button data-key="r">R 重置</button></div>
+  <div>
+    <button data-key="r">R 重置</button>
+    <button id="fullscreen">全屏画面</button>
+  </div>
   <script>
     const view = document.getElementById("view");
     const status = document.getElementById("status");
@@ -174,7 +183,15 @@ WEB_PAGE = """<!doctype html>
       }
     });
     document.querySelectorAll("button").forEach(
-      button => button.addEventListener("click", () => control(button.dataset.key))
+      button => {
+        if (button.dataset.key) {
+          button.addEventListener("click", () => control(button.dataset.key));
+        }
+      }
+    );
+    document.getElementById("fullscreen").addEventListener(
+      "click",
+      () => view.requestFullscreen()
     );
   </script>
 </body>

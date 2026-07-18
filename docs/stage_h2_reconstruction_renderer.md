@@ -117,7 +117,7 @@ Browser display for SSH or other sessions without `$DISPLAY`:
 ```bash
 scripts/run_stage_h2_scene_094.sh interactive \
   --web \
-  --output-scale 0.125
+  --output-scale 0.25
 ```
 
 The default URL is `http://127.0.0.1:8765`. When connecting over SSH, forward
@@ -125,6 +125,16 @@ that port and open the URL on the client machine:
 
 ```bash
 ssh -L 8765:127.0.0.1:8765 yawei@stf-precision-3680
+```
+
+For a larger front view, render only that camera at half resolution. The
+single-camera layout expands to fill the available browser area:
+
+```bash
+scripts/run_stage_h2_scene_094.sh interactive \
+  --web \
+  --output-scale 0.5 \
+  --cameras front-forward
 ```
 
 Keys:
