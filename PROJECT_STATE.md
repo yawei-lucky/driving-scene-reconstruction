@@ -118,13 +118,23 @@ can later support a video-like human-drivable simulator.
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
 
-1. select cleaner scenes or segments instead of relying only on dynamic-heavy
-   `scene_094`;
-2. train an all-camera baseline, holding out time frames rather than the entire
-   front camera;
-3. reduce dynamic-object ghosts before spending large GPU time on longer
-   training;
-4. measure nearby-pose stability, road-region artifacts, multi-camera
-   consistency, temporal flicker, and latency;
-5. add logged-trajectory time progression after the static reconstruction is
-   visually stable enough to trust.
+1. start with a narrow PandaSet pilot rather than another long camera-only
+   training run;
+2. synchronize multi-camera images, LiDAR, calibrated/fused ego poses, and
+   dynamic annotations in one metric coordinate system;
+3. verify camera/LiDAR calibration visually, then compare image-only and
+   LiDAR-assisted static-background reconstruction;
+4. use 3D boxes or semantic labels to keep moving vehicles and pedestrians from
+   contaminating the static background;
+5. retain WayveScenes101 `scene_094` as the known camera-only hard baseline and
+   regression comparison;
+6. only after the pilot gates pass, train a longer all-camera baseline and
+   measure nearby-pose geometry, road artifacts, temporal stability, and
+   latency;
+7. add logged-trajectory progression using fused ego poses, followed by small
+   human-control offsets.
+
+In this plan, camera images remain the source of visual appearance. LiDAR
+anchors depth, metric scale, and ground geometry; ego pose/IMU anchors
+time-varying sensor placement and gravity; annotations support dynamic-object
+separation.

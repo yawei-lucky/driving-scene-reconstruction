@@ -135,14 +135,18 @@ validation evidence, and limitations.
 Stage H3 should produce a stable drivable reconstruction baseline before UI or
 input-device polish:
 
-- select cleaner driving scenes or segments;
-- train an all-camera reconstruction baseline instead of only the
-  leave-front-camera research split;
-- reduce dynamic-object ghosts in the static background;
+- run a small PandaSet multi-sensor pilot before another long camera-only
+  training run;
+- combine camera appearance with LiDAR metric geometry, fused ego poses/IMU,
+  and dynamic-object annotations;
+- verify synchronization and camera/LiDAR calibration on one short scene;
+- compare image-only and LiDAR-assisted static-background reconstruction;
+- keep WayveScenes101 `scene_094` as the camera-only hard baseline;
+- reduce dynamic-object ghosts using 3D boxes or semantic labels;
 - quantify nearby-pose stability, road-region artifacts, multi-camera
-  consistency, temporal flicker, and latency;
-- add logged-trajectory time progression once the static reconstruction is
-  stable enough.
+  consistency, depth/scale consistency, temporal flicker, and latency;
+- add logged-trajectory time progression from fused ego poses once the static
+  reconstruction is stable enough.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 
