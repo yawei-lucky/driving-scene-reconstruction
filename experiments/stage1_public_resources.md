@@ -2,6 +2,12 @@
 
 Last updated: 2026-07-02
 
+> **Historical Stage 1 planning record.**
+>
+> The resource choices and imperative wording below document the Stage 1
+> decision at that time; they are not current execution instructions. See the
+> repository root `README.md` and `PROJECT_STATE.md` for current priorities.
+
 ## 1. Execution Goal
 
 Run the first real experiment using public / openly available autonomous-driving resources and mature open-source reconstruction tools.

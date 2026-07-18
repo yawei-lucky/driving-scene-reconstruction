@@ -2,6 +2,12 @@
 
 Date: 2026-07-14
 
+> **Completed experiment record.**
+>
+> This file preserves the H1 setup, results, and artifact locations. It is not
+> a current task specification; use the repository root `README.md` and
+> `PROJECT_STATE.md` for current scope and next actions.
+
 ## Scope
 
 - Dataset: WayveScenes101 `scene_094` (dataset license: non-commercial research use).

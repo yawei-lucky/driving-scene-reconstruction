@@ -2,6 +2,13 @@
 
 Date: 2026-07-09
 
+> **Historical execution log.**
+>
+> Commands, machine state, environment findings, and next-step wording below
+> describe the recorded Stage 1A run. Do not assume they are still current or
+> treat them as active instructions. See the repository root `README.md` and
+> `PROJECT_STATE.md` for the current stage.
+
 ## 2026-07-09 Linux Workspace Check
 
 Task: verify public resources and prepare the first WayveScenes101 run from the local Linux checkout.

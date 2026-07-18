@@ -1,6 +1,11 @@
 # Experiments
 
-Current experiment record:
+This directory contains historical experiment records, not active task
+instructions. Preserve recorded commands, environment details, decisions, and
+results as evidence of what was done at the time. For current scope, status,
+and next actions, use the repository root `README.md` and `PROJECT_STATE.md`.
+
+Recorded experiments:
 
 - `stage1_public_resources.md`: public dataset and codebase selection;
 - `stage1_codex_execution.md`: environment preparation and early smoke runs;

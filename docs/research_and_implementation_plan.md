@@ -1,10 +1,15 @@
 # Research and Implementation Plan
 
-Last updated: 2026-07-01
+Last reviewed: 2026-07-18
 
-Status note: this is the initial research roadmap. H0, the first WayveScenes101
-baseline, and the H2 renderer integration are now complete. See
-`PROJECT_STATE.md` for current execution status.
+> **Planning reference — not the current task specification.**
+>
+> This document preserves the initial research roadmap. H0, the first
+> WayveScenes101 baseline, and the H2 renderer integration are complete.
+> Dataset rankings, stage ordering, and imperative wording below record the
+> original plan rather than current instructions. If this roadmap differs from
+> the repository root `README.md` or `PROJECT_STATE.md`, those two current
+> documents take precedence.
 
 ## 1. Working Goal
 

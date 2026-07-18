@@ -1,8 +1,11 @@
 # Codex Next Task — Stage H0
 
-Status: completed and independently reviewed. This file is retained as the
-historical H0 implementation specification; see `PROJECT_STATE.md` for the
-current stage.
+> **Archived task specification — not current instructions.**
+>
+> Stage H0 is completed and independently reviewed. The requirements below
+> describe only the historical H0 implementation task and must not be applied
+> to later stages. Use the repository root `README.md` for current scope and
+> `PROJECT_STATE.md` for current status and next actions.
 
 ## Task Title
 
@@ -41,7 +44,7 @@ That is useful, but the project should not continue heavy reconstruction trainin
 
 This task should define the human-drivable simulator skeleton first.
 
-## Rules
+## Historical H0 Task Rules (No Longer Active)
 
 - Do not train NeRF, 3DGS, Splatfacto, Nerfacto, NeuRAD, or SplatAD.
 - Do not download datasets.
