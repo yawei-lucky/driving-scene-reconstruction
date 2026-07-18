@@ -63,7 +63,8 @@ HybridRenderer: geometry-based rendering plus repair / inpainting
 ```
 
 For now, do **not** add a world-model renderer path. The immediate priority is
-to measure nearby-pose quality and add logged-trajectory time progression.
+to make the reconstructed scene stable enough for a later human-drivable
+cockpit-style simulator.
 
 ## Current Status
 
@@ -131,13 +132,19 @@ validation evidence, and limitations.
 
 ## Current Next Step
 
-Stage H3 should make the integration scientifically measurable:
+Stage H3 should produce a stable drivable reconstruction baseline before UI or
+input-device polish:
 
-- quantify quality across a nearby-pose grid;
-- compare reference and displaced views for temporal and geometric stability;
-- separate model warm-up, per-view latency, and display-loop latency;
-- investigate dynamic-object-aware reconstruction;
-- add logged-trajectory time progression instead of a fixed reference frame.
+- select cleaner driving scenes or segments;
+- train an all-camera reconstruction baseline instead of only the
+  leave-front-camera research split;
+- reduce dynamic-object ghosts in the static background;
+- quantify nearby-pose stability, road-region artifacts, multi-camera
+  consistency, temporal flicker, and latency;
+- add logged-trajectory time progression once the static reconstruction is
+  stable enough.
+
+See `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 
 ## Repository Structure
 
@@ -149,6 +156,7 @@ Stage H3 should make the integration scientifically measurable:
 ├── docs/
 │   ├── human_drivable_simulator_project.md
 │   ├── codex_next_task_stage_h0.md
+│   ├── stage_h3_stable_drivable_reconstruction_plan.md
 │   ├── stage_h2_reconstruction_renderer.md
 │   ├── problem_statement.md
 │   └── mvp_leave_one_camera_out.md

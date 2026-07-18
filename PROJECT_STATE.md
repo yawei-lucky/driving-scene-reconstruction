@@ -1,6 +1,6 @@
 # Project State — Driving Scene Reconstruction
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## 1. Product Goal
 
@@ -111,11 +111,20 @@ produced by the trained reconstruction checkpoint.
 
 ## 5. Current Next Action — Stage H3
 
-Prioritize measurement and time progression before simply extending training:
+Stage H3 now prioritizes stable drivable scene reconstruction before cockpit UI
+or steering-wheel polish. The goal is a clean, repeatable reconstruction that
+can later support a video-like human-drivable simulator.
 
-1. evaluate a grid covering forward, left, and yaw offsets;
-2. record per-view latency after explicit warm-up;
-3. compare displaced renders for lane, road boundary, and object consistency;
-4. compose control deviations with the original logged trajectory over time;
-5. investigate dynamic-object-aware reconstruction;
-6. only then compare 15k/30k checkpoints against the fixed H1/H2 protocol.
+See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
+plan. The short version is:
+
+1. select cleaner scenes or segments instead of relying only on dynamic-heavy
+   `scene_094`;
+2. train an all-camera baseline, holding out time frames rather than the entire
+   front camera;
+3. reduce dynamic-object ghosts before spending large GPU time on longer
+   training;
+4. measure nearby-pose stability, road-region artifacts, multi-camera
+   consistency, temporal flicker, and latency;
+5. add logged-trajectory time progression after the static reconstruction is
+   visually stable enough to trust.
