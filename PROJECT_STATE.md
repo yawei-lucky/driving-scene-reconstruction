@@ -143,6 +143,48 @@ smoke or the Wayve held-out protocol. Nearby-pose geometry, quantitative depth,
 temporal flicker, and dynamic-residue gates are still open. See
 `experiments/stage_h3_scene_040_pilot.md`.
 
+### Stage H3 Level 3 — Static 8k geometry/temporal baseline
+
+Completed on 2026-07-19:
+
+- exactly resumed the accepted step-1,999 pilot with optimizer and scheduler
+  state and trained to step 7,999;
+- improved the same 48 held-out views to PSNR 26.6605, SSIM 0.8145, and LPIPS
+  0.2818;
+- rendered all 126 fixed nearby-pose views without a finite-value failure;
+- improved cuboid-excluded static LiDAR absolute error to 0.0614 m p50,
+  0.6265 m p90, and 1.4925 m p95;
+- rendered all 480 logged camera views without a finite-value failure;
+- measured per-camera excess-warp p95 of 0.00457-0.00758;
+- measured 28.01 ms p95 for one warmed camera and 153.19 ms p95 for a
+  sequential six-camera rig.
+
+Static 8k is the current best H3 checkpoint. It is not yet a stable-drivable
+acceptance: close vehicles remain blurred, some optical-flow coverage is
+inconclusive, and the six-camera path is about 6.5 Hz rather than 10 Hz.
+
+### Stage H3 Level 4 — Vehicle actor ablations
+
+Completed and rejected on 2026-07-19:
+
+- implemented actor-aware MCMC relocation that preserves every actor ID;
+- trained a stationary+moving candidate with 91 stationary and 7 moving
+  actors;
+- rejected it after actor layers consumed 42.3% of the final 5M Gaussians and
+  degraded held-out appearance, vehicle crops, LiDAR geometry, temporal
+  stability, and latency;
+- trained the independent reviewer's requested moving-only 8k ablation with
+  all 7 moving actors surviving and 4.959M background Gaussians retained;
+- rejected it because moving crops fell from PSNR 21.3726 / LPIPS 0.2157 to
+  19.7167 / 0.3649 and static LiDAR p90 worsened from 0.6265 m to 0.8529 m.
+
+The second ablation separates two failures: stationary actor seed expansion
+caused the first candidate's global capacity collapse, while the remaining
+moving-actor failure is most consistent with actor-local geometry, cuboid
+trajectory, timestamp, rolling-shutter, or world/camera transform
+misalignment. See
+`experiments/stage_h3_static_8k_and_actor_ablations.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -159,10 +201,12 @@ This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint.
 
 Separately, the H3 path now loads real PandaSet scene 040, uses six cameras,
-Pandar64 geometry and cuboid actor tracks, trains SplatAD, saves/reloads a
-checkpoint, and renders held-out RGB/depth. The 2,000-step checkpoint recovers
-recognizable static structure at logged held-out poses, but has not yet passed
-the nearby-pose and temporal stability gates required for driving.
+Pandar64 geometry and cuboid actor tracks, trains SplatAD, saves/reloads
+checkpoints, and renders held-out RGB/depth. The accepted static 8k checkpoint
+recovers coherent static structure at logged and small nearby poses. It has
+measured image, LiDAR, temporal, actor, VRAM, and warm-latency evidence, but
+close dynamic vehicles and six-camera throughput still block a
+stable-drivable acceptance.
 
 ## 4. Important Limitations
 
@@ -197,36 +241,39 @@ the nearby-pose and temporal stability gates required for driving.
 - The H3 2,000-step pilot is much clearer but uses a denser 0.9 train split.
   Its fixed 48-view metrics measure interpolation near observed poses rather
   than wide extrapolation.
-- Peak VRAM was not preserved during the 2,000-step run and must be measured
-  before raising seed density or starting a longer run.
+- Peak VRAM is now recorded by the H3 geometry and temporal evaluators, but it
+  was not preserved for the historical 2,000-step training process.
 - The PandaSet back camera is intentionally cropped from 1920x1080 to 1920x820
   by the upstream parser; rear-view acceptance must account for that crop.
-- Geometry, temporal, and driving-task metrics have not yet been implemented.
+- Geometry and temporal evaluators are implemented. A final static-semantic
+  LiDAR gate, cross-camera seam metric, and driving-task metric remain open.
+- Both tested actor-aware candidates are rejected. Actor ID survival is not
+  evidence that the actor appears at the correct image location.
 
 ## 5. Current Next Action — Stage H3
 
 Stage H3 prioritizes stable drivable scene reconstruction before cockpit UI or
-steering-wheel polish. Environment, acquisition, calibration, Level 1, and the
-Level 2 visual pilot have passed. The current action is a no-retraining
-geometry/temporal acceptance of the 2,000-step checkpoint, not an 8k baseline.
+steering-wheel polish. Environment, acquisition, calibration, the 2k pilot,
+static 8k baseline, and two actor ablations are complete. Static 8k remains the
+accepted checkpoint; both actor-aware variants are rejected.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
 
-1. preserve and reuse the accepted 2,000-step config/checkpoint and fixed test
-   timestamps;
-2. render a fixed nearby-pose grid around several logged timestamps without
-   changing training;
-3. compare rendered depth with held-out Pandar64 on static road, curb, facade,
-   pole, and vehicle regions;
-4. measure trajectory flicker, camera-to-camera structure, actor residue,
-   warmed rendering latency, and peak VRAM;
-5. diagnose timestamp handling, seed geometry, loss scheduling, or
-   actor/background separation if any geometry/temporal gate fails;
-6. authorize an 8k scene-040 baseline only after those checks pass;
-7. retain WayveScenes101 `scene_094` as the camera-only hard baseline;
+1. keep static 8k as the fixed comparison checkpoint;
+2. stop additional 8k/30k actor training until spatial alignment is proven;
+3. project each moving actor's local LiDAR seed, cuboid trajectory, and final
+   actor-only Gaussians through the exact SplatAD time and transform path;
+4. compare those projections with the source vehicle pixels across all six
+   cameras and rolling-shutter times;
+5. locate whether the first mismatch is seed assignment, cuboid interpolation,
+   actor-local/world transform, camera timing, or trajectory optimization;
+6. correct and test that one failure on a small actor/window before authorizing
+   another full-scene run;
+7. retain WayveScenes101 `scene_094` and static PandaSet 8k as fixed
+   comparisons;
 8. add logged-trajectory progression and human-control offsets only after the
-   accepted 8k or equivalent stable checkpoint exists.
+   reconstruction gate is accepted.
 
 In this plan, camera images remain the source of visual appearance. LiDAR
 anchors depth, metric scale, and ground geometry; fused ego pose/IMU anchors

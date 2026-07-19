@@ -20,10 +20,25 @@ PILOT_RUN_ROOT="${TRAIN_ROOT}/${PILOT_EXPERIMENT}/splatad/${PILOT_TIMESTAMP}"
 PILOT_CONFIG="${PILOT_RUN_ROOT}/config.yml"
 PILOT_CHECKPOINT="${PILOT_RUN_ROOT}/nerfstudio_models/step-000001999.ckpt"
 PILOT_RENDER_ROOT="${H3_PILOT_RENDER_ROOT:-${H3_ROOT}/artifacts/scene_040_pilot_2000_render}"
+STATIC_EXPERIMENT="${H3_STATIC_EXPERIMENT_NAME:-scene_040_splatad_static_8000}"
+STATIC_TIMESTAMP="${H3_STATIC_TIMESTAMP:-2026-07-19_resume_2k_to_8k}"
+STATIC_RUN_ROOT="${TRAIN_ROOT}/${STATIC_EXPERIMENT}/splatad/${STATIC_TIMESTAMP}"
+STATIC_CONFIG="${STATIC_RUN_ROOT}/config.yml"
+STATIC_CHECKPOINT="${STATIC_RUN_ROOT}/nerfstudio_models/step-000007999.ckpt"
+VEHICLE_EXPERIMENT="${H3_VEHICLE_EXPERIMENT_NAME:-scene_040_splatad_vehicle_objects_8000}"
+VEHICLE_TIMESTAMP="${H3_VEHICLE_TIMESTAMP:-2026-07-19_stationary_moving_actor_aware}"
+VEHICLE_RUN_ROOT="${TRAIN_ROOT}/${VEHICLE_EXPERIMENT}/splatad/${VEHICLE_TIMESTAMP}"
+VEHICLE_CONFIG="${VEHICLE_RUN_ROOT}/config.yml"
+VEHICLE_CHECKPOINT="${VEHICLE_RUN_ROOT}/nerfstudio_models/step-000007999.ckpt"
+MOVING_EXPERIMENT="${H3_MOVING_EXPERIMENT_NAME:-scene_040_splatad_moving_actor_aware_8000}"
+MOVING_TIMESTAMP="${H3_MOVING_TIMESTAMP:-2026-07-19_moving_only_actor_aware}"
+MOVING_RUN_ROOT="${TRAIN_ROOT}/${MOVING_EXPERIMENT}/splatad/${MOVING_TIMESTAMP}"
+MOVING_CONFIG="${MOVING_RUN_ROOT}/config.yml"
+MOVING_CHECKPOINT="${MOVING_RUN_ROOT}/nerfstudio_models/step-000007999.ckpt"
 PYTHON="${H3_ENV}/bin/python"
 
 usage() {
-  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|paths}" >&2
+  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|vehicle-8k|moving-8k|paths}" >&2
 }
 
 if [[ ! -x "$PYTHON" ]]; then
@@ -43,6 +58,7 @@ export TCNN_CUDA_ARCHITECTURES="${TCNN_CUDA_ARCHITECTURES:-89}"
 export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.9}"
 export TORCH_EXTENSIONS_DIR="${TORCH_EXTENSIONS_DIR:-${H3_ROOT}/cache/torch_extensions}"
 export MPLCONFIGDIR="${MPLCONFIGDIR:-${H3_ROOT}/cache/matplotlib}"
+export PYTHONPATH="${REPO_ROOT}/src:${PYTHONPATH:-}"
 
 mkdir -p "$TORCH_EXTENSIONS_DIR" "$MPLCONFIGDIR"
 
@@ -142,6 +158,75 @@ case "$MODE" in
       --jpeg-quality 95 \
       --calculate-and-save-metrics True
     ;;
+  static-8k)
+    if [[ -f "$STATIC_CHECKPOINT" && "${H3_ALLOW_RETRAIN:-0}" != "1" ]]; then
+      echo "PASS: reusing existing 8,000-step static-background checkpoint: $STATIC_CHECKPOINT"
+      echo "Set H3_ALLOW_RETRAIN=1 only when an intentional rerun is required."
+      exit 0
+    fi
+    if [[ ! -f "$PILOT_CHECKPOINT" ]]; then
+      echo "Accepted 2,000-step source checkpoint is missing: $PILOT_CHECKPOINT" >&2
+      exit 1
+    fi
+    # Trainer max_num_iterations counts additional iterations after resume.
+    # Loading step 1,999 plus 6,000 iterations produces final step 7,999. The
+    # repository entrypoint works around the pinned trainer's optimizer-load
+    # ordering bug while preserving the exact optimizer and scheduler state.
+    "$PYTHON" "$REPO_ROOT/scripts/resume_stage_h3_exact.py" \
+      --source-config "$PILOT_CONFIG" \
+      --checkpoint "$PILOT_CHECKPOINT" \
+      --output-dir "$TRAIN_ROOT" \
+      --experiment-name "$STATIC_EXPERIMENT" \
+      --timestamp "$STATIC_TIMESTAMP" \
+      --additional-iterations 6000 \
+      --model-max-steps 8000 \
+      --steps-per-save 2000 \
+      --steps-per-eval-image 1000 \
+      --keep-all-checkpoints
+    ;;
+  vehicle-8k)
+    if [[ -f "$VEHICLE_CHECKPOINT" && "${H3_ALLOW_RETRAIN:-0}" != "1" ]]; then
+      echo "PASS: reusing existing 8,000-step vehicle-object checkpoint: $VEHICLE_CHECKPOINT"
+      echo "Set H3_ALLOW_RETRAIN=1 only when an intentional rerun is required."
+      exit 0
+    fi
+    if [[ ! -f "$PILOT_CONFIG" ]]; then
+      echo "Accepted source config is missing: $PILOT_CONFIG" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/train_stage_h3_vehicle_objects.py" \
+      --source-config "$PILOT_CONFIG" \
+      --output-dir "$TRAIN_ROOT" \
+      --experiment-name "$VEHICLE_EXPERIMENT" \
+      --timestamp "$VEHICLE_TIMESTAMP" \
+      --max-num-iterations 8000 \
+      --model-max-steps 8000 \
+      --steps-per-save 2000 \
+      --steps-per-eval-image 1000 \
+      --keep-all-checkpoints
+    ;;
+  moving-8k)
+    if [[ -f "$MOVING_CHECKPOINT" && "${H3_ALLOW_RETRAIN:-0}" != "1" ]]; then
+      echo "PASS: reusing existing 8,000-step moving-only actor checkpoint: $MOVING_CHECKPOINT"
+      echo "Set H3_ALLOW_RETRAIN=1 only when an intentional rerun is required."
+      exit 0
+    fi
+    if [[ ! -f "$PILOT_CONFIG" ]]; then
+      echo "Accepted source config is missing: $PILOT_CONFIG" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/train_stage_h3_vehicle_objects.py" \
+      --source-config "$PILOT_CONFIG" \
+      --output-dir "$TRAIN_ROOT" \
+      --experiment-name "$MOVING_EXPERIMENT" \
+      --timestamp "$MOVING_TIMESTAMP" \
+      --max-num-iterations 8000 \
+      --model-max-steps 8000 \
+      --steps-per-save 2000 \
+      --steps-per-eval-image 1000 \
+      --keep-all-checkpoints \
+      --moving-only
+    ;;
   paths)
     echo "data: $DATA_ROOT/$SCENE"
     echo "calibration: $CALIBRATION_ROOT"
@@ -151,6 +236,12 @@ case "$MODE" in
     echo "pilot config: $PILOT_CONFIG"
     echo "pilot checkpoint: $PILOT_CHECKPOINT"
     echo "pilot test render: $PILOT_RENDER_ROOT"
+    echo "static 8k config: $STATIC_CONFIG"
+    echo "static 8k checkpoint: $STATIC_CHECKPOINT"
+    echo "vehicle 8k config: $VEHICLE_CONFIG"
+    echo "vehicle 8k checkpoint: $VEHICLE_CHECKPOINT"
+    echo "moving-only 8k config: $MOVING_CONFIG"
+    echo "moving-only 8k checkpoint: $MOVING_CHECKPOINT"
     ;;
   *)
     usage

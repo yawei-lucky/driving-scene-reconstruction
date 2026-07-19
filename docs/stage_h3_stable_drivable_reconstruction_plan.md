@@ -2,6 +2,28 @@
 
 Date: 2026-07-19
 
+## Execution Update
+
+The no-retraining 2k gate, exact 2k-to-8k resume, and two actor-layer
+ablations are now complete.
+
+- Static 8k is the current accepted H3 checkpoint: held-out PSNR 26.6605,
+  SSIM 0.8145, LPIPS 0.2818; static LiDAR error p50/p90 is
+  0.0614/0.6265 m.
+- It is not yet a stable-drivable acceptance: close vehicles remain blurred
+  and six-camera sequential rendering is 153.19 ms p95 rather than <=100 ms.
+- A 98-object stationary+moving actor pilot was rejected because it consumed
+  42.3% of final Gaussian capacity, blurred vehicles, degraded geometry, and
+  increased latency.
+- A moving-only actor-aware 8k ablation preserved all 7 actors and restored
+  background capacity, but still worsened moving crops, held-out SSIM, and
+  LiDAR p90. The current actor-aware branch is therefore stopped.
+
+The next action is an actor-alignment diagnostic before any further training:
+project every moving cuboid at exact camera timestamps, verify actor-local/world
+transforms, and compare actor-only and background-only renders. See
+`experiments/stage_h3_static_8k_and_actor_ablations.md`.
+
 ## Purpose
 
 Stage H3 shifts the next milestone from a visually packaged cockpit demo to a

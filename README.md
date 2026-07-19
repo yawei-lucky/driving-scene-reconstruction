@@ -96,16 +96,27 @@ Stage H3 Level 2
 → 90% temporal training split, six cameras, Pandar64, and actor tracks
 → 2,000-step checkpoint recovered recognizable static structure in all six views
 → 48-view means: PSNR 24.7109, SSIM 0.7392, LPIPS 0.4475
+
+Stage H3 Level 3
+→ exact-resume static 8,000-step checkpoint
+→ 48-view means: PSNR 26.6605, SSIM 0.8145, LPIPS 0.2818
+→ 126 finite nearby-pose views and measured LiDAR/temporal/latency evidence
+
+Stage H3 Level 4
+→ stationary+moving and moving-only actor-aware 8k ablations
+→ both rejected; static 8k remains the accepted checkpoint
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
 and rig extrinsics at a selected reference frame. It currently enforces a
 conservative nearby-pose envelope of ±2 m forward, ±0.5 m left, and ±5° yaw.
 
-The current baseline is still not production quality. The H3 100-step output
-is visibly under-trained and only proves the end-to-end path; H2 dynamic
-vehicles remain blurred, time is fixed to one reference frame, and no collision
-or responsive traffic model exists.
+The current baseline is still not production quality. Static H3 8k is much
+clearer and geometrically stronger than the 2k pilot, but close vehicles remain
+blurred and sequential six-camera rendering is about 6.5 Hz. The tested actor
+layers kept actor IDs alive but did not place moving vehicles correctly in the
+images. H2 time is still fixed to one reference frame, and no collision or
+responsive traffic model exists.
 
 ## Run
 
@@ -148,18 +159,14 @@ validation evidence, and limitations.
 ## Current Next Step
 
 Stage H3 should produce a stable drivable reconstruction baseline before UI or
-input-device polish. Environment, acquisition, calibration, 100-step smoke,
-and the 2,000-step visual pilot have passed on PandaSet scene 040. The next
-gate reuses that checkpoint; it does not retrain:
+input-device polish. Static 8k is now the fixed accepted checkpoint. The next
+gate does not start another long training run:
 
-- render a fixed nearby-pose grid around several logged timestamps;
-- compare predicted depth against held-out Pandar64 on static road, curb,
-  facade, pole, and vehicle regions;
-- measure logged-trajectory flicker and camera-to-camera structure;
-- inspect the 7 dynamic actor tracks separately from stationary background;
-- record peak VRAM and warmed render latency before raising the seed or step
-  budget;
-- authorize the 8k baseline only if these geometry and temporal gates pass;
+- project moving-actor LiDAR seeds and cuboids at exact camera timestamps;
+- validate actor-local, world, and camera transforms including rolling shutter;
+- render actor-only and background-only layers;
+- identify where moving cars first leave their source image location;
+- correct and test one actor/window before another full-scene run;
 - keep PandarGT, cockpit UI, controller work, and unrestricted driving deferred.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
@@ -169,8 +176,13 @@ Environment acceptance can be regenerated without PandaSet:
 ```bash
 scripts/check_stage_h3_environment.sh
 scripts/run_stage_h3_pandaset_040.sh data-gate
+scripts/run_stage_h3_pandaset_040.sh static-8k
 scripts/run_stage_h3_pandaset_040.sh paths
 ```
+
+The static 8k run is reused when its checkpoint exists; it is not retrained by
+default. Detailed results and rejected actor ablations are in
+`experiments/stage_h3_static_8k_and_actor_ablations.md`.
 
 ## Repository Structure
 
