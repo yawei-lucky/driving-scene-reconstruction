@@ -68,7 +68,7 @@ cockpit-style simulator.
 
 ## Current Status
 
-The repository now has four connected results:
+The repository now has six connected results:
 
 ```text
 Stage H0
@@ -86,16 +86,26 @@ Stage H2
 Stage H3-0A
 → isolated, pinned neurad-studio/SplatAD environment
 → synthetic camera and LiDAR CUDA kernels verified on RTX 4090 D
-→ six-camera PandaSet parser and dynamic-aware methods ready for a data pilot
+
+Stage H3-0B / Level 1
+→ pinned PandaSet archive verified and only daylight scene 040 extracted
+→ six cameras, Pandar64, fused poses, cuboids, and timestamps passed data/calibration gates
+→ 100-step SplatAD checkpoint reloaded and rendered over 240 held-out images
+
+Stage H3 Level 2
+→ 90% temporal training split, six cameras, Pandar64, and actor tracks
+→ 2,000-step checkpoint recovered recognizable static structure in all six views
+→ 48-view means: PSNR 24.7109, SSIM 0.7392, LPIPS 0.4475
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
 and rig extrinsics at a selected reference frame. It currently enforces a
 conservative nearby-pose envelope of ±2 m forward, ±0.5 m left, and ±5° yaw.
 
-The current baseline is still not production quality: dynamic vehicles remain
-blurred, time is fixed to one reference frame, and no collision or responsive
-traffic model exists.
+The current baseline is still not production quality. The H3 100-step output
+is visibly under-trained and only proves the end-to-end path; H2 dynamic
+vehicles remain blurred, time is fixed to one reference frame, and no collision
+or responsive traffic model exists.
 
 ## Run
 
@@ -138,32 +148,19 @@ validation evidence, and limitations.
 ## Current Next Step
 
 Stage H3 should produce a stable drivable reconstruction baseline before UI or
-input-device polish. The isolated environment is now ready; the next gate is a
-small, auditable PandaSet data pilot:
+input-device polish. Environment, acquisition, calibration, 100-step smoke,
+and the 2,000-step visual pilot have passed on PandaSet scene 040. The next
+gate reuses that checkpoint; it does not retrain:
 
-- keep the verified Wayve and H3 environments separate;
-- use the completed PandaSet source/archive audit: the current neurad-linked
-  mirror is one 44.5-GB ZIP; full extraction would make 83.12 GiB, while
-  selectively extracting one scene keeps the pilot near 41.91 GiB; explicit
-  acceptance of its CC BY 4.0 plus additional terms is still needed;
-- acquire the pinned archive but extract and inspect only one 80-frame scene;
-- use six cameras, the mature Pandar64 path, fused poses, and 3D cuboid actor
-  tracks for the first reliable SplatAD baseline;
-- treat the forward PandarGT sensor as a later audited extension rather than
-  claiming two-LiDAR support immediately;
-- combine camera appearance with LiDAR metric geometry, fused ego poses/IMU,
-  and dynamic-object annotations;
-- verify synchronization and camera/LiDAR calibration on one short scene;
-- compare dynamic-aware SplatAD with a static-background diagnostic;
-- keep WayveScenes101 `scene_094` as the camera-only hard baseline;
-- reuse matching scene checkpoints and escalate from no-training checks to
-  <=100-step smoke, 1k-2k pilot, and 8k baseline runs;
-- reduce dynamic-object ghosts using cuboid actor tracks, with point-cloud
-  semantics or image masks as supplemental diagnostics;
-- quantify nearby-pose stability, road-region artifacts, multi-camera
-  consistency, depth/scale consistency, temporal flicker, and latency;
-- add logged-trajectory time progression from fused ego poses once the static
-  reconstruction is stable enough.
+- render a fixed nearby-pose grid around several logged timestamps;
+- compare predicted depth against held-out Pandar64 on static road, curb,
+  facade, pole, and vehicle regions;
+- measure logged-trajectory flicker and camera-to-camera structure;
+- inspect the 7 dynamic actor tracks separately from stationary background;
+- record peak VRAM and warmed render latency before raising the seed or step
+  budget;
+- authorize the 8k baseline only if these geometry and temporal gates pass;
+- keep PandarGT, cockpit UI, controller work, and unrestricted driving deferred.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 
@@ -171,6 +168,8 @@ Environment acceptance can be regenerated without PandaSet:
 
 ```bash
 scripts/check_stage_h3_environment.sh
+scripts/run_stage_h3_pandaset_040.sh data-gate
+scripts/run_stage_h3_pandaset_040.sh paths
 ```
 
 ## Repository Structure

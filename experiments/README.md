@@ -14,11 +14,16 @@ Recorded experiments:
 - `stage_h3_environment.md`: isolated neurad-studio/SplatAD environment,
   pinned revisions, synthetic camera/LiDAR GPU acceptance, and direction risks.
 - `stage_h3_dataset_foundation.md`: PandaSet source, license, archive/storage,
-  per-sequence packaging, and semantic-coverage acquisition audit.
+  per-sequence packaging, verified acquisition, scene selection, and
+  calibration gate.
+- `stage_h3_scene_040_smoke.md`: scene 040 data/timing evidence, SplatAD
+  100-step checkpoint, held-out rendering, metrics, and visual decision.
+- `stage_h3_scene_040_pilot.md`: 2,000-step six-camera/Pandar64 pilot, fixed
+  temporal holdout, full checkpoint evidence, and visual quality decision.
 
 Stage H2 connects that H1 checkpoint to the simulator interface. Its design and
 GPU validation record live in `docs/stage_h2_reconstruction_renderer.md`.
 
-The next H3 experiment should audit and load one PandaSet sequence, preserve
-camera/LiDAR calibration overlays, and pass the data and geometry gates before
-any long training run.
+The next H3 experiment is a fixed nearby-pose, depth, and temporal validation
+of the accepted 2,000-step checkpoint. The 8k baseline remains gated on those
+geometry, timing, and dynamic-object findings.

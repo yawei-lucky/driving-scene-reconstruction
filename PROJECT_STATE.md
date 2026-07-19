@@ -1,6 +1,6 @@
 # Project State — Driving Scene Reconstruction
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 ## 1. Product Goal
 
@@ -95,6 +95,54 @@ Completed on 2026-07-18 without modifying the H1/H2 environment:
 The environment record and exact evidence are in
 `experiments/stage_h3_environment.md`.
 
+### Stage H3-0B / Level 1 — PandaSet data and pipeline
+
+Completed on scene `040` on 2026-07-19:
+
+- user accepted the recorded PandaSet CC BY 4.0 plus additional terms;
+- downloaded the pinned 44,520,528,731-byte archive, matched its exact
+  SHA-256, and passed a complete ZIP integrity test;
+- triaged semseg-capable scenes and selected scene 040 for daylight, stable
+  exposure, visible road geometry, and usable camera overlap;
+- selectively extracted only its 80 frames;
+- loaded six 1920x1080 cameras, Pandar64/PandarGT, poses, timestamps, cuboids,
+  GPS, and point-cloud semantics;
+- accepted six cameras plus Pandar64 as the first baseline;
+- preserved LiDAR-to-camera overlays at frames 0, 40, and 79;
+- recorded sensor offsets of about 10.8-50.1 ms relative to the front camera;
+- passed the exact SplatAD dataparser with 240 train cameras, 40 Pandar64
+  sweeps, and 7 actor trajectories at the default 0.5 train split;
+- completed a 100-step SplatAD smoke, saved a 297,232,596-byte checkpoint,
+  reloaded it, and rendered 240 held-out views;
+- measured smoke means of PSNR 15.9365, SSIM 0.6185, and LPIPS 0.8402.
+
+The output is still visibly fuzzy and multicolored at 100 steps. This stage
+proves the data, calibration, GPU, checkpoint, and rendering path; it does not
+pass the stable-reconstruction visual gate. Exact evidence is in
+`experiments/stage_h3_scene_040_smoke.md`.
+
+### Stage H3 Level 2 — Scene 040 visual pilot
+
+Completed on 2026-07-19:
+
+- changed from the smoke's 0.5 split to a fixed 0.9 linspace temporal split;
+- trained on 432 images and 72 Pandar64 sweeps; held out 48 images at 8
+  timestamps across all six cameras;
+- raised LiDAR downsampling from 0.25 to 0.5 and seed cap from 250,000 to
+  750,000;
+- completed 2,000 steps in 199.6 seconds and saved a 912,125,396-byte
+  checkpoint;
+- reloaded step 1,999 and rendered all 48 held-out views at 12.62 images/s;
+- measured means of PSNR 24.7109, SSIM 0.7392, and LPIPS 0.4475;
+- visually recovered recognizable road, buildings, sidewalks, trees, signals,
+  vehicles, and rear/side layout in every camera.
+
+The result remains soft around road texture, tree/sky edges, poles, windows,
+and near vehicles. Metrics are not directly comparable with the 0.5-split
+smoke or the Wayve held-out protocol. Nearby-pose geometry, quantitative depth,
+temporal flicker, and dynamic-residue gates are still open. See
+`experiments/stage_h3_scene_040_pilot.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -110,10 +158,11 @@ HumanControl
 This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint.
 
-Separately, the H3 environment can now execute SplatAD's synthetic camera and
-LiDAR rendering path and exposes the six-camera PandaSet parser. It has not yet
-loaded PandaSet data or produced a PandaSet checkpoint, so this is an
-environment milestone rather than a new reconstructed scene result.
+Separately, the H3 path now loads real PandaSet scene 040, uses six cameras,
+Pandar64 geometry and cuboid actor tracks, trains SplatAD, saves/reloads a
+checkpoint, and renders held-out RGB/depth. The 2,000-step checkpoint recovers
+recognizable static structure at logged held-out poses, but has not yet passed
+the nearby-pose and temporal stability gates required for driving.
 
 ## 4. Important Limitations
 
@@ -140,35 +189,44 @@ environment milestone rather than a new reconstructed scene result.
   handling requires a separate verification before it becomes a baseline.
 - PandaSet semantic segmentation is point-cloud annotation for selected
   scenes, not a complete dense image-mask source.
+- PandaSet sensors are asynchronously captured: scene 040 offsets span roughly
+  10.8-50.1 ms relative to the front camera. Later timing logic must preserve
+  sensor and per-point timestamps rather than assuming frame-index simultaneity.
+- The H3 100-step smoke used a 0.5 train split, 0.25 data downsampling, and a
+  250,000-point seed cap. Its blurred output is not suitable for driving.
+- The H3 2,000-step pilot is much clearer but uses a denser 0.9 train split.
+  Its fixed 48-view metrics measure interpolation near observed poses rather
+  than wide extrapolation.
+- Peak VRAM was not preserved during the 2,000-step run and must be measured
+  before raising seed density or starting a longer run.
+- The PandaSet back camera is intentionally cropped from 1920x1080 to 1920x820
+  by the upstream parser; rear-view acceptance must account for that crop.
 - Geometry, temporal, and driving-task metrics have not yet been implemented.
 
 ## 5. Current Next Action — Stage H3
 
-Stage H3 now prioritizes stable drivable scene reconstruction before cockpit UI
-or steering-wheel polish. H3-0A environment preparation has passed. The current
-action is the H3-0B PandaSet acquisition and calibration gate, not a long
-training run.
+Stage H3 prioritizes stable drivable scene reconstruction before cockpit UI or
+steering-wheel polish. Environment, acquisition, calibration, Level 1, and the
+Level 2 visual pilot have passed. The current action is a no-retraining
+geometry/temporal acceptance of the 2,000-step checkpoint, not an 8k baseline.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
 
-1. preserve the accepted H3 environment and continue using
-   `scripts/check_stage_h3_environment.sh` as its acceptance test;
-2. obtain explicit acceptance for the audited PandaSet terms and 44.5-GB
-   download, validate the pinned hash, and extract only one scene;
-3. select that 80-frame sequence and load one frame without training;
-4. synchronize six-camera images, Pandar64, calibrated/fused ego poses, and
-   dynamic annotations in one metric coordinate system;
-5. verify camera/LiDAR calibration visually before running an optimization;
-6. use SplatAD's cuboid-derived dynamic actor layer as the primary path and a
-   masked static-background run as a diagnostic comparison;
-7. retain WayveScenes101 `scene_094` and its existing checkpoint as the known
-   camera-only hard baseline and regression comparison;
-8. reuse a checkpoint whenever its scene, preprocessing, calibration, model
-   configuration, code, and environment key match; use no-training, <=100-step,
-   1k-2k, and 8k gates instead of repeatedly launching full training;
-9. add logged-trajectory progression using fused ego poses, followed by small
-   human-control offsets.
+1. preserve and reuse the accepted 2,000-step config/checkpoint and fixed test
+   timestamps;
+2. render a fixed nearby-pose grid around several logged timestamps without
+   changing training;
+3. compare rendered depth with held-out Pandar64 on static road, curb, facade,
+   pole, and vehicle regions;
+4. measure trajectory flicker, camera-to-camera structure, actor residue,
+   warmed rendering latency, and peak VRAM;
+5. diagnose timestamp handling, seed geometry, loss scheduling, or
+   actor/background separation if any geometry/temporal gate fails;
+6. authorize an 8k scene-040 baseline only after those checks pass;
+7. retain WayveScenes101 `scene_094` as the camera-only hard baseline;
+8. add logged-trajectory progression and human-control offsets only after the
+   accepted 8k or equivalent stable checkpoint exists.
 
 In this plan, camera images remain the source of visual appearance. LiDAR
 anchors depth, metric scale, and ground geometry; fused ego pose/IMU anchors
@@ -186,18 +244,15 @@ Accepted on the project host on 2026-07-18:
 - all audited upstream code is pinned under
   `/home/yawei/stage3_external/code`;
 - approximately 264 GiB remained free at final acceptance;
-- no PandaSet data has been downloaded;
 - the inspected neurad-studio documentation explains checkpoint loading but
   does not publish an exact-sequence checkpoint catalog.
 
-The immediate action is now explicit dataset-term/download approval, followed
-by archive integrity validation, one-scene inspection, and calibration
-overlays. Only after those pass should the project run a <=100-step end-to-end
-PandaSet smoke.
+This environment remains the accepted H3 execution base. The subsequent
+PandaSet acquisition and Level 1 smoke did not modify the H1/H2 environment.
 
-### H3-0B acquisition audit result
+### H3-0B acquisition and Level 1 result
 
-The read-only source and archive audit is complete:
+The source/archive audit and accepted execution produced:
 
 - the neurad-linked Hugging Face mirror contains one 44,520,528,731-byte ZIP
   at repository commit `e2e123aea3b3132c67f4b395ec6120f63e190271`;
@@ -211,11 +266,19 @@ The read-only source and archive audit is complete:
 - 76 scenes contain point-cloud semantic annotations;
 - the standard mirror exposes only the full archive, not per-scene packages;
 - the archive license is CC BY 4.0 with additional dataset terms, and
-  downloading or use constitutes acceptance.
+  downloading or use constitutes acceptance;
+- the exact archive now exists outside Git and passed size, SHA-256, and ZIP
+  integrity checks;
+- only daylight scene 040 was extracted, and its data/calibration gates passed;
+- a reusable 100-step scene-040 SplatAD checkpoint and 240-view render exist
+  outside Git;
+- a reusable 2,000-step scene-040 SplatAD checkpoint and fixed 48-view render
+  recover recognizable all-camera static structure;
+- approximately 220 GiB remained free after the archive, scene, checkpoint,
+  render, and caches.
 
 The official PandaSet page's visible download link returned HTTP 404 during the
 audit, while the neurad-linked mirror states that its uploader is not affiliated
 with the dataset creators. Therefore provenance must be recorded with every
-run. No data was downloaded because accepting the terms and acquiring 44.5 GB
-requires explicit user approval. See
-`experiments/stage_h3_dataset_foundation.md`.
+run. See `experiments/stage_h3_dataset_foundation.md` and
+`experiments/stage_h3_scene_040_smoke.md`.

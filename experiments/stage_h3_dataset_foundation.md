@@ -1,14 +1,82 @@
 # Stage H3 PandaSet Data Foundation
 
-Date: 2026-07-18
+Date: 2026-07-19
 
-Status: acquisition audit complete; download and data loading not started.
+Status: acquisition, integrity, one-scene extraction, data loading, and
+calibration gates passed for scene 040.
 
 ## Purpose
 
 This record covers the H3-0B gate before any large download or training run:
 current source provenance, license, exact archive metadata, extraction budget,
 per-sequence packaging, and annotation coverage.
+
+## Execution Result
+
+The user explicitly accepted the recorded CC BY 4.0 plus additional PandaSet
+terms and the 44.5-GB acquisition on 2026-07-19.
+
+The pinned archive was downloaded to:
+
+```text
+/home/yawei/stage3_external/artifacts/pandaset-e2e123aea3b3132c67f4b395ec6120f63e190271.zip
+```
+
+Validated result:
+
+```text
+size: 44,520,528,731 bytes
+SHA-256: 6e2f978fe8e98a8708ca00acae86415096868eccc2effe9826db57514582433e
+unzip integrity test: no errors
+```
+
+The long resumable transfer was interrupted by the execution environment and
+the local file contained 25,044,133 appended bytes after the valid ZIP end.
+This was not silently accepted. Fixed-source range hashes were compared at
+offsets from the beginning through the final 528,731 bytes, the ZIP64 end
+records were located at the audited expected boundary, and only the proven
+appended tail was truncated. The resulting exact-size file then matched the
+recorded full SHA-256 and passed `unzip -tq`.
+
+All 76 semseg-capable scenes were triaged by ego motion, cuboid density, and
+near-field dynamic density, followed by contact-sheet inspection. Scene 149
+ranked well numerically but was rejected because it is dark and blurred.
+Scene 040 was selected because it is daylight, has stable exposure, clear road
+and curb structure, and usable six-camera coverage.
+
+Only scene 040 was extracted:
+
+```text
+/home/yawei/stage3_external/data/pandaset/040
+744 files
+411 MiB on disk
+```
+
+The reproducible data/calibration inspection is:
+
+```bash
+scripts/run_stage_h3_pandaset_040.sh data-gate
+```
+
+It loaded 80 frames for every one of the six cameras, both LiDAR streams,
+poses, timestamps, cuboids, GPS, and point-cloud semantics. The accepted
+baseline uses Pandar64 only. Timestamp offsets relative to the front camera
+range from about 10.8 ms for the front-side cameras to about 50.0 ms for the
+back camera and LiDAR. These offsets are expected asynchronous acquisition and
+must remain visible in later temporal modeling.
+
+Calibration evidence:
+
+```text
+/home/yawei/stage3_external/artifacts/scene_040_calibration/scene_040_data_report.json
+/home/yawei/stage3_external/artifacts/scene_040_calibration/scene_040_six_camera_keyframes.jpg
+/home/yawei/stage3_external/artifacts/scene_040_calibration/scene_040_pandar64_camera_overlay.jpg
+```
+
+Projected static Pandar64 returns align plausibly with roads, building faces,
+trees, poles, curbs, and parked vehicles at frames 0, 40, and 79. No systematic
+extrinsic failure blocks the Level 1 smoke. Exact measurements and the
+subsequent training result are in `stage_h3_scene_040_smoke.md`.
 
 ## Current Sources
 
@@ -122,7 +190,7 @@ including when acting for an organization. The repository must not silently
 accept them on the user's behalf. Explicit approval is required before the
 44.5-GB acquisition begins.
 
-## Gate Decision
+## Audit-Era Gate Decision
 
 Passed:
 
@@ -134,7 +202,7 @@ Passed:
 - license text exists inside the mirrored archive and matches the CC BY 4.0
   label with additional terms.
 
-Not yet passed:
+At the time of the read-only audit, these items were not yet passed:
 
 - explicit acceptance of the dataset terms and large download;
 - full-file checksum validation;
@@ -144,18 +212,22 @@ Not yet passed:
 - camera/LiDAR overlays;
 - SplatAD one-batch or <=100-step smoke.
 
-## Recommended Acquisition Path
+All listed acquisition, data, calibration, and Level 1 smoke items were
+subsequently completed on 2026-07-19. This wording is retained to distinguish
+the original pre-download decision from the later execution result.
 
-Use the full pinned archive rather than adding an untested remote-ZIP extractor
-to the critical path. After explicit license/download approval:
+## Executed Acquisition Path
 
-1. download once to `/home/yawei/stage3_external/artifacts`;
-2. verify byte size and SHA-256 before extraction;
-3. extract only the selected `pandaset/<scene>/` directory to
-   `/home/yawei/stage3_external/data`;
-4. keep only one raw and one processed pilot scene;
-5. triage the 76 semseg-capable scenes first, but select on visual and dynamic
-   criteria;
-6. start with six cameras, Pandar64, fused poses, and cuboid actor tracks;
-7. stop after one-frame and calibration-overlay gates if alignment is wrong;
-8. run no more than 100 training iterations for the first end-to-end smoke.
+The approved run followed the audited path instead of adding an untested
+remote-ZIP extractor:
+
+1. downloaded the pinned archive once to
+   `/home/yawei/stage3_external/artifacts`;
+2. verified exact byte size, SHA-256, and ZIP integrity before extraction;
+3. triaged the 76 semseg-capable scenes using annotations and contact sheets;
+4. extracted only `pandaset/040` to
+   `/home/yawei/stage3_external/data/pandaset/040`;
+5. kept the raw archive, one extracted pilot scene, and bounded outputs;
+6. used six cameras, Pandar64, fused poses, and cuboid actor tracks;
+7. passed the full data and calibration-overlay gates;
+8. limited the first end-to-end SplatAD run to 100 iterations.

@@ -1,6 +1,6 @@
 # Stage H3 — Stable Drivable Scene Reconstruction Plan
 
-Date: 2026-07-18
+Date: 2026-07-19
 
 ## Purpose
 
@@ -174,7 +174,39 @@ experiments/stage_h3_environment.md
 After H3-0A passes, run one narrow pilot on a driving dataset that supplies
 synchronized cameras, LiDAR, ego motion, and dynamic annotations.
 
-Acquisition-audit status on 2026-07-18:
+Status: **data, calibration, Level 1, and the Level 2 logged-pose visual gate
+passed on 2026-07-19 for PandaSet scene 040; nearby-pose geometry and temporal
+stability have not yet passed.**
+
+Execution result:
+
+- the user accepted the recorded dataset terms and 44.5-GB acquisition;
+- the pinned archive matched its exact size and SHA-256 and passed ZIP
+  integrity validation;
+- only daylight scene 040 was extracted after annotation and visual triage;
+- six cameras, Pandar64, fused poses, timestamps, cuboids, GPS, and point-cloud
+  semantics loaded for all 80 frames;
+- representative Pandar64/camera overlays showed plausible alignment;
+- asynchronous sensor offsets of about 10.8-50.1 ms were measured and retained
+  as a timing requirement;
+- the exact SplatAD parser produced 240 training cameras, 40 Pandar64 sweeps,
+  and 7 actor trajectories under the default 0.5 split;
+- a 100-step SplatAD checkpoint was saved, reloaded, and rendered over 240
+  held-out images;
+- the smoke output remains visibly under-trained, with broad colored splats and
+  LPIPS 0.8402, so it proves integration rather than quality.
+- a subsequent 2,000-step run used a fixed 0.9 temporal split, 0.5 LiDAR
+  downsampling, and a 750,000-point seed cap;
+- its 48-view fixed holdout reached PSNR 24.7109, SSIM 0.7392, and LPIPS
+  0.4475, with recognizable static structure in all six cameras;
+- the logged-pose visual gate now passes, but nearby-pose, depth, flicker,
+  actor-residue, peak-VRAM, and warm-latency checks remain open.
+
+See `experiments/stage_h3_dataset_foundation.md` and
+`experiments/stage_h3_scene_040_smoke.md`. The Level 2 record is
+`experiments/stage_h3_scene_040_pilot.md`.
+
+Acquisition-audit evidence from 2026-07-18:
 
 - the neurad-linked mirror contains one 44,520,528,731-byte ZIP at a recorded
   repository revision and LFS SHA-256 oid;
@@ -498,29 +530,24 @@ reconstruction:
 
 ## First Concrete Task
 
-H3-0A and the read-only H3-0B acquisition audit are complete. Continue with the
-licensed data and calibration gate:
+H3-0A, H3-0B, Level 1, and the Level 2 logged-pose visual pilot are complete.
+Continue by reusing the 2,000-step checkpoint without retraining:
 
 1. keep `scripts/check_stage_h3_environment.sh` as the H3 environment
-   acceptance command;
-2. obtain explicit approval for the recorded PandaSet dataset terms and the
-   44.5-GB download;
-3. acquire the pinned full archive, validate its size and SHA-256, and extract
-   only the selected scene under the H3 external root;
-4. maintain at least the recorded output/checkpoint headroom and avoid a second
-   processed full copy;
-5. after the access, integrity, and storage gates pass, inspect the data and
-   select one short pilot scene or frame window;
-6. load and synchronize six cameras, Pandar64, fused ego poses, and 3D cuboid
-   actor tracks;
-7. produce camera/LiDAR calibration overlays and a documented common
-   coordinate system;
-8. search for and test any exact-sequence compatible upstream checkpoint before
-   starting a new optimization;
-9. if no compatible checkpoint exists, run Level 1 smoke and Level 2 pilot
-    training before deciding on the 8k baseline.
+   acceptance command and preserve the verified data, calibration, config,
+   checkpoint, fixed test split, metrics, and visual summaries;
+2. render a fixed nearby-pose grid around several logged timestamps and inspect
+   front/side/rear floaters, holes, and ground deformation;
+3. compare rendered depth against held-out Pandar64 in static road, curb,
+   facade, pole, and vehicle regions;
+4. measure logged-trajectory flicker, camera-to-camera structure, dynamic actor
+   residue, warmed render latency, and peak VRAM;
+5. stop and diagnose timing, seed geometry, loss schedules, or actor/background
+   separation if any geometry or temporal gate fails;
+6. authorize the 8k all-camera baseline only after these no-retraining checks
+   pass.
 
-Only after the H3-0B gates pass should we spend GPU time on the longer
-all-camera baseline. The next comparison then uses PandaSet SplatAD as the
-geometry- and actor-aware candidate and Wayve `scene_094` as the known
-camera-only hard baseline.
+PandaSet SplatAD remains the geometry- and actor-aware candidate and Wayve
+`scene_094` remains the known camera-only hard baseline. Cockpit UI,
+logged-trajectory playback, and controller integration stay deferred until the
+reconstruction gate passes.
