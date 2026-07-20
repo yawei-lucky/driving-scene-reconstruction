@@ -20,10 +20,14 @@ Recorded experiments:
   100-step checkpoint, held-out rendering, metrics, and visual decision.
 - `stage_h3_scene_040_pilot.md`: 2,000-step six-camera/Pandar64 pilot, fixed
   temporal holdout, full checkpoint evidence, and visual quality decision.
+- `stage_h3_static_8k_and_actor_ablations.md`: accepted static 8k checkpoint
+  and rejected stationary+moving and moving-only actor ablations.
+- `stage_h3_actor_alignment_and_timing.md`: actor-local MCMC escape diagnosis,
+  boundary and timing corrections, short-run rejections, and the next
+  per-point seed-timing test.
 
 Stage H2 connects that H1 checkpoint to the simulator interface. Its design and
 GPU validation record live in `docs/stage_h2_reconstruction_renderer.md`.
 
-The next H3 experiment is a fixed nearby-pose, depth, and temporal validation
-of the accepted 2,000-step checkpoint. The 8k baseline remains gated on those
-geometry, timing, and dynamic-object findings.
+The current accepted H3 checkpoint and next experiment are recorded in the
+root `README.md` and `PROJECT_STATE.md`.

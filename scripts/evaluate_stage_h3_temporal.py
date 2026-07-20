@@ -333,6 +333,10 @@ def load_vehicle_trajectories(
     dataparser_config._target = PandaSetVehicleObjectParser
     dataparser_config.include_stationary_rigid_actors = True
     dataparser_config.include_deformable_actors = False
+    # Evaluation boxes must not inherit the checkpoint's legacy timestamp
+    # semantics. Always build one calibrated annotation reference so crop
+    # regions remain identical across legacy and corrected-time checkpoints.
+    dataparser_config.use_calibrated_lidar_frame_for_cuboid_time = True
     parser = dataparser_config.setup()
     dataset = DataSet(str(dataparser_config.data.absolute()))
     parser.sequence = dataset[dataparser_config.sequence]
@@ -552,6 +556,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--load-config", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--fps", type=int, default=10)
+    checkpoint_group = parser.add_mutually_exclusive_group()
+    checkpoint_group.add_argument("--load-step", type=int)
+    checkpoint_group.add_argument("--load-checkpoint", type=Path)
     parser.add_argument("--vehicle-crop-metrics", action="store_true")
     parser.add_argument("--vehicle-min-side-pixels", type=int, default=16)
     return parser.parse_args()
@@ -564,10 +571,22 @@ def main() -> None:
     rig_dir = args.output_dir / "rig_frames"
 
     load_start = time.perf_counter()
+    def update_config(config: Any) -> Any:
+        config = streamline_ad_config(config)
+        if args.load_checkpoint is not None:
+            if not args.load_checkpoint.is_file():
+                raise FileNotFoundError(args.load_checkpoint)
+            config.load_dir = None
+            config.load_step = None
+            config.load_checkpoint = args.load_checkpoint
+        if args.load_step is not None:
+            config.load_step = args.load_step
+        return config
+
     config, pipeline, checkpoint_path, step = eval_setup(
         args.load_config,
         test_mode="test",
-        update_config_callback=streamline_ad_config,
+        update_config_callback=update_config,
     )
     torch.cuda.synchronize()
     load_seconds = time.perf_counter() - load_start

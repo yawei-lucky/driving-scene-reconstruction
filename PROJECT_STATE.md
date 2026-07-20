@@ -185,6 +185,28 @@ trajectory, timestamp, rolling-shutter, or world/camera transform
 misalignment. See
 `experiments/stage_h3_static_8k_and_actor_ablations.md`.
 
+### Stage H3 Level 5 — Actor alignment and timing audit
+
+Completed on 2026-07-20:
+
+- proved actor 0/1 local Gaussian p95 coordinates reached 34-290 m while
+  vehicle half-extents were about 1.2 x 2.6 x 1.2 m;
+- traced the escape to per-step MCMC position noise without actor-bound
+  handling, then added post-MCMC cuboid projection and optimizer-moment reset;
+- kept all seven short-run actor geometries inside their padded cuboids, but
+  rejected the step-2,000 candidate at moving-crop PSNR 18.2289 / LPIPS 0.4882;
+- corrected cuboid azimuth timing in the calibrated LiDAR frame and serialized
+  legacy/corrected semantics explicitly; the 253 observations that enter
+  training change by 46.973 ms p50 and 55.852 ms p90;
+- rejected the boundary-plus-time candidate: five of seven actors retained
+  active Gaussians, but 39 calibrated-reference moving crops measured PSNR
+  18.5608 / LPIPS 0.5331;
+- retained static 8k as the only accepted H3 checkpoint.
+
+The spatial and time corrections are correctness infrastructure, not accepted
+visual checkpoints. See
+`experiments/stage_h3_actor_alignment_and_timing.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -249,27 +271,35 @@ stable-drivable acceptance.
   LiDAR gate, cross-camera seam metric, and driving-task metric remain open.
 - Both tested actor-aware candidates are rejected. Actor ID survival is not
   evidence that the actor appears at the correct image location.
+- Actor-local MCMC geometry is now bounded, but opacity/supervision failure
+  still leaves several moving actors visually absent.
+- Cuboid time has an explicit calibrated mode, while actor seed assignment
+  still evaluates a LiDAR scan at its center timestamp rather than each
+  point's timestamp.
+- SplatAD discards trajectory `exists_at_time` during rendering, so an
+  out-of-window actor can appear at its nearest pose.
 
 ## 5. Current Next Action — Stage H3
 
 Stage H3 prioritizes stable drivable scene reconstruction before cockpit UI or
 steering-wheel polish. Environment, acquisition, calibration, the 2k pilot,
-static 8k baseline, and two actor ablations are complete. Static 8k remains the
-accepted checkpoint; both actor-aware variants are rejected.
+static 8k baseline, actor ablations, and the alignment/timing audit are
+complete. Static 8k remains the accepted checkpoint; all actor-aware visual
+candidates are rejected.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
 
 1. keep static 8k as the fixed comparison checkpoint;
-2. stop additional 8k/30k actor training until spatial alignment is proven;
-3. project each moving actor's local LiDAR seed, cuboid trajectory, and final
-   actor-only Gaussians through the exact SplatAD time and transform path;
-4. compare those projections with the source vehicle pixels across all six
-   cameras and rolling-shutter times;
-5. locate whether the first mismatch is seed assignment, cuboid interpolation,
-   actor-local/world transform, camera timing, or trajectory optimization;
-6. correct and test that one failure on a small actor/window before authorizing
-   another full-scene run;
+2. retain actor-bound projection and calibrated cuboid-time semantics as
+   correctness guards, but do not promote their rejected checkpoints;
+3. for actor 0/1, assign each LiDAR seed using its own point timestamp instead
+   of the scan-center timestamp;
+4. project corrected seeds into exact camera rows and compare them with source
+   vehicle pixels before optimization;
+5. correct and test one small actor/window only if seed projection aligns;
+6. apply trajectory `exists_at_time` during rendering to prevent nearest-pose
+   ghost actors outside their valid interval;
 7. retain WayveScenes101 `scene_094` and static PandaSet 8k as fixed
    comparisons;
 8. add logged-trajectory progression and human-control offsets only after the

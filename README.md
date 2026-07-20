@@ -105,6 +105,11 @@ Stage H3 Level 3
 Stage H3 Level 4
 → stationary+moving and moving-only actor-aware 8k ablations
 → both rejected; static 8k remains the accepted checkpoint
+
+Stage H3 Level 5
+→ proved MCMC actor-local points escaped 34-290 m from vehicle cuboids
+→ added actor bounds and explicit calibrated cuboid timing
+→ short candidates remained visually weak and were rejected
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -115,8 +120,10 @@ The current baseline is still not production quality. Static H3 8k is much
 clearer and geometrically stronger than the 2k pilot, but close vehicles remain
 blurred and sequential six-camera rendering is about 6.5 Hz. The tested actor
 layers kept actor IDs alive but did not place moving vehicles correctly in the
-images. H2 time is still fixed to one reference frame, and no collision or
-responsive traffic model exists.
+images. Actor-local geometry is now bounded and corrected cuboid timing is
+reproducibly configurable, but several actors still fade or receive misaligned
+seed supervision. H2 time is still fixed to one reference frame, and no
+collision or responsive traffic model exists.
 
 ## Run
 
@@ -159,17 +166,21 @@ validation evidence, and limitations.
 ## Current Next Step
 
 Stage H3 should produce a stable drivable reconstruction baseline before UI or
-input-device polish. Static 8k is now the fixed accepted checkpoint. The next
-gate does not start another long training run:
+input-device polish. Static 8k remains the fixed accepted checkpoint.
+Actor-local MCMC escape and a roughly 50-56 ms cuboid-time error are now
+diagnosed and guarded, but the corrected short runs still failed
+moving-vehicle appearance. The next gate does not start another long run:
 
-- project moving-actor LiDAR seeds and cuboids at exact camera timestamps;
-- validate actor-local, world, and camera transforms including rolling shutter;
-- render actor-only and background-only layers;
-- identify where moving cars first leave their source image location;
-- correct and test one actor/window before another full-scene run;
+- assign actor 0/1 LiDAR seeds at each point's own scan timestamp instead of
+  the scan-center time;
+- project those seeds through exact camera and row timing;
+- verify source-pixel alignment before optimizing a small actor/window;
+- mask actor rendering with trajectory `exists_at_time` to prevent nearest-pose
+  ghost vehicles outside valid intervals;
 - keep PandarGT, cockpit UI, controller work, and unrestricted driving deferred.
 
-See `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
+See `docs/stage_h3_stable_drivable_reconstruction_plan.md` and
+`experiments/stage_h3_actor_alignment_and_timing.md`.
 
 Environment acceptance can be regenerated without PandaSet:
 

@@ -4,8 +4,8 @@ Date: 2026-07-19
 
 ## Execution Update
 
-The no-retraining 2k gate, exact 2k-to-8k resume, and two actor-layer
-ablations are now complete.
+The no-retraining 2k gate, exact 2k-to-8k resume, two actor-layer ablations,
+and the actor alignment/timing audit are now complete.
 
 - Static 8k is the current accepted H3 checkpoint: held-out PSNR 26.6605,
   SSIM 0.8145, LPIPS 0.2818; static LiDAR error p50/p90 is
@@ -17,12 +17,21 @@ ablations are now complete.
   increased latency.
 - A moving-only actor-aware 8k ablation preserved all 7 actors and restored
   background capacity, but still worsened moving crops, held-out SSIM, and
-  LiDAR p90. The current actor-aware branch is therefore stopped.
+  LiDAR p90.
+- The alignment audit proved MCMC noise moved actor-local Gaussians tens to
+  hundreds of metres beyond vehicle cuboids. Actor-bound projection now
+  prevents that escape.
+- A calibrated LiDAR-frame cuboid-time correction changes scene 040 moving
+  training observations by 46.97 ms p50 and 55.85 ms p90. Its semantics are
+  serialized so legacy checkpoints remain reproducible.
+- Boundary-only and boundary-plus-time short candidates still failed moving
+  crop appearance and are rejected.
 
-The next action is an actor-alignment diagnostic before any further training:
-project every moving cuboid at exact camera timestamps, verify actor-local/world
-transforms, and compare actor-only and background-only renders. See
-`experiments/stage_h3_static_8k_and_actor_ablations.md`.
+The next action is per-point seed-timing diagnosis before further long
+training: assign actor 0/1 LiDAR points at their own scan timestamps, project
+them into exact camera rows, and verify source-pixel alignment. Then apply
+trajectory `exists_at_time` during rendering to prevent out-of-window ghost
+actors. See `experiments/stage_h3_actor_alignment_and_timing.md`.
 
 ## Purpose
 

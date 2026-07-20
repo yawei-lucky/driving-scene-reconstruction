@@ -35,10 +35,20 @@ MOVING_TIMESTAMP="${H3_MOVING_TIMESTAMP:-2026-07-19_moving_only_actor_aware}"
 MOVING_RUN_ROOT="${TRAIN_ROOT}/${MOVING_EXPERIMENT}/splatad/${MOVING_TIMESTAMP}"
 MOVING_CONFIG="${MOVING_RUN_ROOT}/config.yml"
 MOVING_CHECKPOINT="${MOVING_RUN_ROOT}/nerfstudio_models/step-000007999.ckpt"
+CONSTRAINED_EXPERIMENT="${H3_CONSTRAINED_EXPERIMENT_NAME:-scene_040_splatad_moving_constrained_2000}"
+CONSTRAINED_TIMESTAMP="${H3_CONSTRAINED_TIMESTAMP:-2026-07-20_actor_bounds}"
+CONSTRAINED_RUN_ROOT="${TRAIN_ROOT}/${CONSTRAINED_EXPERIMENT}/splatad/${CONSTRAINED_TIMESTAMP}"
+CONSTRAINED_CONFIG="${CONSTRAINED_RUN_ROOT}/config.yml"
+CONSTRAINED_CHECKPOINT="${CONSTRAINED_RUN_ROOT}/nerfstudio_models/step-000001999.ckpt"
+TIMED_EXPERIMENT="${H3_TIMED_EXPERIMENT_NAME:-scene_040_splatad_moving_constrained_timed_2000}"
+TIMED_TIMESTAMP="${H3_TIMED_TIMESTAMP:-2026-07-20_actor_bounds_and_time_v2}"
+TIMED_RUN_ROOT="${TRAIN_ROOT}/${TIMED_EXPERIMENT}/splatad/${TIMED_TIMESTAMP}"
+TIMED_CONFIG="${TIMED_RUN_ROOT}/config.yml"
+TIMED_CHECKPOINT="${TIMED_RUN_ROOT}/nerfstudio_models/step-000001999.ckpt"
 PYTHON="${H3_ENV}/bin/python"
 
 usage() {
-  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|vehicle-8k|moving-8k|paths}" >&2
+  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
 }
 
 if [[ ! -x "$PYTHON" ]]; then
@@ -227,6 +237,43 @@ case "$MODE" in
       --keep-all-checkpoints \
       --moving-only
     ;;
+  moving-constrained-2k)
+    if [[ -f "$CONSTRAINED_CHECKPOINT" && "${H3_ALLOW_RETRAIN:-0}" != "1" ]]; then
+      echo "PASS: reusing existing 2,000-step constrained-actor checkpoint: $CONSTRAINED_CHECKPOINT"
+      echo "Set H3_ALLOW_RETRAIN=1 only when an intentional rerun is required."
+      exit 0
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/train_stage_h3_vehicle_objects.py" \
+      --source-config "$PILOT_CONFIG" \
+      --output-dir "$TRAIN_ROOT" \
+      --experiment-name "$CONSTRAINED_EXPERIMENT" \
+      --timestamp "$CONSTRAINED_TIMESTAMP" \
+      --max-num-iterations 2000 \
+      --model-max-steps 2000 \
+      --steps-per-save 2000 \
+      --steps-per-eval-image 1000 \
+      --keep-all-checkpoints \
+      --moving-only
+    ;;
+  moving-constrained-timed-2k)
+    if [[ -f "$TIMED_CHECKPOINT" && "${H3_ALLOW_RETRAIN:-0}" != "1" ]]; then
+      echo "PASS: reusing existing 2,000-step bounded+timed checkpoint: $TIMED_CHECKPOINT"
+      echo "Set H3_ALLOW_RETRAIN=1 only when an intentional rerun is required."
+      exit 0
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/train_stage_h3_vehicle_objects.py" \
+      --source-config "$PILOT_CONFIG" \
+      --output-dir "$TRAIN_ROOT" \
+      --experiment-name "$TIMED_EXPERIMENT" \
+      --timestamp "$TIMED_TIMESTAMP" \
+      --max-num-iterations 2000 \
+      --model-max-steps 2000 \
+      --steps-per-save 2000 \
+      --steps-per-eval-image 1000 \
+      --keep-all-checkpoints \
+      --moving-only \
+      --calibrated-cuboid-time
+    ;;
   paths)
     echo "data: $DATA_ROOT/$SCENE"
     echo "calibration: $CALIBRATION_ROOT"
@@ -242,6 +289,10 @@ case "$MODE" in
     echo "vehicle 8k checkpoint: $VEHICLE_CHECKPOINT"
     echo "moving-only 8k config: $MOVING_CONFIG"
     echo "moving-only 8k checkpoint: $MOVING_CHECKPOINT"
+    echo "constrained moving-only 2k config: $CONSTRAINED_CONFIG"
+    echo "constrained moving-only 2k checkpoint: $CONSTRAINED_CHECKPOINT"
+    echo "bounded+timed moving-only 2k config: $TIMED_CONFIG"
+    echo "bounded+timed moving-only 2k checkpoint: $TIMED_CHECKPOINT"
     ;;
   *)
     usage

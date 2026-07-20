@@ -7,7 +7,9 @@ parser and model interfaces while changing two narrowly scoped behaviors:
 
 * stationary rigid cuboids are also emitted as actor trajectories;
 * MCMC relocation samples within each actor ID, so refinement cannot recycle
-  every Gaussian of one actor into another actor or the background.
+  every Gaussian of one actor into another actor or the background;
+* actor-local MCMC noise is bounded by each padded cuboid;
+* calibrated LiDAR-frame cuboid timing is an explicit, serialized option.
 
 The module is loaded only by the H3 environment and does not add dependencies
 to the repository's lightweight simulator package.
@@ -15,7 +17,8 @@ to the repository's lightweight simulator package.
 
 from __future__ import annotations
 
-from typing import Dict, Union
+from dataclasses import dataclass, field
+from typing import Any, Dict, Type, Union
 
 import numpy as np
 import torch
@@ -35,6 +38,26 @@ class PandaSetVehicleObjectParser(pandaset_parser.PandaSet):
     """PandaSet parser that includes stationary rigid actors when requested."""
 
     def _get_actor_trajectories(self) -> list[Dict]:
+        use_calibrated_lidar_frame = bool(
+            getattr(
+                self.config,
+                "use_calibrated_lidar_frame_for_cuboid_time",
+                False,
+            )
+        )
+        if (
+            self.config.correct_cuboid_time
+            and use_calibrated_lidar_frame
+            and not hasattr(self, "extrinsics")
+        ):
+            with open(
+                pandaset_parser.EXTRINSICS_FILE_PATH,
+                encoding="utf-8",
+            ) as stream:
+                self.extrinsics = pandaset_parser.yaml.load(
+                    stream,
+                    Loader=pandaset_parser.yaml.FullLoader,
+                )
         allowed_classes = tuple(pandaset_parser.ALLOWED_RIGID_CLASSES)
         if self.config.include_deformable_actors:
             allowed_classes += tuple(pandaset_parser.ALLOWED_DEFORMABLE_CLASSES)
@@ -91,12 +114,54 @@ class PandaSetVehicleObjectParser(pandaset_parser.PandaSet):
             sibling_id = np.asarray(current["cuboids.sibling_id"])
 
             if self.config.correct_cuboid_time:
-                lidar_pose = pandaset_parser._pandaset_pose_to_matrix(
-                    self.sequence.lidar.poses[frame_index]
-                )
-                position_in_lidar = (
-                    position @ lidar_pose[:3, :3].T + lidar_pose[:3, 3]
-                )
+                if use_calibrated_lidar_frame:
+                    # PandaSet cuboid centers are in world coordinates. The
+                    # upstream parser already avoids sequence.lidar.poses when
+                    # it loads points because those poses are unreliable.
+                    # Rebuild the same lidar-to-world transform from the
+                    # synchronized front camera, then invert it before
+                    # computing lidar azimuth.
+                    front_camera = self.sequence.camera["front_camera"]
+                    front_camera_to_world = (
+                        pandaset_parser._pandaset_pose_to_matrix(
+                            front_camera.poses[frame_index]
+                        )
+                    )
+                    front_transform = self.extrinsics["front_camera"][
+                        "extrinsic"
+                    ]["transform"]
+                    lidar_to_front_camera = (
+                        pandaset_parser._pandaset_pose_to_matrix(
+                            {
+                                "position": front_transform["translation"],
+                                "heading": front_transform["rotation"],
+                            }
+                        )
+                    )
+                    lidar_to_world = (
+                        front_camera_to_world @ lidar_to_front_camera
+                    )
+                    world_to_lidar = np.linalg.inv(lidar_to_world)
+                    homogeneous_positions = np.concatenate(
+                        [
+                            position,
+                            np.ones((len(position), 1), dtype=np.float32),
+                        ],
+                        axis=1,
+                    )
+                    position_in_lidar = (
+                        homogeneous_positions @ world_to_lidar.T
+                    )[:, :3]
+                else:
+                    # Preserve the pinned upstream behavior for checkpoints
+                    # trained before the calibrated-frame fix was introduced.
+                    lidar_pose = pandaset_parser._pandaset_pose_to_matrix(
+                        self.sequence.lidar.poses[frame_index]
+                    )
+                    position_in_lidar = (
+                        position @ lidar_pose[:3, :3].T
+                        + lidar_pose[:3, 3]
+                    )
                 angle = (
                     np.arctan2(
                         position_in_lidar[:, 0], position_in_lidar[:, 1]
@@ -142,8 +207,105 @@ class PandaSetVehicleObjectParser(pandaset_parser.PandaSet):
         return pandaset_parser._cuboids_to_trajectories(cuboids)
 
 
+@dataclass
+class PandaSetVehicleObjectParserConfig(
+    pandaset_parser.PandaSetDataParserConfig
+):
+    """Explicit, checkpoint-serialized options for vehicle actor parsing."""
+
+    _target: Type = field(
+        default_factory=lambda: PandaSetVehicleObjectParser
+    )
+    include_stationary_rigid_actors: bool = False
+    use_calibrated_lidar_frame_for_cuboid_time: bool = False
+
+
 class ActorAwareMCMCStrategy(ADMCMCStrategy):
-    """MCMC relocation that preserves the Gaussian count of every actor ID."""
+    """MCMC refinement that preserves actor IDs and actor-local geometry."""
+
+    actor_bounds: Tensor | None = None
+    last_constraint_stats: dict[str, int] | None = None
+
+    def configure_actor_bounds(self, actor_bounds: Tensor) -> None:
+        self.actor_bounds = actor_bounds.detach().clone()
+        self.last_constraint_stats = {
+            "actor_gaussians": 0,
+            "projected_back_inside": 0,
+        }
+
+    @torch.no_grad()
+    def _constrain_actor_means(
+        self,
+        params: Union[
+            Dict[str, torch.nn.Parameter], torch.nn.ParameterDict
+        ],
+        optimizers: Dict[str, torch.optim.Optimizer],
+        optimizers_prefix: str = "",
+    ) -> None:
+        if self.actor_bounds is None or "id" not in params:
+            return
+        ids = params["id"].detach().flatten().round().to(torch.long)
+        actor_mask = (ids >= 0) & (ids < len(self.actor_bounds))
+        actor_indices = torch.where(actor_mask)[0]
+        if actor_indices.numel() == 0:
+            return
+
+        bounds = self.actor_bounds.to(
+            device=params["means"].device,
+            dtype=params["means"].dtype,
+        )
+        point_bounds = bounds[ids[actor_indices]] * 0.999
+        current = params["means"][actor_indices]
+        constrained = torch.maximum(
+            torch.minimum(current, point_bounds),
+            -point_bounds,
+        )
+        projected = (constrained != current).any(dim=-1)
+        projected_indices = actor_indices[projected]
+        params["means"][actor_indices] = constrained
+
+        optimizer = optimizers.get(f"{optimizers_prefix}means")
+        if optimizer is not None and projected_indices.numel():
+            parameter = optimizer.param_groups[0]["params"][0]
+            for value in optimizer.state.get(parameter, {}).values():
+                if (
+                    isinstance(value, torch.Tensor)
+                    and value.ndim > 0
+                    and value.shape[0] == len(params["means"])
+                ):
+                    value[projected_indices] = 0
+
+        self.last_constraint_stats = {
+            "actor_gaussians": int(actor_indices.numel()),
+            "projected_back_inside": int(projected_indices.numel()),
+        }
+
+    def step_post_backward(
+        self,
+        params: Union[
+            Dict[str, torch.nn.Parameter], torch.nn.ParameterDict
+        ],
+        optimizers: Dict[str, torch.optim.Optimizer],
+        state: Dict[str, Any],
+        step: int,
+        info: Dict[str, Any],
+        lr: float,
+        optimizers_prefix: str = "",
+    ) -> None:
+        super().step_post_backward(
+            params=params,
+            optimizers=optimizers,
+            state=state,
+            step=step,
+            info=info,
+            lr=lr,
+            optimizers_prefix=optimizers_prefix,
+        )
+        self._constrain_actor_means(
+            params,
+            optimizers,
+            optimizers_prefix,
+        )
 
     @torch.no_grad()
     def _relocate_gs(
@@ -267,5 +429,8 @@ class VehicleObjectSplatADModel(SplatADModel):
             refine_every=self.config.refine_every,
             min_opacity=self.config.mcmc_min_opacity,
             verbose=self.config.verbose,
+        )
+        self.strategy.configure_actor_bounds(
+            self.dynamic_actors.actor_bounds()
         )
         self.strategy_state = self.strategy.initialize_state()
