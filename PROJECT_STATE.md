@@ -1,6 +1,6 @@
 # Project State — Driving Scene Reconstruction
 
-Last updated: 2026-07-19
+Last updated: 2026-07-20
 
 ## 1. Product Goal
 
@@ -207,6 +207,27 @@ The spatial and time corrections are correctness infrastructure, not accepted
 visual checkpoints. See
 `experiments/stage_h3_actor_alignment_and_timing.md`.
 
+### Stage H3 Level 6 — Seed projection and painting audit
+
+Completed and independently rejected on 2026-07-20:
+
+- compared scan-centre and per-point actor seed assignment on real PandaSet
+  point semantics and back-camera source images;
+- used the actual 820-row rear crop, rolling-shutter row times, calibrated
+  actor trajectories, and retained per-point LiDAR offsets;
+- found a train-only semantic precision improvement from 87.76% to 90.28%,
+  while held-out precision fell from 89.16% to 87.97% and usable points fell
+  from 369 to 349;
+- measured current-versus-corrected seed-paint projection displacement of
+  0.375 px weighted median and 1.547 px weighted p95 on held-out points, with
+  no consistent visible correction;
+- rejected both a new actor training run and an unproven multi-camera painting
+  rewrite;
+- packaged the accepted static 8k as an exact 10-second, 80-frame six-camera
+  result.
+
+See `experiments/stage_h3_seed_projection_and_painting.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -273,9 +294,12 @@ stable-drivable acceptance.
   evidence that the actor appears at the correct image location.
 - Actor-local MCMC geometry is now bounded, but opacity/supervision failure
   still leaves several moving actors visually absent.
-- Cuboid time has an explicit calibrated mode, while actor seed assignment
-  still evaluates a LiDAR scan at its center timestamp rather than each
-  point's timestamp.
+- Cuboid time has an explicit calibrated mode. Per-point actor seed assignment
+  is diagnosed but not enabled because the held-out semantic direction was
+  negative for actor 0/1.
+- Seed painting ignores point time, actor motion, and rolling shutter, but the
+  audited held-out projection difference was mostly subpixel to about 2 px and
+  did not prove a quality benefit.
 - SplatAD discards trajectory `exists_at_time` during rendering, so an
   out-of-window actor can appear at its nearest pose.
 
@@ -293,11 +317,11 @@ plan. The short version is:
 1. keep static 8k as the fixed comparison checkpoint;
 2. retain actor-bound projection and calibrated cuboid-time semantics as
    correctness guards, but do not promote their rejected checkpoints;
-3. for actor 0/1, assign each LiDAR seed using its own point timestamp instead
-   of the scan-center timestamp;
-4. project corrected seeds into exact camera rows and compare them with source
-   vehicle pixels before optimization;
-5. correct and test one small actor/window only if seed projection aligns;
+3. repeat the point-semantic and source-projection audit on a larger actor
+   visible in a front or side camera;
+4. require held-out semantic precision and visible alignment to improve in the
+   same direction;
+5. correct and test one small actor/window only after that gate passes;
 6. apply trajectory `exists_at_time` during rendering to prevent nearest-pose
    ghost actors outside their valid interval;
 7. retain WayveScenes101 `scene_094` and static PandaSet 8k as fixed

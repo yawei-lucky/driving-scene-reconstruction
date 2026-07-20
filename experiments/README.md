@@ -25,6 +25,9 @@ Recorded experiments:
 - `stage_h3_actor_alignment_and_timing.md`: actor-local MCMC escape diagnosis,
   boundary and timing corrections, short-run rejections, and the next
   per-point seed-timing test.
+- `stage_h3_seed_projection_and_painting.md`: point-time seed assignment,
+  rolling-shutter source overlays, seed-painting audit, independent rejection,
+  and the accepted static-8k ten-second result.
 
 Stage H2 connects that H1 checkpoint to the simulator interface. Its design and
 GPU validation record live in `docs/stage_h2_reconstruction_renderer.md`.

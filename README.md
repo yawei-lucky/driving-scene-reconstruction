@@ -110,6 +110,11 @@ Stage H3 Level 5
 → proved MCMC actor-local points escaped 34-290 m from vehicle cuboids
 → added actor bounds and explicit calibrated cuboid timing
 → short candidates remained visually weak and were rejected
+
+Stage H3 Level 6
+→ audited scan-centre versus per-point actor seeds on real source images
+→ held-out vehicle precision fell from 89.16% to 87.97%
+→ rejected more training; static 8k remains the accepted result
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -168,13 +173,14 @@ validation evidence, and limitations.
 Stage H3 should produce a stable drivable reconstruction baseline before UI or
 input-device polish. Static 8k remains the fixed accepted checkpoint.
 Actor-local MCMC escape and a roughly 50-56 ms cuboid-time error are now
-diagnosed and guarded, but the corrected short runs still failed
-moving-vehicle appearance. The next gate does not start another long run:
+diagnosed and guarded. Per-point seed assignment and corrected seed-paint
+projection were also audited, but did not improve independent held-out
+evidence. The next gate does not start another long run:
 
-- assign actor 0/1 LiDAR seeds at each point's own scan timestamp instead of
-  the scan-center time;
-- project those seeds through exact camera and row timing;
-- verify source-pixel alignment before optimizing a small actor/window;
+- repeat the semantic/projection audit on a larger actor visible in a front or
+  side camera;
+- require held-out semantics and source-image alignment to improve together;
+- optimize a small actor/window only after that gate passes;
 - mask actor rendering with trajectory `exists_at_time` to prevent nearest-pose
   ghost vehicles outside valid intervals;
 - keep PandarGT, cockpit UI, controller work, and unrestricted driving deferred.
