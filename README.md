@@ -254,6 +254,28 @@ Then open:
 http://100.116.66.57:8781
 ```
 
+Preferred when working through VS Code Remote SSH: forward the browser service
+through VS Code instead of visiting the Tailscale IP directly. Start the service
+from a VS Code terminal on `shidi`:
+
+```bash
+H3_BROWSER_HOST=127.0.0.1 scripts/run_stage_h3_pandaset_040.sh logged-browser
+```
+
+Then open VS Code's `Ports` panel, forward port `8766` if it was not detected
+automatically, and open:
+
+```text
+http://localhost:8766
+```
+
+You can also run the command `Simple Browser: Show` inside VS Code and enter
+that same URL. This keeps the connection inside VS Code's SSH/tunnel channel,
+so the local proxy on port `25378` does not need to be disabled. If a local
+proxy extension still captures `localhost`, add `localhost` and `127.0.0.1` to
+its bypass list. If the VS Code webview does not focus keyboard input reliably,
+click inside the page once or use the on-screen W/S/A/D buttons.
+
 The browser defaults to manual time progression: the scene stays still after
 opening, and the logged trajectory advances only while a driving key is held.
 To restore the earlier auto-play behavior:
