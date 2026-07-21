@@ -28,6 +28,12 @@ Recorded experiments:
 - `stage_h3_seed_projection_and_painting.md`: point-time seed assignment,
   rolling-shutter source overlays, seed-painting audit, independent rejection,
   and the accepted static-8k ten-second result.
+- `stage_h3_logged_renderer_mvp.md`: accepted static-8k logged-time Renderer,
+  visible counterfactual movement profile, browser MVP, and remaining
+  acceptance boundary.
+- `stage_h3_drivability_preflight.md`: automated H3 drivability preflight,
+  generated review artifacts, browser trial JSON recording, and remaining
+  human-review items.
 
 Stage H2 connects that H1 checkpoint to the simulator interface. Its design and
 GPU validation record live in `docs/stage_h2_reconstruction_renderer.md`.

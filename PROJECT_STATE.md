@@ -284,6 +284,40 @@ Completed on 2026-07-21 without retraining:
 This is a demonstrability improvement, not a new certified safe pose envelope.
 Use `H3_BROWSER_MOVEMENT_PROFILE=safe` for the conservative acceptance run.
 
+### Stage H3 Level 7B — Drivability preflight and browser trial recording
+
+Completed on 2026-07-21 without retraining:
+
+- added `drivability-preflight`, a GPU preflight that uses the accepted
+  static-8k step-7,999 checkpoint and emits a machine-readable report plus
+  human-review images;
+- verified the visible profile over all 80 logical frames with 17 automated
+  backend gates passing, including accepted checkpoint, six finite camera
+  outputs, same-time counterfactual pixel changes, same logical frame for
+  counterfactual probes, monotonic logical frames, camera time/source metadata,
+  reset repeatability, scripted-state repeatability, final-state pixel
+  repeatability, inside/outside profile limit behavior, and p95 latency;
+- measured visible-profile preflight latency at 0.5 output scale: 69.07 ms p50,
+  73.36 ms p95, and 76.08 ms max for the six-camera Renderer observation;
+- preserved review artifacts outside Git under
+  `/home/yawei/stage3_external/artifacts/scene_040_drivability_preflight/`,
+  including `counterfactual_front_preflight.jpg`,
+  `sequence_contact_sheet.jpg`, and
+  `stage_h3_drivability_preflight.json`;
+- added browser trial recording so the real operator run exposes `/trial.json`
+  and, by default, writes
+  `/home/yawei/stage3_external/artifacts/scene_040_browser_trial/browser_trial.json`;
+- validated the browser recording endpoint locally: the page trial report
+  initialized with checkpoint step 7,999 and visible profile, a `W+A` tick
+  returned logical frame 1 and server control-to-JPEG time of 89.88 ms, a
+  trial sample was recorded, reset was recorded, and `/trial.json` returned
+  `sample_count=1` and `reset_count=1`.
+
+This is still not a completed human driving acceptance run. The preflight
+explicitly leaves road/lane continuity, steering direction by eye, nearby
+artifact judgment, physical key-to-display latency, and dynamic-traffic
+decision impact as manual review items.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -293,7 +327,8 @@ HumanControl
 → one rigid transform of the calibrated six-camera rig
 → SplatADLoggedRenderer using accepted static-8k
 → six RGB arrays at about 13.4 Renderer observations/s
-→ 10 Hz browser W/S/A/D/R driving loop
+→ automated drivability preflight
+→ 10 Hz browser W/S/A/D/R driving loop with trial JSON recording
 ```
 
 This is the first repository state where simulated ego motion changes pixels
@@ -305,9 +340,10 @@ The earlier H2 fixed-pose Wayve renderer remains available. The H3 path now
 also loads real PandaSet scene 040, uses six cameras, Pandar64 geometry and
 cuboid actor tracks, and follows every logged rig pose with bounded human
 offsets. Static structure remains coherent over the complete short sequence
-at the tested scale. The browser/server path now works; the next unresolved
-integration gate is a real operator trial including physical key-to-display
-timing. Dynamic traffic remains a later mandatory gate.
+at the tested scale. The backend preflight and browser/server path now work;
+the next unresolved integration gate is a real operator trial including
+physical key-to-display timing and visual review. Dynamic traffic remains a
+later mandatory gate.
 
 ## 4. Important Limitations
 
@@ -322,6 +358,9 @@ timing. Dynamic traffic remains a later mandatory gate.
   complete envelope still needs systematic visual certification.
 - H3 Renderer latency passes 100 ms at 0.5 scale, but this excludes physical
   input, mosaic/JPEG encoding, browser transport, and display refresh.
+- Browser trial recording measures browser request-to-image and input-to-image
+  load events, but still does not include monitor scan-out or a calibrated
+  external latency sensor.
 - The current examples depend on the machine-specific H1 checkpoint and
   Nerfstudio environment.
 - The new SplatAD backend is a separate Renderer; direct checkpoint
@@ -372,20 +411,22 @@ See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
 
 1. keep static 8k as the fixed visual and geometry checkpoint;
-2. run the Level-7 10 Hz browser loop through the full segment with a human;
-3. start with the visible movement profile when inspecting whether motion is
+2. run `drivability-preflight` after renderer/control changes and preserve its
+   JSON plus review images;
+3. run the Level-7 10 Hz browser loop through the full segment with a human;
+4. start with the visible movement profile when inspecting whether motion is
    perceptible, then repeat the acceptance run with `safe` if strict envelope
    evidence is needed;
-4. accept only steering, throttle, brake, and reset during driving—never ask
+5. accept only steering, throttle, brake, and reset during driving—never ask
    the operator to inspect or compensate for reconstruction defects;
-5. preserve the browser-reported control-event-to-screen p95 latency and
-   deterministic replay evidence;
-6. execute the six separate gates in
+6. preserve `/trial.json` and the browser-reported control-event-to-screen p95
+   latency plus deterministic replay evidence;
+7. execute the six separate gates in
    `docs/drivability_acceptance_criteria.md` on this low-interference segment;
-7. return dynamic traffic to the main line immediately if it obscures the
+8. return dynamic traffic to the main line immediately if it obscures the
    road, creates a false obstacle, or closed-loop autonomous-driving testing
    begins;
-8. then fix the offending dynamic object/window with the existing actor bounds
+9. then fix the offending dynamic object/window with the existing actor bounds
    and timing evidence rather than restarting broad, ungated training.
 
 In this plan, camera images remain the source of visual appearance. LiDAR

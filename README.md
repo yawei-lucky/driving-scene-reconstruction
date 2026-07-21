@@ -129,6 +129,11 @@ Stage H3 Level 7A
   and ±8° yaw
 → counterfactual probe confirmed stronger same-time view changes and produced
   a 7.9 s visible-movement demo
+
+Stage H3 Level 7B
+→ automated drivability preflight for the accepted static-8k renderer
+→ visible-profile preflight passed 17 backend gates over all 80 logical frames
+→ browser loop now records trial JSON with request→image and input→image timing
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -200,6 +205,16 @@ H3_LOGGED_MOVEMENT_PROFILE=visible \
 scripts/run_stage_h3_pandaset_040.sh logged-renderer-smoke
 ```
 
+For the current automated drivability preflight:
+
+```bash
+scripts/run_stage_h3_pandaset_040.sh drivability-preflight
+```
+
+This writes a JSON report plus counterfactual and sequence review images under
+`/home/yawei/stage3_external/artifacts/scene_040_drivability_preflight/`. It is
+a backend preflight, not a substitute for the human browser driving trial.
+
 To drive the same reconstruction from another Tailscale-connected computer:
 
 ```bash
@@ -214,6 +229,9 @@ so counterfactual motion is easy to see. Use `H3_BROWSER_MOVEMENT_PROFILE=safe`
 when running the conservative acceptance envelope. The default 0.25 browser
 render scale produces a 1440-pixel-wide six-camera view; it is twice the
 linear camera resolution of the earlier 0.125 viewer that was judged too small.
+The browser also exposes `/trial.json` and writes the same trial report to
+`/home/yawei/stage3_external/artifacts/scene_040_browser_trial/browser_trial.json`
+by default.
 
 ## Current Next Step
 
@@ -223,6 +241,11 @@ operator acceptance run of the new browser loop over the complete real
 road/curb continuity, steering direction, reset, and deterministic replay. Do
 not start another dynamic training run before this driving run reveals an
 artifact that affects the road or obstacle decision.
+
+An automated preflight now exists before that operator run. It should be green
+before a human trial is treated as meaningful, but it deliberately leaves
+road/lane continuity, steering direction by eye, physical display latency, and
+dynamic-traffic decision impact as review items.
 
 The success criteria are deliberately separate from generic image metrics:
 

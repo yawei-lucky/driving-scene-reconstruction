@@ -18,6 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from driving_scene_reconstruction.sim import (  # noqa: E402
+    BrowserTrialRecorder,
     CameraRig,
     CameraSpec,
     EgoState,
@@ -43,6 +44,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dt", type=float, default=0.1)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8766)
+    parser.add_argument("--trial-output", type=Path, default=None)
     parser.add_argument(
         "--movement-profile",
         choices=("safe", "visible"),
@@ -112,6 +114,7 @@ WEB_PAGE = """<!doctype html>
     #view { max-width: 100vw; max-height: calc(100vh - 150px); border: 1px solid #444; }
     #status { min-height: 22px; color: #ffd84d; margin: 4px; }
     button { min-width: 76px; margin: 3px; padding: 10px; font-size: 17px; }
+    a { color: #93c5fd; }
   </style>
 </head>
 <body>
@@ -126,18 +129,60 @@ WEB_PAGE = """<!doctype html>
     <button data-key="d">D 右转</button>
   </div>
   <div><button data-key="r">R 重置</button><button id="fullscreen">全屏</button></div>
+  <div><a href="/trial.json" target="_blank">试驾记录 JSON</a></div>
   <script>
     const view = document.getElementById("view");
     const status = document.getElementById("status");
     const held = new Set();
     let running = true;
+    let inFlight = false;
+    let nextTimer = null;
     let sequence = 0;
     let generation = 0;
+    let pendingInputStartedAt = null;
+    let trialSamples = 0;
     const tickPeriodMs = __TICK_PERIOD_MS__;
     const drivingKeys = new Set(["w", "s", "a", "d"]);
 
+    function markInputEdge() {
+      pendingInputStartedAt = performance.now();
+      requestTickNow();
+    }
     function setHeld(key, active) {
+      const wasHeld = held.has(key);
       if (active) held.add(key); else held.delete(key);
+      if (wasHeld !== active) markInputEdge();
+    }
+    function scheduleNextTick(token, started) {
+      if (!running || token !== generation) return;
+      if (nextTimer !== null) clearTimeout(nextTimer);
+      nextTimer = setTimeout(
+        () => tick(token),
+        Math.max(0, tickPeriodMs - (performance.now() - started))
+      );
+    }
+    function requestTickNow() {
+      if (!running || inFlight) return;
+      if (nextTimer !== null) {
+        clearTimeout(nextTimer);
+        nextTimer = null;
+      }
+      tick(generation);
+    }
+    async function recordSample(sample) {
+      try {
+        const response = await fetch("/trial-sample", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(sample)
+        });
+        const result = await response.json();
+        if (response.ok && result.summary) {
+          trialSamples = result.summary.sample_count;
+        }
+      } catch (_) {
+        /* Keep driving even if recording fails. */
+      }
     }
     document.addEventListener("keydown", event => {
       const key = event.key.toLowerCase();
@@ -148,7 +193,12 @@ WEB_PAGE = """<!doctype html>
       const key = event.key.toLowerCase();
       if (drivingKeys.has(key)) { event.preventDefault(); setHeld(key, false); }
     });
-    window.addEventListener("blur", () => held.clear());
+    window.addEventListener("blur", () => {
+      if (held.size) {
+        held.clear();
+        markInputEdge();
+      }
+    });
     document.querySelectorAll("button[data-key]").forEach(button => {
       const key = button.dataset.key;
       if (key === "r") { button.addEventListener("click", reset); return; }
@@ -165,20 +215,37 @@ WEB_PAGE = """<!doctype html>
       held.clear();
       const token = ++generation;
       running = false;
+      const resetStarted = performance.now();
+      if (nextTimer !== null) {
+        clearTimeout(nextTimer);
+        nextTimer = null;
+      }
       await fetch("/reset", {method: "POST"});
       await new Promise((resolve, reject) => {
         view.onload = resolve;
         view.onerror = reject;
         view.src = "/frame.jpg?n=" + (++sequence);
       });
+      const resetToScreen = performance.now() - resetStarted;
+      pendingInputStartedAt = null;
+      status.textContent =
+        `log 0.00s · 重置→图像加载 ${resetToScreen.toFixed(0)}ms · ` +
+        `记录 ${trialSamples}`;
       running = true;
       tick(token);
     }
     async function tick(token) {
-      if (token !== generation) return;
+      if (token !== generation || inFlight) return;
+      inFlight = true;
+      if (nextTimer !== null) {
+        clearTimeout(nextTimer);
+        nextTimer = null;
+      }
       const started = performance.now();
+      const inputStartedAt = pendingInputStartedAt;
       try {
-        const query = encodeURIComponent([...held].join(""));
+        const keys = [...held].sort().join("");
+        const query = encodeURIComponent(keys);
         const response = await fetch("/tick?keys=" + query, {method: "POST"});
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "request failed");
@@ -187,10 +254,31 @@ WEB_PAGE = """<!doctype html>
           view.onerror = reject;
           view.src = "/frame.jpg?n=" + (++sequence);
         });
-        const eventToScreen = performance.now() - started;
+        const loadedAt = performance.now();
+        const eventToScreen = loadedAt - started;
+        let inputToScreen = null;
+        if (inputStartedAt !== null) {
+          inputToScreen = loadedAt - inputStartedAt;
+          if (pendingInputStartedAt === inputStartedAt) {
+            pendingInputStartedAt = null;
+          }
+        }
+        const displayedSampleCount = trialSamples + 1;
+        recordSample({
+          sequence,
+          keys,
+          client_unix_ms: Date.now(),
+          browser_request_to_image_ms: eventToScreen,
+          browser_input_to_image_ms: inputToScreen,
+          server: result
+        });
         status.textContent =
           `log ${result.time.toFixed(2)}s / ${result.duration.toFixed(2)}s · ` +
           `请求→图像加载 ${eventToScreen.toFixed(0)}ms`;
+        if (inputToScreen !== null) {
+          status.textContent += ` · 输入→图像加载 ${inputToScreen.toFixed(0)}ms`;
+        }
+        status.textContent += ` · 记录 ${displayedSampleCount}`;
         if (result.time >= result.duration) {
           running = false;
           status.textContent += " · 已到终点，按 R 重置";
@@ -198,13 +286,10 @@ WEB_PAGE = """<!doctype html>
       } catch (error) {
         status.textContent = error.toString();
         running = false;
+      } finally {
+        inFlight = false;
       }
-      if (running && token === generation) {
-        setTimeout(
-          () => tick(token),
-          Math.max(0, tickPeriodMs - (performance.now() - started))
-        );
-      }
+      scheduleNextTick(token, started);
     }
     tick(generation);
   </script>
@@ -237,6 +322,15 @@ def main() -> None:
         profile,
     )
     rig = CameraRig(tuple(CameraSpec(name) for name in CAMERAS))
+    recorder = BrowserTrialRecorder(
+        scene="040",
+        movement_profile=profile.name,
+        output_scale=args.output_scale,
+        dt_seconds=args.dt,
+        checkpoint_step=renderer.checkpoint_step,
+        logged_duration_seconds=renderer.logged_duration,
+        output_path=args.trial_output,
+    )
     runtime: dict[str, object] = {
         "state": controller.reset(),
         "jpeg": b"",
@@ -259,6 +353,33 @@ def main() -> None:
         runtime["jpeg"] = buffer.getvalue()
         runtime["metadata"] = dict(observation.metadata)
 
+    def state_payload(started: float | None = None) -> dict[str, object]:
+        state = runtime["state"]
+        metadata = runtime["metadata"]
+        assert isinstance(state, EgoState)
+        assert isinstance(metadata, dict)
+        payload: dict[str, object] = {
+            "time": state.time,
+            "duration": renderer.logged_duration,
+            "x": state.x,
+            "y": state.y,
+            "yaw_degrees": math.degrees(state.yaw),
+            "speed": state.speed,
+            "renderer_ms": float(metadata["render_seconds"]) * 1000.0,
+            "movement_profile": profile.name,
+            "logical_frame": int(metadata["logical_frame"]),
+            "frame_selection_error_ms": float(
+                metadata["frame_selection_error_ms"]
+            ),
+            "camera_time_spread_ms": float(metadata["camera_time_spread_ms"]),
+            "output_scale": args.output_scale,
+        }
+        if started is not None:
+            payload["server_control_to_jpeg_ms"] = (
+                time.perf_counter() - started
+            ) * 1000.0
+        return payload
+
     class Handler(BaseHTTPRequestHandler):
         def send_bytes(self, status: int, content_type: str, payload: bytes) -> None:
             self.send_response(status)
@@ -278,6 +399,12 @@ def main() -> None:
                 self.send_bytes(200, "text/html; charset=utf-8", page.encode())
             elif path == "/frame.jpg":
                 self.send_bytes(200, "image/jpeg", runtime["jpeg"])  # type: ignore[arg-type]
+            elif path == "/trial.json":
+                self.send_bytes(
+                    200,
+                    "application/json",
+                    recorder.report_bytes(),
+                )
             else:
                 self.send_bytes(404, "text/plain", b"not found")
 
@@ -285,6 +412,29 @@ def main() -> None:
             started = time.perf_counter()
             parsed = urlparse(self.path)
             try:
+                if parsed.path == "/trial-sample":
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length > 65536:
+                        raise ValueError("trial sample is too large")
+                    raw_payload = self.rfile.read(content_length)
+                    payload = json.loads(raw_payload.decode("utf-8"))
+                    if not isinstance(payload, dict):
+                        raise ValueError("trial sample must be a JSON object")
+                    summary = recorder.record_sample(payload)
+                    response = {
+                        "summary": summary,
+                        "trial_output": (
+                            str(recorder.output_path)
+                            if recorder.output_path
+                            else None
+                        ),
+                    }
+                    self.send_bytes(
+                        200,
+                        "application/json",
+                        json.dumps(response).encode(),
+                    )
+                    return
                 if parsed.path == "/reset":
                     runtime["state"] = controller.reset()
                 elif parsed.path == "/tick":
@@ -302,22 +452,9 @@ def main() -> None:
                     self.send_bytes(404, "text/plain", b"not found")
                     return
                 render_frame()
-                state = runtime["state"]
-                metadata = runtime["metadata"]
-                assert isinstance(state, EgoState)
-                assert isinstance(metadata, dict)
-                payload = {
-                    "time": state.time,
-                    "duration": renderer.logged_duration,
-                    "x": state.x,
-                    "y": state.y,
-                    "yaw_degrees": math.degrees(state.yaw),
-                    "renderer_ms": float(metadata["render_seconds"]) * 1000.0,
-                    "movement_profile": profile.name,
-                    "server_control_to_jpeg_ms": (
-                        time.perf_counter() - started
-                    ) * 1000.0,
-                }
+                payload = state_payload(started)
+                if parsed.path == "/reset":
+                    recorder.record_reset(payload)
                 self.send_bytes(200, "application/json", json.dumps(payload).encode())
             except Exception as error:
                 self.send_bytes(
@@ -340,6 +477,9 @@ def main() -> None:
         f"+/-{profile.limits.max_abs_left_meters:.2f}m left, "
         f"+/-{math.degrees(profile.limits.max_abs_yaw_radians):.1f}deg yaw"
     )
+    if args.trial_output:
+        print(f"trial_output={Path(args.trial_output).expanduser().resolve()}")
+    print("trial_report_endpoint=/trial.json")
     print("controls=W/S/A/D, reset=R")
     try:
         server.serve_forever()

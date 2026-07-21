@@ -63,3 +63,10 @@ pass on one declared low-interference segment. Image metrics remain supporting
 diagnostics, not substitutes for these gates. Dynamic-traffic correctness is a
 separate mandatory gate before strict autonomous-driving evaluation, as
 defined in `driver_attention_and_dynamic_traffic_requirements.md`.
+
+The automated H3 drivability preflight is a prerequisite evidence package, not
+the final acceptance verdict. It verifies backend repeatability,
+counterfactual-pose response, frame grouping, profile bounds, and renderer
+latency. A human operator still has to review road/lane continuity, steering
+direction, nearby artifacts, physical input-to-display latency, and
+traffic-decision impact during the browser trial.

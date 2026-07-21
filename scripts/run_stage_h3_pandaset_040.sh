@@ -26,6 +26,9 @@ STATIC_RUN_ROOT="${TRAIN_ROOT}/${STATIC_EXPERIMENT}/splatad/${STATIC_TIMESTAMP}"
 STATIC_CONFIG="${STATIC_RUN_ROOT}/config.yml"
 STATIC_CHECKPOINT="${STATIC_RUN_ROOT}/nerfstudio_models/step-000007999.ckpt"
 LOGGED_RENDER_ROOT="${H3_LOGGED_RENDER_ROOT:-${H3_ROOT}/artifacts/scene_040_logged_renderer_mvp}"
+DRIVABILITY_ROOT="${H3_DRIVABILITY_ROOT:-${H3_ROOT}/artifacts/scene_040_drivability_preflight}"
+BROWSER_TRIAL_ROOT="${H3_BROWSER_TRIAL_ROOT:-${H3_ROOT}/artifacts/scene_040_browser_trial}"
+BROWSER_TRIAL_OUTPUT="${H3_BROWSER_TRIAL_OUTPUT:-${BROWSER_TRIAL_ROOT}/browser_trial.json}"
 VEHICLE_EXPERIMENT="${H3_VEHICLE_EXPERIMENT_NAME:-scene_040_splatad_vehicle_objects_8000}"
 VEHICLE_TIMESTAMP="${H3_VEHICLE_TIMESTAMP:-2026-07-19_stationary_moving_actor_aware}"
 VEHICLE_RUN_ROOT="${TRAIN_ROOT}/${VEHICLE_EXPERIMENT}/splatad/${VEHICLE_TIMESTAMP}"
@@ -49,7 +52,7 @@ TIMED_CHECKPOINT="${TIMED_RUN_ROOT}/nerfstudio_models/step-000001999.ckpt"
 PYTHON="${H3_ENV}/bin/python"
 
 usage() {
-  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|logged-renderer-smoke|logged-browser|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
+  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|logged-renderer-smoke|drivability-preflight|logged-browser|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
 }
 
 if [[ ! -x "$PYTHON" ]]; then
@@ -208,6 +211,19 @@ case "$MODE" in
       --dt "${H3_LOGGED_RENDER_DT:-0.1}" \
       --movement-profile "${H3_LOGGED_MOVEMENT_PROFILE:-safe}"
     ;;
+  drivability-preflight)
+    if [[ ! -f "$STATIC_CONFIG" || ! -f "$STATIC_CHECKPOINT" ]]; then
+      echo "Accepted static-8k config/checkpoint is missing: $STATIC_RUN_ROOT" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/examples/stage_h3_drivability_preflight.py" \
+      --config "$STATIC_CONFIG" \
+      --output-dir "$DRIVABILITY_ROOT" \
+      --output-scale "${H3_DRIVABILITY_RENDER_SCALE:-0.5}" \
+      --steps "${H3_DRIVABILITY_STEPS:-80}" \
+      --dt "${H3_LOGGED_RENDER_DT:-0.1}" \
+      --movement-profile "${H3_DRIVABILITY_MOVEMENT_PROFILE:-visible}"
+    ;;
   logged-browser)
     if [[ ! -f "$STATIC_CONFIG" || ! -f "$STATIC_CHECKPOINT" ]]; then
       echo "Accepted static-8k config/checkpoint is missing: $STATIC_RUN_ROOT" >&2
@@ -219,7 +235,8 @@ case "$MODE" in
       --dt "${H3_LOGGED_RENDER_DT:-0.1}" \
       --movement-profile "${H3_BROWSER_MOVEMENT_PROFILE:-visible}" \
       --host "${H3_BROWSER_HOST:-0.0.0.0}" \
-      --port "${H3_BROWSER_PORT:-8766}"
+      --port "${H3_BROWSER_PORT:-8766}" \
+      --trial-output "$BROWSER_TRIAL_OUTPUT"
     ;;
   vehicle-8k)
     if [[ -f "$VEHICLE_CHECKPOINT" && "${H3_ALLOW_RETRAIN:-0}" != "1" ]]; then
@@ -313,6 +330,8 @@ case "$MODE" in
     echo "static 8k config: $STATIC_CONFIG"
     echo "static 8k checkpoint: $STATIC_CHECKPOINT"
     echo "logged renderer smoke: $LOGGED_RENDER_ROOT"
+    echo "drivability preflight: $DRIVABILITY_ROOT"
+    echo "browser trial report: $BROWSER_TRIAL_OUTPUT"
     echo "vehicle 8k config: $VEHICLE_CONFIG"
     echo "vehicle 8k checkpoint: $VEHICLE_CHECKPOINT"
     echo "moving-only 8k config: $MOVING_CONFIG"
