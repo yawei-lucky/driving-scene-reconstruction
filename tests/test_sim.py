@@ -267,6 +267,21 @@ class LoggedEgoOffsetControllerTest(unittest.TestCase):
         self.assertAlmostEqual(state.speed, 0.0)
         self.assertAlmostEqual(state.x, 0.0)
 
+    def test_speed_persists_after_throttle_is_released(self) -> None:
+        accelerated = self.controller.step(
+            EgoState(),
+            HumanControl(throttle=1.0),
+            0.1,
+        )
+        coasting = self.controller.step(
+            accelerated,
+            HumanControl(),
+            0.1,
+        )
+
+        self.assertAlmostEqual(coasting.speed, accelerated.speed)
+        self.assertGreater(coasting.x, accelerated.x)
+
     def test_non_finite_control_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             self.controller.step(

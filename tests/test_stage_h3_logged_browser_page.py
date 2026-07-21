@@ -36,12 +36,19 @@ class StageH3LoggedBrowserPageTest(unittest.TestCase):
         self.assertIn('let autoplay = timeMode === "auto";', WEB_PAGE)
         self.assertIn("if (autoplay)", startup_block)
         self.assertIn("人工控制", startup_block)
-        self.assertIn("!autoplay && held.size === 0", WEB_PAGE)
+        self.assertIn('!held.has("w") && vehicleSpeed <= speedEpsilon', WEB_PAGE)
 
     def test_time_mode_advance_rules(self) -> None:
         self.assertFalse(should_advance_log_time("manual", set()))
         self.assertTrue(should_advance_log_time("manual", {"w"}))
-        self.assertTrue(should_advance_log_time("manual", {"a"}))
+        self.assertFalse(should_advance_log_time("manual", {"a"}))
+        self.assertFalse(should_advance_log_time("manual", {"s"}))
+        self.assertTrue(
+            should_advance_log_time("manual", set(), current_speed=0.2)
+        )
+        self.assertTrue(
+            should_advance_log_time("manual", {"s"}, current_speed=0.2)
+        )
         self.assertTrue(should_advance_log_time("auto", set()))
         self.assertTrue(should_advance_log_time("auto", {"s"}))
         self.assertTrue(should_advance_log_time("manual", set(), autoplay=True))
@@ -64,6 +71,7 @@ class StageH3LoggedBrowserPageTest(unittest.TestCase):
         self.assertIn('"&autoplay=" + autoplayQuery', WEB_PAGE)
         self.assertIn("↑ / W 加速", WEB_PAGE)
         self.assertIn("↓ / S 减速", WEB_PAGE)
+        self.assertIn("vehicleSpeed = result.speed", WEB_PAGE)
 
     def test_page_records_manual_drivability_review(self) -> None:
         self.assertIn("人工试驾验收", WEB_PAGE)

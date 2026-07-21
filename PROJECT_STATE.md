@@ -399,7 +399,9 @@ This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint. The default browser loop now
 uses the `visible` profile so those counterfactual changes are easier for a
 human to see, and it now opens stopped: logged time advances only while W/S/A/D
-or the matching arrow key is held. The page can start/pause auto-play without
+or the matching arrow key is used to begin driving. Releasing the accelerator
+now coasts at the current relative speed, while braking reduces that speed to
+zero before the render loop stops. The page can start/pause auto-play without
 restarting the server, while `H3_BROWSER_TIME_MODE=auto` still starts in
 auto-play mode. The `safe` profile preserves the previous conservative bounds.
 

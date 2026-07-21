@@ -75,11 +75,12 @@ def should_advance_log_time(
     time_mode: str,
     keys: set[str],
     autoplay: bool = False,
+    current_speed: float = 0.0,
 ) -> bool:
     if time_mode == "auto" or autoplay:
         return True
     if time_mode == "manual":
-        return bool(keys)
+        return "w" in keys or current_speed > 1e-6
     raise ValueError(f"unknown time mode: {time_mode}")
 
 
@@ -235,7 +236,9 @@ WEB_PAGE = """<!doctype html>
     let generation = 0;
     let pendingInputStartedAt = null;
     let trialSamples = 0;
+    let vehicleSpeed = 0;
     const tickPeriodMs = __TICK_PERIOD_MS__;
+    const speedEpsilon = 1e-6;
     const timeMode = "__TIME_MODE__";
     const drivingKeys = new Set(["w", "s", "a", "d"]);
     const keyAliases = new Map([
@@ -275,7 +278,7 @@ WEB_PAGE = """<!doctype html>
     }
     function scheduleNextTick(token, started) {
       if (!running || token !== generation) return;
-      if (!autoplay && held.size === 0) return;
+      if (!autoplay && !held.has("w") && vehicleSpeed <= speedEpsilon) return;
       if (nextTimer !== null) clearTimeout(nextTimer);
       nextTimer = setTimeout(
         () => tick(token),
@@ -377,6 +380,7 @@ WEB_PAGE = """<!doctype html>
       });
       const resetToScreen = performance.now() - resetStarted;
       pendingInputStartedAt = null;
+      vehicleSpeed = 0;
       status.textContent =
         `log 0.00s · 重置→图像加载 ${resetToScreen.toFixed(0)}ms · ` +
         `记录 ${trialSamples}`;
@@ -404,6 +408,7 @@ WEB_PAGE = """<!doctype html>
         );
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "request failed");
+        vehicleSpeed = result.speed;
         await new Promise((resolve, reject) => {
           view.onload = resolve;
           view.onerror = reject;
@@ -649,6 +654,7 @@ def main() -> None:
                         "manual",
                         keys,
                         autoplay,
+                        state.speed,
                     )
                     if should_advance:
                         runtime["state"] = controller.step(
