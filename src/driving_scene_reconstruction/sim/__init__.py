@@ -11,10 +11,17 @@ from .renderer_interface import CameraRig, CameraSpec, RenderedObservation, Rend
 from .scene_coordinates import NearbyPoseLimits, SceneReferenceFrame
 from .splatad_logged_renderer import SplatADLoggedRenderer
 from .state import EgoState
+from .trial_acceptance import (
+    AcceptanceGate,
+    TrialAcceptanceConfig,
+    evaluate_trial_report,
+    load_trial_report,
+)
 from .trial_recorder import BrowserTrialRecorder
 from .vehicle_model import SimpleVehicleModel
 
 __all__ = [
+    "AcceptanceGate",
     "BrowserTrialRecorder",
     "CameraRig",
     "CameraSpec",
@@ -29,5 +36,8 @@ __all__ = [
     "SceneReferenceFrame",
     "SimpleVehicleModel",
     "SplatADLoggedRenderer",
+    "TrialAcceptanceConfig",
+    "evaluate_trial_report",
     "logged_movement_profile",
+    "load_trial_report",
 ]

@@ -327,6 +327,33 @@ decision impact as manual review items. Those items are now recordable from
 the browser, but they are not accepted until a real operator completes and
 saves the review.
 
+### Stage H3 Level 7C — Browser trial acceptance checker
+
+Completed on 2026-07-21 without retraining:
+
+- added a dependency-light trial acceptance evaluator for saved browser
+  `trial.json` files;
+- added `examples/stage_h3_trial_acceptance_check.py` and the
+  `scripts/run_stage_h3_pandaset_040.sh trial-check` mode;
+- default checks require scene 040, the accepted step-7,999 checkpoint, visible
+  movement profile, at least 70 browser samples, completed logged segment,
+  monotonic logical frames, at least one reset, at least one non-empty W/S/A/D
+  input sample, browser request-to-image p95 at or below 100 ms, browser
+  input-to-image p95 at or below 100 ms, server control-to-JPEG p95 at or
+  below 100 ms, camera time-spread p95 at or below 100 ms, and all five manual
+  drivability gates marked `pass`;
+- the checker also rejects a manual all-pass review if the latest review was
+  saved before enough samples or before the completed log time, preventing an
+  early click from becoming acceptance evidence.
+- validation passed the full dependency-light suite with 55 tests, and the
+  checker correctly rejected the earlier manual-review endpoint artifact
+  because it had no complete driving samples, reset, operator input sample, or
+  browser latency distributions.
+
+This checker does not make visual judgments itself. It turns the recorded
+operator verdicts and browser timing into a reproducible pass/fail evidence
+package.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -338,6 +365,7 @@ HumanControl
 → six RGB arrays at about 13.4 Renderer observations/s
 → automated drivability preflight
 → 10 Hz browser W/S/A/D/R driving loop with timing and manual-review trial JSON
+→ browser trial acceptance checker
 ```
 
 This is the first repository state where simulated ego motion changes pixels
@@ -351,8 +379,8 @@ cuboid actor tracks, and follows every logged rig pose with bounded human
 offsets. Static structure remains coherent over the complete short sequence
 at the tested scale. The backend preflight and browser/server path now work;
 the next unresolved integration gate is a real operator trial including
-physical key-to-display timing and visual review. Dynamic traffic remains a
-later mandatory gate.
+physical key-to-display timing and visual review, followed by the saved
+`trial-check` result. Dynamic traffic remains a later mandatory gate.
 
 ## 4. Important Limitations
 
@@ -413,9 +441,9 @@ later mandatory gate.
 Stage H3 now prioritizes completing one stable human-driving loop around the
 accepted static-8k backend. Environment, acquisition, calibration, the static
 baseline, rejected actor ablations, logged-time Renderer, automated preflight,
-and browser-side trial recording are complete. Static 8k remains the accepted
-checkpoint; no further dynamic training starts until driving evidence makes it
-necessary.
+browser-side trial recording, and browser-trial acceptance checking are
+complete. Static 8k remains the accepted checkpoint; no further dynamic
+training starts until driving evidence makes it necessary.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -431,12 +459,13 @@ plan. The short version is:
    the operator to inspect or compensate for reconstruction defects;
 6. preserve `/trial.json`, including browser-reported control-event-to-screen
    p95 latency, reset events, and the five manual drivability gate verdicts;
-7. execute the six separate gates in
+7. run `trial-check` and preserve the resulting acceptance-check JSON;
+8. execute the six separate gates in
    `docs/drivability_acceptance_criteria.md` on this low-interference segment;
-8. return dynamic traffic to the main line immediately if it obscures the
+9. return dynamic traffic to the main line immediately if it obscures the
    road, creates a false obstacle, or closed-loop autonomous-driving testing
    begins;
-9. then fix the offending dynamic object/window with the existing actor bounds
+10. then fix the offending dynamic object/window with the existing actor bounds
    and timing evidence rather than restarting broad, ungated training.
 
 In this plan, camera images remain the source of visual appearance. LiDAR

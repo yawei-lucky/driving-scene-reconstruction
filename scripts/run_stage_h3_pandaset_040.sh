@@ -29,6 +29,7 @@ LOGGED_RENDER_ROOT="${H3_LOGGED_RENDER_ROOT:-${H3_ROOT}/artifacts/scene_040_logg
 DRIVABILITY_ROOT="${H3_DRIVABILITY_ROOT:-${H3_ROOT}/artifacts/scene_040_drivability_preflight}"
 BROWSER_TRIAL_ROOT="${H3_BROWSER_TRIAL_ROOT:-${H3_ROOT}/artifacts/scene_040_browser_trial}"
 BROWSER_TRIAL_OUTPUT="${H3_BROWSER_TRIAL_OUTPUT:-${BROWSER_TRIAL_ROOT}/browser_trial.json}"
+TRIAL_CHECK_OUTPUT="${H3_TRIAL_CHECK_OUTPUT:-${BROWSER_TRIAL_ROOT}/browser_trial_acceptance_check.json}"
 VEHICLE_EXPERIMENT="${H3_VEHICLE_EXPERIMENT_NAME:-scene_040_splatad_vehicle_objects_8000}"
 VEHICLE_TIMESTAMP="${H3_VEHICLE_TIMESTAMP:-2026-07-19_stationary_moving_actor_aware}"
 VEHICLE_RUN_ROOT="${TRAIN_ROOT}/${VEHICLE_EXPERIMENT}/splatad/${VEHICLE_TIMESTAMP}"
@@ -52,7 +53,7 @@ TIMED_CHECKPOINT="${TIMED_RUN_ROOT}/nerfstudio_models/step-000001999.ckpt"
 PYTHON="${H3_ENV}/bin/python"
 
 usage() {
-  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|logged-renderer-smoke|drivability-preflight|logged-browser|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
+  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|logged-renderer-smoke|drivability-preflight|logged-browser|trial-check|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
 }
 
 if [[ ! -x "$PYTHON" ]]; then
@@ -238,6 +239,21 @@ case "$MODE" in
       --port "${H3_BROWSER_PORT:-8766}" \
       --trial-output "$BROWSER_TRIAL_OUTPUT"
     ;;
+  trial-check)
+    "$PYTHON" "$REPO_ROOT/examples/stage_h3_trial_acceptance_check.py" \
+      --trial-json "${H3_TRIAL_JSON:-$BROWSER_TRIAL_OUTPUT}" \
+      --output "$TRIAL_CHECK_OUTPUT" \
+      --expected-scene "$SCENE" \
+      --expected-checkpoint-step 7999 \
+      --expected-movement-profile "${H3_TRIAL_EXPECTED_MOVEMENT_PROFILE:-visible}" \
+      --min-sample-count "${H3_TRIAL_MIN_SAMPLE_COUNT:-70}" \
+      --min-reset-count "${H3_TRIAL_MIN_RESET_COUNT:-1}" \
+      --min-browser-input-samples "${H3_TRIAL_MIN_INPUT_SAMPLES:-1}" \
+      --max-browser-request-to-image-p95-ms "${H3_TRIAL_MAX_REQUEST_TO_IMAGE_P95_MS:-100}" \
+      --max-browser-input-to-image-p95-ms "${H3_TRIAL_MAX_INPUT_TO_IMAGE_P95_MS:-100}" \
+      --max-server-control-to-jpeg-p95-ms "${H3_TRIAL_MAX_SERVER_TO_JPEG_P95_MS:-100}" \
+      --max-camera-time-spread-p95-ms "${H3_TRIAL_MAX_CAMERA_SPREAD_P95_MS:-100}"
+    ;;
   vehicle-8k)
     if [[ -f "$VEHICLE_CHECKPOINT" && "${H3_ALLOW_RETRAIN:-0}" != "1" ]]; then
       echo "PASS: reusing existing 8,000-step vehicle-object checkpoint: $VEHICLE_CHECKPOINT"
@@ -332,6 +348,7 @@ case "$MODE" in
     echo "logged renderer smoke: $LOGGED_RENDER_ROOT"
     echo "drivability preflight: $DRIVABILITY_ROOT"
     echo "browser trial report: $BROWSER_TRIAL_OUTPUT"
+    echo "browser trial acceptance check: $TRIAL_CHECK_OUTPUT"
     echo "vehicle 8k config: $VEHICLE_CONFIG"
     echo "vehicle 8k checkpoint: $VEHICLE_CHECKPOINT"
     echo "moving-only 8k config: $MOVING_CONFIG"

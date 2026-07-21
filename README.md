@@ -135,6 +135,11 @@ Stage H3 Level 7B
 → visible-profile preflight passed 17 backend gates over all 80 logical frames
 → browser loop now records trial JSON with request→image and input→image timing
   plus in-browser manual drivability review gates
+
+Stage H3 Level 7C
+→ browser trial acceptance checker consumes `/trial.json`
+→ fails incomplete runs, missing reset/input latency, early manual-review clicks,
+  over-budget latency, and any non-pass manual gate
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -236,14 +241,28 @@ by default. After driving the segment, use the page's manual review panel to
 save the road/lane/curb, steering-response, nearby-artifact, physical-latency,
 and dynamic-traffic decision gates into the same JSON file.
 
+Then check whether that saved run is complete enough to count as acceptance
+evidence:
+
+```bash
+scripts/run_stage_h3_pandaset_040.sh trial-check
+```
+
+The checker reads the browser trial JSON and writes
+`/home/yawei/stage3_external/artifacts/scene_040_browser_trial/browser_trial_acceptance_check.json`
+by default. It should fail until the operator has completed the segment,
+recorded at least one reset and physical input latency sample, and saved all
+manual drivability gates as `pass`.
+
 ## Current Next Step
 
 Static 8k remains the fixed accepted checkpoint. The next main-line step is an
 operator acceptance run of the browser loop over the complete real
 7.899-second trajectory. Preserve `/trial.json` after the run; it now contains
 browser-side frame-update latency, reset events, and the operator's manual
-drivability verdicts. Do not start another dynamic training run before this
-driving run reveals an artifact that affects the road or obstacle decision.
+drivability verdicts. Then run `trial-check` and preserve its JSON result. Do
+not start another dynamic training run before this driving run reveals an
+artifact that affects the road or obstacle decision.
 
 An automated preflight now exists before that operator run. It should be green
 before a human trial is treated as meaningful, but it deliberately leaves

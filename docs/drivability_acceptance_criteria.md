@@ -73,3 +73,12 @@ traffic-decision impact during the browser trial. The browser saves those five
 manual verdicts into `/trial.json` under `manual_reviews`; an item marked
 `fail`, `unsure`, or not yet saved blocks acceptance even when automated gates
 are green.
+
+After the browser run, `trial-check` must pass before the trial counts as
+acceptance evidence. It verifies that the saved trial covered the full logged
+segment, recorded enough browser samples, included reset and physical
+input-to-image latency evidence, stayed within the declared latency budgets,
+and saved the latest manual review after the completed log. This machine check
+does not inspect road quality by itself; it only enforces that the operator's
+driving-relevant verdicts and timing evidence are present and internally
+consistent.
