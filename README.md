@@ -140,6 +140,10 @@ Stage H3 Level 7C
 → browser trial acceptance checker consumes `/trial.json`
 → fails incomplete runs, missing reset/input latency, early manual-review clicks,
   over-budget latency, and any non-pass manual gate
+
+Stage H3 Level 7D
+→ scripted browser trial rehearsal drives the live HTTP loop
+→ validates full-sample/reset/latency plumbing while leaving manual gates unsure
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -240,6 +244,18 @@ The browser also exposes `/trial.json` and writes the same trial report to
 by default. After driving the segment, use the page's manual review panel to
 save the road/lane/curb, steering-response, nearby-artifact, physical-latency,
 and dynamic-traffic decision gates into the same JSON file.
+
+Before a real operator run, the service can be rehearsed from another terminal:
+
+```bash
+scripts/run_stage_h3_pandaset_040.sh trial-rehearsal
+```
+
+This scripted rehearsal exercises the live `/tick`, `/frame.jpg`,
+`/trial-sample`, `/reset`, and `/trial-review` endpoints. It intentionally
+saves all manual gates as `unsure`, so it is not human acceptance; it should
+only pass when the machine plumbing is complete and `trial-check` fails solely
+because human visual verdicts are still missing.
 
 Then check whether that saved run is complete enough to count as acceptance
 evidence:

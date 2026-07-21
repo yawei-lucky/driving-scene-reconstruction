@@ -30,6 +30,9 @@ DRIVABILITY_ROOT="${H3_DRIVABILITY_ROOT:-${H3_ROOT}/artifacts/scene_040_drivabil
 BROWSER_TRIAL_ROOT="${H3_BROWSER_TRIAL_ROOT:-${H3_ROOT}/artifacts/scene_040_browser_trial}"
 BROWSER_TRIAL_OUTPUT="${H3_BROWSER_TRIAL_OUTPUT:-${BROWSER_TRIAL_ROOT}/browser_trial.json}"
 TRIAL_CHECK_OUTPUT="${H3_TRIAL_CHECK_OUTPUT:-${BROWSER_TRIAL_ROOT}/browser_trial_acceptance_check.json}"
+BROWSER_REHEARSAL_ROOT="${H3_BROWSER_REHEARSAL_ROOT:-${H3_ROOT}/artifacts/scene_040_browser_trial_rehearsal}"
+BROWSER_REHEARSAL_OUTPUT="${H3_BROWSER_REHEARSAL_OUTPUT:-${BROWSER_REHEARSAL_ROOT}/browser_trial_rehearsal.json}"
+BROWSER_REHEARSAL_CHECK_OUTPUT="${H3_BROWSER_REHEARSAL_CHECK_OUTPUT:-${BROWSER_REHEARSAL_ROOT}/browser_trial_acceptance_check.json}"
 VEHICLE_EXPERIMENT="${H3_VEHICLE_EXPERIMENT_NAME:-scene_040_splatad_vehicle_objects_8000}"
 VEHICLE_TIMESTAMP="${H3_VEHICLE_TIMESTAMP:-2026-07-19_stationary_moving_actor_aware}"
 VEHICLE_RUN_ROOT="${TRAIN_ROOT}/${VEHICLE_EXPERIMENT}/splatad/${VEHICLE_TIMESTAMP}"
@@ -53,7 +56,7 @@ TIMED_CHECKPOINT="${TIMED_RUN_ROOT}/nerfstudio_models/step-000001999.ckpt"
 PYTHON="${H3_ENV}/bin/python"
 
 usage() {
-  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|logged-renderer-smoke|drivability-preflight|logged-browser|trial-check|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
+  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|logged-renderer-smoke|drivability-preflight|logged-browser|trial-rehearsal|trial-check|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
 }
 
 if [[ ! -x "$PYTHON" ]]; then
@@ -254,6 +257,14 @@ case "$MODE" in
       --max-server-control-to-jpeg-p95-ms "${H3_TRIAL_MAX_SERVER_TO_JPEG_P95_MS:-100}" \
       --max-camera-time-spread-p95-ms "${H3_TRIAL_MAX_CAMERA_SPREAD_P95_MS:-100}"
     ;;
+  trial-rehearsal)
+    "$PYTHON" "$REPO_ROOT/examples/stage_h3_browser_trial_rehearsal.py" \
+      --base-url "${H3_BROWSER_BASE_URL:-http://127.0.0.1:${H3_BROWSER_PORT:-8766}}" \
+      --steps "${H3_REHEARSAL_STEPS:-80}" \
+      --output "$BROWSER_REHEARSAL_OUTPUT" \
+      --acceptance-output "$BROWSER_REHEARSAL_CHECK_OUTPUT" \
+      --expected-movement-profile "${H3_REHEARSAL_EXPECTED_MOVEMENT_PROFILE:-visible}"
+    ;;
   vehicle-8k)
     if [[ -f "$VEHICLE_CHECKPOINT" && "${H3_ALLOW_RETRAIN:-0}" != "1" ]]; then
       echo "PASS: reusing existing 8,000-step vehicle-object checkpoint: $VEHICLE_CHECKPOINT"
@@ -349,6 +360,8 @@ case "$MODE" in
     echo "drivability preflight: $DRIVABILITY_ROOT"
     echo "browser trial report: $BROWSER_TRIAL_OUTPUT"
     echo "browser trial acceptance check: $TRIAL_CHECK_OUTPUT"
+    echo "browser trial rehearsal report: $BROWSER_REHEARSAL_OUTPUT"
+    echo "browser trial rehearsal check: $BROWSER_REHEARSAL_CHECK_OUTPUT"
     echo "vehicle 8k config: $VEHICLE_CONFIG"
     echo "vehicle 8k checkpoint: $VEHICLE_CHECKPOINT"
     echo "moving-only 8k config: $MOVING_CONFIG"

@@ -354,6 +354,31 @@ This checker does not make visual judgments itself. It turns the recorded
 operator verdicts and browser timing into a reproducible pass/fail evidence
 package.
 
+### Stage H3 Level 7D — Scripted browser trial rehearsal
+
+Completed on 2026-07-21 without retraining:
+
+- added `examples/stage_h3_browser_trial_rehearsal.py`;
+- added `scripts/run_stage_h3_pandaset_040.sh trial-rehearsal`;
+- the rehearsal drives the live browser HTTP service through `/tick`,
+  `/frame.jpg`, `/trial-sample`, `/reset`, and `/trial-review`;
+- its deterministic W/S/A/D schedule exercises forward, left-yaw, right-yaw,
+  and brake inputs over the logged segment;
+- it submits a manual review with all five gates set to `unsure` and reviewer
+  `scripted_rehearsal_not_human`, so the artifact cannot be mistaken for human
+  acceptance;
+- the rehearsal evaluates the resulting trial JSON and only passes when all
+  non-visual machine gates pass while the expected manual-gate failures remain.
+- the real rehearsal run on port 8781 passed with 79 samples, completed log,
+  reset_count 1, key sets `a`, `aw`, `d`, `s`, and `w`, browser
+  request-to-image p95 77.22 ms, browser input-to-image p95 82.61 ms over 10
+  input-change samples, server control-to-JPEG p95 76.19 ms, and camera
+  time-spread p95 81.37 ms; the only acceptance-check failures were the
+  expected manual visual gates.
+
+This is a pre-operator service rehearsal. It validates the HTTP and recording
+plumbing before a human trial, but it still cannot judge road/lane quality.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -366,6 +391,7 @@ HumanControl
 → automated drivability preflight
 → 10 Hz browser W/S/A/D/R driving loop with timing and manual-review trial JSON
 → browser trial acceptance checker
+→ scripted browser trial rehearsal
 ```
 
 This is the first repository state where simulated ego motion changes pixels
@@ -380,7 +406,8 @@ offsets. Static structure remains coherent over the complete short sequence
 at the tested scale. The backend preflight and browser/server path now work;
 the next unresolved integration gate is a real operator trial including
 physical key-to-display timing and visual review, followed by the saved
-`trial-check` result. Dynamic traffic remains a later mandatory gate.
+`trial-check` result. The scripted rehearsal can catch service plumbing
+failures before that human run. Dynamic traffic remains a later mandatory gate.
 
 ## 4. Important Limitations
 
@@ -441,9 +468,10 @@ physical key-to-display timing and visual review, followed by the saved
 Stage H3 now prioritizes completing one stable human-driving loop around the
 accepted static-8k backend. Environment, acquisition, calibration, the static
 baseline, rejected actor ablations, logged-time Renderer, automated preflight,
-browser-side trial recording, and browser-trial acceptance checking are
-complete. Static 8k remains the accepted checkpoint; no further dynamic
-training starts until driving evidence makes it necessary.
+browser-side trial recording, browser-trial acceptance checking, and scripted
+browser-service rehearsal are complete. Static 8k remains the accepted
+checkpoint; no further dynamic training starts until driving evidence makes it
+necessary.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -451,21 +479,23 @@ plan. The short version is:
 1. keep static 8k as the fixed visual and geometry checkpoint;
 2. run `drivability-preflight` after renderer/control changes and preserve its
    JSON plus review images;
-3. run the Level-7 10 Hz browser loop through the full segment with a human;
-4. start with the visible movement profile when inspecting whether motion is
+3. run `trial-rehearsal` against the live browser service to catch plumbing
+   problems before asking for a human trial;
+4. run the Level-7 10 Hz browser loop through the full segment with a human;
+5. start with the visible movement profile when inspecting whether motion is
    perceptible, then repeat the acceptance run with `safe` if strict envelope
    evidence is needed;
-5. accept only steering, throttle, brake, and reset during driving—never ask
+6. accept only steering, throttle, brake, and reset during driving—never ask
    the operator to inspect or compensate for reconstruction defects;
-6. preserve `/trial.json`, including browser-reported control-event-to-screen
+7. preserve `/trial.json`, including browser-reported control-event-to-screen
    p95 latency, reset events, and the five manual drivability gate verdicts;
-7. run `trial-check` and preserve the resulting acceptance-check JSON;
-8. execute the six separate gates in
+8. run `trial-check` and preserve the resulting acceptance-check JSON;
+9. execute the six separate gates in
    `docs/drivability_acceptance_criteria.md` on this low-interference segment;
-9. return dynamic traffic to the main line immediately if it obscures the
+10. return dynamic traffic to the main line immediately if it obscures the
    road, creates a false obstacle, or closed-loop autonomous-driving testing
    begins;
-10. then fix the offending dynamic object/window with the existing actor bounds
+11. then fix the offending dynamic object/window with the existing actor bounds
    and timing evidence rather than restarting broad, ungated training.
 
 In this plan, camera images remain the source of visual appearance. LiDAR

@@ -82,3 +82,9 @@ and saved the latest manual review after the completed log. This machine check
 does not inspect road quality by itself; it only enforces that the operator's
 driving-relevant verdicts and timing evidence are present and internally
 consistent.
+
+Before the operator run, `trial-rehearsal` may be run against the live browser
+service. It should pass only when the service produces a complete recorded
+trial and the resulting `trial-check` failures are limited to the intentionally
+`unsure` manual visual gates. Passing rehearsal is a readiness check for the
+browser service, not an acceptance result.
