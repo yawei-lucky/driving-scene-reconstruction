@@ -282,6 +282,9 @@ click inside the page once or use the on-screen W/S/A/D buttons.
 The browser defaults to manual control and stays still after opening. Once the
 driver has accelerated, releasing the accelerator keeps the current speed and
 rendering continues; braking reduces the speed until the loop stops at zero.
+The six-camera mosaic fills the available browser width by default. The
+on-screen shortcut pad and manual acceptance form start collapsed and can be
+shown independently from the compact toolbar when needed.
 The page button can start or pause auto-play at any time; pressing a driving
 control takes back manual control. To start in auto-play mode instead:
 

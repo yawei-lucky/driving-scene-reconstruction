@@ -73,6 +73,16 @@ class StageH3LoggedBrowserPageTest(unittest.TestCase):
         self.assertIn("↓ / S 减速", WEB_PAGE)
         self.assertIn("vehicleSpeed = result.speed", WEB_PAGE)
 
+    def test_page_prioritizes_large_view_and_collapses_secondary_panels(self) -> None:
+        self.assertIn("width: calc(100vw - 8px)", WEB_PAGE)
+        self.assertIn("max-height: calc(100vh - 92px)", WEB_PAGE)
+        self.assertIn('id="controls" hidden', WEB_PAGE)
+        self.assertIn('id="review" hidden', WEB_PAGE)
+        self.assertIn('id="toggle-controls"', WEB_PAGE)
+        self.assertIn('id="toggle-review"', WEB_PAGE)
+        self.assertIn('bindPanelToggle("toggle-controls"', WEB_PAGE)
+        self.assertIn('bindPanelToggle("toggle-review"', WEB_PAGE)
+
     def test_page_records_manual_drivability_review(self) -> None:
         self.assertIn("人工试驾验收", WEB_PAGE)
         self.assertIn('fetch("/trial-review"', WEB_PAGE)

@@ -145,10 +145,14 @@ WEB_PAGE = """<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PandaSet 可驾驶重建</title>
   <style>
-    body { margin: 0; background: #0d0d0d; color: #eee; font: 16px sans-serif; text-align: center; }
-    h1 { font-size: 20px; margin: 8px; }
-    #view { max-width: 100vw; max-height: calc(100vh - 150px); border: 1px solid #444; }
-    #status { min-height: 22px; color: #ffd84d; margin: 4px; }
+    body { margin: 0; overflow-x: hidden; background: #0d0d0d; color: #eee; font: 16px sans-serif; text-align: center; }
+    h1 { font-size: 18px; margin: 4px; }
+    #view { display: block; width: calc(100vw - 8px); height: auto; max-height: calc(100vh - 92px); margin: 0 auto; object-fit: contain; border: 1px solid #444; }
+    #status { min-height: 20px; color: #ffd84d; margin: 2px 4px; }
+    #toolbar { min-height: 34px; }
+    #toolbar button { min-width: 68px; margin: 1px 2px; padding: 6px 9px; font-size: 14px; }
+    #controls { max-width: 760px; margin: 6px auto; padding: 8px; background: #171717; border: 1px solid #333; }
+    #mode-help { margin-bottom: 5px; color: #bbb; }
     #review { max-width: 1120px; margin: 8px auto 18px; padding: 10px; background: #171717; border: 1px solid #333; text-align: left; }
     #review h2 { margin: 0 0 6px; font-size: 17px; }
     #review p { margin: 4px 0 8px; color: #bbb; }
@@ -160,28 +164,33 @@ WEB_PAGE = """<!doctype html>
     #review-status { min-height: 20px; color: #93c5fd; margin-top: 5px; }
     button { min-width: 76px; margin: 3px; padding: 10px; font-size: 17px; }
     a { color: #93c5fd; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
   <h1>PandaSet 场景 040 · 六相机驾驶</h1>
   <img id="view" src="/frame.jpg" alt="six reconstructed driving cameras">
-  <div id="mode-help">__MODE_HELP__</div>
   <div id="status">单驾驶客户端 · 请勿同时打开多个标签页</div>
-  <div><button data-key="w">↑ / W 加速</button></div>
-  <div>
-    <button data-key="a">← / A 左转</button>
-    <button data-key="s">↓ / S 减速</button>
-    <button data-key="d">→ / D 右转</button>
-  </div>
-  <div>
+  <div id="toolbar">
     <button id="autoplay">自动播放</button>
     <button data-key="r">R 重置</button>
     <button id="fullscreen">全屏</button>
+    <button id="toggle-controls" aria-expanded="false">显示快捷键</button>
+    <button id="toggle-review" aria-expanded="false">显示验收</button>
   </div>
-  <div><a href="/trial.json" target="_blank">试驾记录 JSON</a></div>
-  <section id="review">
+  <section id="controls" hidden>
+    <div id="mode-help">__MODE_HELP__</div>
+    <div><button data-key="w">↑ / W 加速</button></div>
+    <div>
+      <button data-key="a">← / A 左转</button>
+      <button data-key="s">↓ / S 减速</button>
+      <button data-key="d">→ / D 右转</button>
+    </div>
+  </section>
+  <section id="review" hidden>
     <h2>人工试驾验收</h2>
     <p>自动预检不等于最终验收。开完整段后，把“能不能开”的判断保存到同一个 trial JSON。</p>
+    <div><a href="/trial.json" target="_blank">试驾记录 JSON</a></div>
     <div class="review-grid">
       <label>道路/车道/路缘
         <select data-review-gate="road_lane_curb_continuity">
@@ -228,6 +237,8 @@ WEB_PAGE = """<!doctype html>
     const status = document.getElementById("status");
     const reviewStatus = document.getElementById("review-status");
     const autoplayButton = document.getElementById("autoplay");
+    const controlsPanel = document.getElementById("controls");
+    const reviewPanel = document.getElementById("review");
     const held = new Set();
     let running = true;
     let inFlight = false;
@@ -264,6 +275,14 @@ WEB_PAGE = """<!doctype html>
     function normalizedDrivingKey(key) {
       const lowered = key.toLowerCase();
       return keyAliases.get(lowered) || lowered;
+    }
+    function bindPanelToggle(buttonId, panel, showText, hideText) {
+      const button = document.getElementById(buttonId);
+      button.addEventListener("click", () => {
+        panel.hidden = !panel.hidden;
+        button.textContent = panel.hidden ? showText : hideText;
+        button.setAttribute("aria-expanded", String(!panel.hidden));
+      });
     }
 
     function markInputEdge() {
@@ -361,6 +380,8 @@ WEB_PAGE = """<!doctype html>
     });
     document.getElementById("fullscreen").addEventListener("click", () => view.requestFullscreen());
     autoplayButton.addEventListener("click", () => setAutoplay(!autoplay));
+    bindPanelToggle("toggle-controls", controlsPanel, "显示快捷键", "隐藏快捷键");
+    bindPanelToggle("toggle-review", reviewPanel, "显示验收", "隐藏验收");
     document.getElementById("save-review").addEventListener("click", saveManualReview);
 
     async function reset() {

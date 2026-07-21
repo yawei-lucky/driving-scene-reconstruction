@@ -403,7 +403,9 @@ or the matching arrow key is used to begin driving. Releasing the accelerator
 now coasts at the current relative speed, while braking reduces that speed to
 zero before the render loop stops. The page can start/pause auto-play without
 restarting the server, while `H3_BROWSER_TIME_MODE=auto` still starts in
-auto-play mode. The `safe` profile preserves the previous conservative bounds.
+auto-play mode. The browser now gives the six-camera mosaic the full available
+width and keeps the shortcut pad and manual acceptance form collapsed until
+requested. The `safe` profile preserves the previous conservative bounds.
 
 The earlier H2 fixed-pose Wayve renderer remains available. The H3 path now
 also loads real PandaSet scene 040, uses six cameras, Pandar64 geometry and
