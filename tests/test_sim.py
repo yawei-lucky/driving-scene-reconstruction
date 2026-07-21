@@ -16,11 +16,13 @@ from driving_scene_reconstruction.sim import (  # noqa: E402
     CameraSpec,
     EgoState,
     HumanControl,
+    LoggedEgoOffsetController,
     NearbyPoseLimits,
     NerfstudioRenderer,
     RenderedObservation,
     SceneReferenceFrame,
     SimpleVehicleModel,
+    SplatADLoggedRenderer,
 )
 
 
@@ -201,6 +203,105 @@ class NerfstudioRendererConfigurationTest(unittest.TestCase):
         with tempfile.NamedTemporaryFile(suffix=".yml") as config:
             with self.assertRaises(ValueError):
                 NerfstudioRenderer(config.name, output_scale=0.0)
+
+
+class SplatADLoggedRendererConfigurationTest(unittest.TestCase):
+    def test_lazy_construction_does_not_import_heavy_dependencies(self) -> None:
+        with tempfile.NamedTemporaryFile(suffix=".yml") as config:
+            renderer = SplatADLoggedRenderer(config.name)
+
+        self.assertFalse(renderer.is_loaded)
+
+    def test_invalid_output_scale_is_rejected_before_loading(self) -> None:
+        with tempfile.NamedTemporaryFile(suffix=".yml") as config:
+            with self.assertRaises(ValueError):
+                SplatADLoggedRenderer(config.name, output_scale=0.0)
+
+    def test_nearest_frame_selection_is_deterministic(self) -> None:
+        times = (0.0, 0.1, 0.2)
+
+        self.assertEqual(SplatADLoggedRenderer._nearest_index(times, 0.04), 0)
+        self.assertEqual(SplatADLoggedRenderer._nearest_index(times, 0.06), 1)
+        self.assertEqual(SplatADLoggedRenderer._nearest_index(times, 0.15), 1)
+
+
+class LoggedEgoOffsetControllerTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.controller = LoggedEgoOffsetController(logged_duration=1.0)
+
+    def test_log_time_advances_without_control(self) -> None:
+        state = self.controller.step(EgoState(), HumanControl(), 0.1)
+
+        self.assertAlmostEqual(state.time, 0.1)
+        self.assertAlmostEqual(state.x, 0.0)
+
+    def test_steering_is_visible_at_zero_relative_speed(self) -> None:
+        state = self.controller.step(
+            EgoState(),
+            HumanControl(steer=1.0),
+            0.1,
+        )
+
+        self.assertGreater(state.yaw, 0.0)
+
+    def test_throttle_adds_bounded_forward_offset(self) -> None:
+        state = EgoState()
+        for _ in range(20):
+            state = self.controller.step(
+                state,
+                HumanControl(throttle=1.0),
+                0.05,
+            )
+
+        self.assertLessEqual(state.x, self.controller.limits.max_abs_forward_meters)
+
+    def test_brake_from_rest_does_not_reverse(self) -> None:
+        state = self.controller.step(
+            EgoState(),
+            HumanControl(brake=1.0),
+            0.1,
+        )
+
+        self.assertAlmostEqual(state.speed, 0.0)
+        self.assertAlmostEqual(state.x, 0.0)
+
+    def test_non_finite_control_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self.controller.step(
+                EgoState(),
+                HumanControl(throttle=math.nan),
+                0.1,
+            )
+
+    def test_control_is_clamped_at_device_boundary(self) -> None:
+        normalized = self.controller.step(
+            EgoState(),
+            HumanControl(throttle=1.0),
+            0.1,
+        )
+        oversized = self.controller.step(
+            EgoState(),
+            HumanControl(throttle=10.0),
+            0.1,
+        )
+
+        self.assertEqual(normalized, oversized)
+
+    def test_end_of_log_stops_without_looping(self) -> None:
+        state = self.controller.step(
+            EgoState(time=0.95, speed=0.2),
+            HumanControl(throttle=1.0),
+            0.1,
+        )
+        stopped = self.controller.step(state, HumanControl(throttle=1.0), 0.1)
+
+        self.assertAlmostEqual(state.time, 1.0)
+        self.assertAlmostEqual(stopped.time, 1.0)
+        self.assertAlmostEqual(stopped.speed, 0.0)
+
+    def test_reset_is_complete_and_repeatable(self) -> None:
+        self.assertEqual(self.controller.reset(), EgoState())
+        self.assertEqual(self.controller.reset(), self.controller.reset())
 
 
 if __name__ == "__main__":

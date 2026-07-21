@@ -25,6 +25,7 @@ STATIC_TIMESTAMP="${H3_STATIC_TIMESTAMP:-2026-07-19_resume_2k_to_8k}"
 STATIC_RUN_ROOT="${TRAIN_ROOT}/${STATIC_EXPERIMENT}/splatad/${STATIC_TIMESTAMP}"
 STATIC_CONFIG="${STATIC_RUN_ROOT}/config.yml"
 STATIC_CHECKPOINT="${STATIC_RUN_ROOT}/nerfstudio_models/step-000007999.ckpt"
+LOGGED_RENDER_ROOT="${H3_LOGGED_RENDER_ROOT:-${H3_ROOT}/artifacts/scene_040_logged_renderer_mvp}"
 VEHICLE_EXPERIMENT="${H3_VEHICLE_EXPERIMENT_NAME:-scene_040_splatad_vehicle_objects_8000}"
 VEHICLE_TIMESTAMP="${H3_VEHICLE_TIMESTAMP:-2026-07-19_stationary_moving_actor_aware}"
 VEHICLE_RUN_ROOT="${TRAIN_ROOT}/${VEHICLE_EXPERIMENT}/splatad/${VEHICLE_TIMESTAMP}"
@@ -48,7 +49,7 @@ TIMED_CHECKPOINT="${TIMED_RUN_ROOT}/nerfstudio_models/step-000001999.ckpt"
 PYTHON="${H3_ENV}/bin/python"
 
 usage() {
-  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
+  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|logged-renderer-smoke|logged-browser|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
 }
 
 if [[ ! -x "$PYTHON" ]]; then
@@ -194,6 +195,30 @@ case "$MODE" in
       --steps-per-eval-image 1000 \
       --keep-all-checkpoints
     ;;
+  logged-renderer-smoke)
+    if [[ ! -f "$STATIC_CONFIG" || ! -f "$STATIC_CHECKPOINT" ]]; then
+      echo "Accepted static-8k config/checkpoint is missing: $STATIC_RUN_ROOT" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/examples/stage_h3_logged_renderer_smoke.py" \
+      --config "$STATIC_CONFIG" \
+      --output-dir "$LOGGED_RENDER_ROOT" \
+      --output-scale "${H3_LOGGED_RENDER_SCALE:-0.5}" \
+      --steps "${H3_LOGGED_RENDER_STEPS:-80}" \
+      --dt "${H3_LOGGED_RENDER_DT:-0.1}"
+    ;;
+  logged-browser)
+    if [[ ! -f "$STATIC_CONFIG" || ! -f "$STATIC_CHECKPOINT" ]]; then
+      echo "Accepted static-8k config/checkpoint is missing: $STATIC_RUN_ROOT" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/examples/stage_h3_logged_browser.py" \
+      --config "$STATIC_CONFIG" \
+      --output-scale "${H3_BROWSER_RENDER_SCALE:-0.25}" \
+      --dt "${H3_LOGGED_RENDER_DT:-0.1}" \
+      --host "${H3_BROWSER_HOST:-0.0.0.0}" \
+      --port "${H3_BROWSER_PORT:-8766}"
+    ;;
   vehicle-8k)
     if [[ -f "$VEHICLE_CHECKPOINT" && "${H3_ALLOW_RETRAIN:-0}" != "1" ]]; then
       echo "PASS: reusing existing 8,000-step vehicle-object checkpoint: $VEHICLE_CHECKPOINT"
@@ -285,6 +310,7 @@ case "$MODE" in
     echo "pilot test render: $PILOT_RENDER_ROOT"
     echo "static 8k config: $STATIC_CONFIG"
     echo "static 8k checkpoint: $STATIC_CHECKPOINT"
+    echo "logged renderer smoke: $LOGGED_RENDER_ROOT"
     echo "vehicle 8k config: $VEHICLE_CONFIG"
     echo "vehicle 8k checkpoint: $VEHICLE_CHECKPOINT"
     echo "moving-only 8k config: $MOVING_CONFIG"

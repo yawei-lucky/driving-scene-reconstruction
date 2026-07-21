@@ -1,6 +1,6 @@
 # Project State — Driving Scene Reconstruction
 
-Last updated: 2026-07-20
+Last updated: 2026-07-21
 
 ## 1. Product Goal
 
@@ -228,47 +228,73 @@ Completed and independently rejected on 2026-07-20:
 
 See `experiments/stage_h3_seed_projection_and_painting.md`.
 
+### Stage H3 Level 7 — Logged-time drivable Renderer MVP
+
+Completed and independently reviewed on 2026-07-21 without retraining:
+
+- connected the accepted scene-040 static-8k step-7,999 checkpoint to the
+  repository `Renderer` protocol;
+- merged all 80 logical frames and all six PandaSet cameras while retaining
+  calibrated poses, rolling shutter, original crops, and native timestamps;
+- changed `EgoState.time` from one fixed reference pose to the real
+  7.899239-second logged ego trajectory;
+- added a bounded human-offset controller over that trajectory with a
+  conservative +/−0.5 m forward, +/−0.25 m left, and +/−2 degree envelope;
+- rendered the complete logical sequence 0-79 with six finite RGB views per
+  observation and exact six-camera pixel repeatability after reset;
+- measured warmed six-camera Renderer latency at 0.5 scale: 69.15 ms p50,
+  74.37 ms p95, and 75.71 ms maximum, or about 13.4 observations/s;
+- added a 10 Hz browser loop that accepts only W/S/A/D/R driving actions;
+  local HTTP checks passed for the page, frame, throttle, and reset, and ten
+  warmed 0.25-scale throttle requests measured 75.89 ms p50, 78.19 ms p95,
+  and 78.76 ms maximum from server receipt to six-camera JPEG readiness;
+- independently found and fixed controller normalization and brake-from-rest
+  errors before the full rerun;
+- preserved an 80-frame video, nearby-pose probes, and machine-readable report
+  outside Git.
+
+This passes the logged-time/offset/Renderer integration smoke. It does not yet
+pass a complete human driving trial or physical-input-to-display latency, and
+does not accept static/baked traffic as correct. Exact evidence is in
+`experiments/stage_h3_logged_renderer_mvp.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
 HumanControl
-→ SimpleVehicleModel
-→ EgoState near one logged reference pose
-→ SceneReferenceFrame transform
-→ NerfstudioRenderer
-→ front / side / rear RGB arrays
-→ Tk multi-view display
+→ LoggedEgoOffsetController
+→ PandaSet logged pose(time) + bounded EgoState offset
+→ one rigid transform of the calibrated six-camera rig
+→ SplatADLoggedRenderer using accepted static-8k
+→ six RGB arrays at about 13.4 Renderer observations/s
+→ 10 Hz browser W/S/A/D/R driving loop
 ```
 
 This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint.
 
-Separately, the H3 path now loads real PandaSet scene 040, uses six cameras,
-Pandar64 geometry and cuboid actor tracks, trains SplatAD, saves/reloads
-checkpoints, and renders held-out RGB/depth. The accepted static 8k checkpoint
-recovers coherent static structure at logged and small nearby poses. It has
-measured image, LiDAR, temporal, actor, VRAM, and warm-latency evidence, but
-close dynamic vehicles and six-camera throughput still block a
-stable-drivable acceptance.
+The earlier H2 fixed-pose Wayve renderer remains available. The H3 path now
+also loads real PandaSet scene 040, uses six cameras, Pandar64 geometry and
+cuboid actor tracks, and follows every logged rig pose with bounded human
+offsets. Static structure remains coherent over the complete short sequence
+at the tested scale. The browser/server path now works; the next unresolved
+integration gate is a real operator trial including physical key-to-display
+timing. Dynamic traffic remains a later mandatory gate.
 
 ## 4. Important Limitations
 
-- `EgoState` is relative to one fixed logged reference rig, not yet composed
-  with a time-varying logged ego trajectory.
 - The nearby-pose limits are conservative engineering bounds, not empirically
   certified safe regions.
 - Static Splatfacto blurs moving vehicles and pedestrians.
 - There is no collision, road-boundary, traffic-agent, or map constraint.
-- The camera basis is inferred from the reference front camera; a future log
-  adapter should use an explicit calibrated ego pose.
-- Full-resolution H1 evaluation was about 1.52 FPS. Low-resolution warmed
-  rendering is interactive, but systematic latency benchmarking is still
-  required.
+- H3 uses the logged rig-center trajectory tangent as its offset basis; the
+  complete envelope still needs systematic visual certification.
+- H3 Renderer latency passes 100 ms at 0.5 scale, but this excludes physical
+  input, mosaic/JPEG encoding, browser transport, and display refresh.
 - The current examples depend on the machine-specific H1 checkpoint and
   Nerfstudio environment.
-- `NerfstudioRenderer` has not been adapted to a dynamic SplatAD checkpoint;
-  direct checkpoint compatibility between the H2 Nerfstudio 1.1.5 path and the
-  neurad-studio fork must not be assumed.
+- The new SplatAD backend is a separate Renderer; direct checkpoint
+  compatibility with the H2 Nerfstudio 1.1.5 backend is not assumed.
 - PandaSet sequences are only 80 frames, so the first achievable simulator is
   log-local playback with small pose offsets, not unrestricted free roaming.
 - The audited PandaSet parser robustly defaults to Pandar64. PandarGT exists in
@@ -305,29 +331,28 @@ stable-drivable acceptance.
 
 ## 5. Current Next Action — Stage H3
 
-Stage H3 prioritizes stable drivable scene reconstruction before cockpit UI or
-steering-wheel polish. Environment, acquisition, calibration, the 2k pilot,
-static 8k baseline, actor ablations, and the alignment/timing audit are
-complete. Static 8k remains the accepted checkpoint; all actor-aware visual
-candidates are rejected.
+Stage H3 now prioritizes completing one stable human-driving loop around the
+accepted static-8k backend. Environment, acquisition, calibration, the static
+baseline, rejected actor ablations, and the logged-time Renderer are complete.
+Static 8k remains the accepted checkpoint; no further dynamic training starts
+until driving evidence makes it necessary.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
 
-1. keep static 8k as the fixed comparison checkpoint;
-2. retain actor-bound projection and calibrated cuboid-time semantics as
-   correctness guards, but do not promote their rejected checkpoints;
-3. repeat the point-semantic and source-projection audit on a larger actor
-   visible in a front or side camera;
-4. require held-out semantic precision and visible alignment to improve in the
-   same direction;
-5. correct and test one small actor/window only after that gate passes;
-6. apply trajectory `exists_at_time` during rendering to prevent nearest-pose
-   ghost actors outside their valid interval;
-7. retain WayveScenes101 `scene_094` and static PandaSet 8k as fixed
-   comparisons;
-8. add logged-trajectory progression and human-control offsets only after the
-   reconstruction gate is accepted.
+1. keep static 8k as the fixed visual and geometry checkpoint;
+2. run the Level-7 10 Hz browser loop through the full segment with a human;
+3. accept only steering, throttle, brake, and reset during driving—never ask
+   the operator to inspect or compensate for reconstruction defects;
+4. preserve the browser-reported control-event-to-screen p95 latency and
+   deterministic replay evidence;
+5. execute the six separate gates in
+   `docs/drivability_acceptance_criteria.md` on this low-interference segment;
+6. return dynamic traffic to the main line immediately if it obscures the
+   road, creates a false obstacle, or closed-loop autonomous-driving testing
+   begins;
+7. then fix the offending dynamic object/window with the existing actor bounds
+   and timing evidence rather than restarting broad, ungated training.
 
 In this plan, camera images remain the source of visual appearance. LiDAR
 anchors depth, metric scale, and ground geometry; fused ego pose/IMU anchors

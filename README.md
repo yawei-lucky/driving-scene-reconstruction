@@ -68,7 +68,7 @@ cockpit-style simulator.
 
 ## Current Status
 
-The repository now has six connected results:
+The repository now has a connected H0-H3 path:
 
 ```text
 Stage H0
@@ -115,20 +115,28 @@ Stage H3 Level 6
 → audited scan-centre versus per-point actor seeds on real source images
 → held-out vehicle precision fell from 89.16% to 87.97%
 → rejected more training; static 8k remains the accepted result
+
+Stage H3 Level 7
+→ static-8k connected to the common Renderer over all 80×6 logged cameras
+→ PandaSet trajectory time plus bounded human forward/left/yaw offsets
+→ full 7.899 s sequence rendered as logical frames 0-79
+→ six-camera Renderer p95 74.37 ms at 0.5 scale; exact reset passed
+→ browser W/S/A/D/R loop validated; server control-to-JPEG p95 78.19 ms
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
 and rig extrinsics at a selected reference frame. It currently enforces a
 conservative nearby-pose envelope of ±2 m forward, ±0.5 m left, and ±5° yaw.
 
-The current baseline is still not production quality. Static H3 8k is much
-clearer and geometrically stronger than the 2k pilot, but close vehicles remain
-blurred and sequential six-camera rendering is about 6.5 Hz. The tested actor
-layers kept actor IDs alive but did not place moving vehicles correctly in the
-images. Actor-local geometry is now bounded and corrected cuboid timing is
-reproducibly configurable, but several actors still fade or receive misaligned
-seed supervision. H2 time is still fixed to one reference frame, and no
-collision or responsive traffic model exists.
+The current baseline is still not production quality. The accepted static H3
+8k checkpoint now supports logged-time, six-camera rendering with small human
+offsets at about 13.4 complete observations/s at 0.5 output scale. A browser
+W/S/A/D/R loop now advances that trajectory automatically at 10 Hz. This is a
+tested backend/browser-service result, not yet a real operator
+keyboard-to-display driving trial. Close vehicles remain blurred or baked into
+the background, and no collision or responsive traffic model exists. Such
+traffic artifacts are a mandatory later blocker whenever they can change the
+driving decision.
 
 ## Run
 
@@ -168,25 +176,48 @@ scripts/run_stage_h2_scene_094.sh interactive \
 See `docs/stage_h2_reconstruction_renderer.md` for coordinate conventions,
 validation evidence, and limitations.
 
+For the accepted PandaSet static-8k logged-time backend, with no retraining:
+
+```bash
+scripts/run_stage_h3_pandaset_040.sh logged-renderer-smoke
+```
+
+This produces the full 80-frame, six-camera sequence plus nearby-pose and reset
+evidence under `/home/yawei/stage3_external/artifacts/`. It requires the pinned
+H3 environment and the existing scene-040 static-8k checkpoint.
+
+To drive the same reconstruction from another Tailscale-connected computer:
+
+```bash
+scripts/run_stage_h3_pandaset_040.sh logged-browser
+```
+
+Then open `http://100.116.66.57:8766` in one browser tab only. The logged car
+advances automatically; `W/S` adjust its small forward offset speed, `A/D`
+adjust the small heading offset, and `R` restarts the log. `S` does not pause
+the underlying recorded trajectory. The default 0.25 browser render scale
+produces a 1440-pixel-wide six-camera view; it is twice the linear camera
+resolution of the earlier 0.125 viewer that was judged too small.
+
 ## Current Next Step
 
-Stage H3 should produce a stable drivable reconstruction baseline before UI or
-input-device polish. Static 8k remains the fixed accepted checkpoint.
-Actor-local MCMC escape and a roughly 50-56 ms cuboid-time error are now
-diagnosed and guarded. Per-point seed assignment and corrected seed-paint
-projection were also audited, but did not improve independent held-out
-evidence. The next gate does not start another long run:
+Static 8k remains the fixed accepted checkpoint. The next main-line step is a
+operator acceptance run of the new browser loop over the complete real
+7.899-second trajectory. Record the page's browser-side frame-update latency,
+road/curb continuity, steering direction, reset, and deterministic replay. Do
+not start another dynamic training run before this driving run reveals an
+artifact that affects the road or obstacle decision.
 
-- repeat the semantic/projection audit on a larger actor visible in a front or
-  side camera;
-- require held-out semantics and source-image alignment to improve together;
-- optimize a small actor/window only after that gate passes;
-- mask actor rendering with trajectory `exists_at_time` to prevent nearest-pose
-  ghost vehicles outside valid intervals;
-- keep PandarGT, cockpit UI, controller work, and unrestricted driving deferred.
+The success criteria are deliberately separate from generic image metrics:
 
-See `docs/stage_h3_stable_drivable_reconstruction_plan.md` and
-`experiments/stage_h3_actor_alignment_and_timing.md`.
+- `docs/drivability_acceptance_criteria.md` defines whether the scene can be
+  driven;
+- `docs/driver_attention_and_dynamic_traffic_requirements.md` records that the
+  operator only drives and that dynamic correctness is deferred, not waived;
+- `experiments/stage_h3_logged_renderer_mvp.md` records the Level-7 run and its
+  acceptance boundary.
+
+See also `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 
 Environment acceptance can be regenerated without PandaSet:
 

@@ -2,6 +2,42 @@
 
 Date: 2026-07-19
 
+## Product-Priority Update — 2026-07-21
+
+This decision supersedes older next-action wording later in this document.
+The main line is now the shortest path to one stable, human-drivable,
+log-local reconstructed scene. Do not resume open-ended actor training or UI
+polish ahead of that outcome.
+
+Priority order:
+
+1. freeze the accepted PandaSet scene-040 static-8k checkpoint and connect it
+   to the repository `Renderer` interface;
+2. advance the ego vehicle along PandaSet's real logged trajectory;
+3. compose bounded human forward, lateral, and yaw offsets on the logged pose,
+   then render all six calibrated cameras from that one `EgoState`;
+4. reach at least 10 complete six-camera observations/s and separately measure
+   true control-to-display latency;
+5. judge the MVP with the separate drivability gates in
+   `drivability_acceptance_criteria.md`, not by LPIPS alone;
+6. return dynamic traffic to the critical path as soon as it hides the road,
+   creates a false obstacle, or closed-loop autonomous-driving evaluation
+   begins.
+
+Items 1-3 and the renderer-only part of item 4 were implemented and GPU-tested
+on 2026-07-21. The complete 7.899-second log rendered logical frames 0-79 with
+bounded scripted offsets. At 0.5 output scale, the warmed six-camera Renderer
+latency was 69.15 ms p50, 74.37 ms p95, and 75.71 ms maximum. Exact reset,
+nondecreasing frame selection, finite six-camera RGB, and nonzero nearby-pose
+response passed. The subsequent 10 Hz browser entrypoint passed page, JPEG,
+W-throttle, and reset HTTP checks. Ten warmed 0.25-scale requests measured
+78.19 ms p95 from server receipt to six-camera JPEG readiness. Physical
+keyboard-to-display acceptance remains an operator test.
+
+The driver-attention rule and the non-waiver of dynamic correctness are
+recorded separately in
+`driver_attention_and_dynamic_traffic_requirements.md`.
+
 ## Execution Update
 
 The no-retraining 2k gate, exact 2k-to-8k resume, two actor-layer ablations,
