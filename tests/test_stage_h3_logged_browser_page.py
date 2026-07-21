@@ -23,6 +23,22 @@ class StageH3LoggedBrowserPageTest(unittest.TestCase):
         self.assertIn("browser_input_to_image_ms", WEB_PAGE)
         self.assertIn('fetch("/trial-sample"', WEB_PAGE)
 
+    def test_page_records_manual_drivability_review(self) -> None:
+        self.assertIn("人工试驾验收", WEB_PAGE)
+        self.assertIn('fetch("/trial-review"', WEB_PAGE)
+        self.assertIn(
+            'data-review-gate="road_lane_curb_continuity"',
+            WEB_PAGE,
+        )
+        self.assertIn(
+            'data-review-gate="steering_response_direction"',
+            WEB_PAGE,
+        )
+        self.assertIn(
+            'data-review-gate="dynamic_traffic_decision_impact"',
+            WEB_PAGE,
+        )
+
     def test_reset_does_not_pollute_next_input_latency(self) -> None:
         reset_block = WEB_PAGE.split("async function reset()", maxsplit=1)[1].split(
             "async function tick",

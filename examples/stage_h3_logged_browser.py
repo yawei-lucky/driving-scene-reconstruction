@@ -113,6 +113,15 @@ WEB_PAGE = """<!doctype html>
     h1 { font-size: 20px; margin: 8px; }
     #view { max-width: 100vw; max-height: calc(100vh - 150px); border: 1px solid #444; }
     #status { min-height: 22px; color: #ffd84d; margin: 4px; }
+    #review { max-width: 1120px; margin: 8px auto 18px; padding: 10px; background: #171717; border: 1px solid #333; text-align: left; }
+    #review h2 { margin: 0 0 6px; font-size: 17px; }
+    #review p { margin: 4px 0 8px; color: #bbb; }
+    .review-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px; }
+    .review-grid label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    select, textarea { background: #f3f3f3; color: #111; border: 1px solid #aaa; border-radius: 4px; }
+    select { padding: 5px; }
+    textarea { width: 100%; min-height: 48px; margin-top: 8px; box-sizing: border-box; }
+    #review-status { min-height: 20px; color: #93c5fd; margin-top: 5px; }
     button { min-width: 76px; margin: 3px; padding: 10px; font-size: 17px; }
     a { color: #93c5fd; }
   </style>
@@ -130,9 +139,54 @@ WEB_PAGE = """<!doctype html>
   </div>
   <div><button data-key="r">R 重置</button><button id="fullscreen">全屏</button></div>
   <div><a href="/trial.json" target="_blank">试驾记录 JSON</a></div>
+  <section id="review">
+    <h2>人工试驾验收</h2>
+    <p>自动预检不等于最终验收。开完整段后，把“能不能开”的判断保存到同一个 trial JSON。</p>
+    <div class="review-grid">
+      <label>道路/车道/路缘
+        <select data-review-gate="road_lane_curb_continuity">
+          <option value="unsure">不确定</option>
+          <option value="pass">通过</option>
+          <option value="fail">失败</option>
+        </select>
+      </label>
+      <label>转向画面方向
+        <select data-review-gate="steering_response_direction">
+          <option value="unsure">不确定</option>
+          <option value="pass">通过</option>
+          <option value="fail">失败</option>
+        </select>
+      </label>
+      <label>近姿态破洞/撕裂
+        <select data-review-gate="nearby_pose_artifact_impact">
+          <option value="unsure">不确定</option>
+          <option value="pass">通过</option>
+          <option value="fail">失败</option>
+        </select>
+      </label>
+      <label>物理输入延迟
+        <select data-review-gate="physical_input_display_latency">
+          <option value="unsure">不确定</option>
+          <option value="pass">通过</option>
+          <option value="fail">失败</option>
+        </select>
+      </label>
+      <label>动态残影影响驾驶
+        <select data-review-gate="dynamic_traffic_decision_impact">
+          <option value="unsure">不确定</option>
+          <option value="pass">通过</option>
+          <option value="fail">失败</option>
+        </select>
+      </label>
+    </div>
+    <textarea id="review-notes" maxlength="2048" placeholder="可选备注：比如哪一帧车道断了、哪个方向的近车残影像假障碍物。"></textarea>
+    <button id="save-review">保存人工验收</button>
+    <div id="review-status">尚未保存人工验收。</div>
+  </section>
   <script>
     const view = document.getElementById("view");
     const status = document.getElementById("status");
+    const reviewStatus = document.getElementById("review-status");
     const held = new Set();
     let running = true;
     let inFlight = false;
@@ -184,6 +238,32 @@ WEB_PAGE = """<!doctype html>
         /* Keep driving even if recording fails. */
       }
     }
+    async function saveManualReview() {
+      const gates = {};
+      document.querySelectorAll("[data-review-gate]").forEach(select => {
+        gates[select.dataset.reviewGate] = select.value;
+      });
+      try {
+        const response = await fetch("/trial-review", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            client_unix_ms: Date.now(),
+            reviewer: "browser_operator",
+            gates,
+            notes: document.getElementById("review-notes").value
+          })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "保存失败");
+        const summary = result.summary;
+        const verdict = summary.manual_review_all_passed ? "全部通过" : "仍有未通过/不确定项";
+        reviewStatus.textContent =
+          `已保存第 ${summary.manual_review_count} 次人工验收：${verdict}`;
+      } catch (error) {
+        reviewStatus.textContent = error.toString();
+      }
+    }
     document.addEventListener("keydown", event => {
       const key = event.key.toLowerCase();
       if (drivingKeys.has(key)) { event.preventDefault(); setHeld(key, true); }
@@ -210,6 +290,7 @@ WEB_PAGE = """<!doctype html>
       }
     });
     document.getElementById("fullscreen").addEventListener("click", () => view.requestFullscreen());
+    document.getElementById("save-review").addEventListener("click", saveManualReview);
 
     async function reset() {
       held.clear();
@@ -421,6 +502,29 @@ def main() -> None:
                     if not isinstance(payload, dict):
                         raise ValueError("trial sample must be a JSON object")
                     summary = recorder.record_sample(payload)
+                    response = {
+                        "summary": summary,
+                        "trial_output": (
+                            str(recorder.output_path)
+                            if recorder.output_path
+                            else None
+                        ),
+                    }
+                    self.send_bytes(
+                        200,
+                        "application/json",
+                        json.dumps(response).encode(),
+                    )
+                    return
+                if parsed.path == "/trial-review":
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    if content_length > 8192:
+                        raise ValueError("trial review is too large")
+                    raw_payload = self.rfile.read(content_length)
+                    payload = json.loads(raw_payload.decode("utf-8"))
+                    if not isinstance(payload, dict):
+                        raise ValueError("trial review must be a JSON object")
+                    summary = recorder.record_manual_review(payload)
                     response = {
                         "summary": summary,
                         "trial_output": (

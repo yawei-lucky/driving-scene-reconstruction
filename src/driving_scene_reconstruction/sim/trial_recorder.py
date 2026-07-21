@@ -11,6 +11,24 @@ from typing import Any, Mapping
 
 
 DRIVING_KEYS = frozenset("wasd")
+MANUAL_REVIEW_STATUSES = frozenset(("pass", "fail", "unsure"))
+MANUAL_REVIEW_GATES: dict[str, str] = {
+    "road_lane_curb_continuity": (
+        "road, lane, curb, and horizon remain readable enough for steering"
+    ),
+    "steering_response_direction": (
+        "left/right/forward controls produce the expected visual motion"
+    ),
+    "nearby_pose_artifact_impact": (
+        "nearby-pose holes, tears, or ghosts do not change the driving decision"
+    ),
+    "physical_input_display_latency": (
+        "real operator input-to-display response is acceptable for driving"
+    ),
+    "dynamic_traffic_decision_impact": (
+        "baked or blurred traffic does not create a false obstacle decision"
+    ),
+}
 
 
 def _percentile(values: list[float], fraction: float) -> float:
@@ -76,6 +94,46 @@ def _clean_keys(value: object) -> str:
     return keys
 
 
+def _short_text(
+    value: object,
+    name: str,
+    *,
+    max_length: int,
+    optional: bool = False,
+) -> str | None:
+    if value is None and optional:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string")
+    result = value.strip()
+    if len(result) > max_length:
+        raise ValueError(f"{name} must be at most {max_length} characters")
+    return result
+
+
+def _clean_manual_review_statuses(value: object) -> dict[str, str]:
+    if not isinstance(value, Mapping):
+        raise ValueError("manual review gates must be an object")
+    gate_names = set(MANUAL_REVIEW_GATES)
+    submitted_names = {str(key) for key in value}
+    unknown = sorted(submitted_names - gate_names)
+    missing = sorted(gate_names - submitted_names)
+    if unknown:
+        raise ValueError(f"unknown manual review gates: {', '.join(unknown)}")
+    if missing:
+        raise ValueError(f"missing manual review gates: {', '.join(missing)}")
+    statuses: dict[str, str] = {}
+    for gate in MANUAL_REVIEW_GATES:
+        status = str(value[gate]).strip().lower()
+        if status not in MANUAL_REVIEW_STATUSES:
+            raise ValueError(
+                f"{gate} must be one of "
+                f"{', '.join(sorted(MANUAL_REVIEW_STATUSES))}"
+            )
+        statuses[gate] = status
+    return statuses
+
+
 class BrowserTrialRecorder:
     """Persist operator-trial timing and state evidence as JSON.
 
@@ -109,6 +167,7 @@ class BrowserTrialRecorder:
         )
         self.samples: list[dict[str, Any]] = []
         self.reset_events: list[dict[str, Any]] = []
+        self.manual_reviews: list[dict[str, Any]] = []
         self.write()
 
     def _from_client_or_server(
@@ -258,6 +317,42 @@ class BrowserTrialRecorder:
         self.write()
         return self.summary()
 
+    def record_manual_review(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        statuses = _clean_manual_review_statuses(payload.get("gates"))
+        review = {
+            "event": "manual_review",
+            "review_index": len(self.manual_reviews),
+            "server_recorded_at_utc": datetime.now(timezone.utc).isoformat(
+                timespec="seconds"
+            ),
+            "client_unix_ms": _finite_float(
+                payload.get("client_unix_ms"),
+                "client_unix_ms",
+                non_negative=True,
+                optional=True,
+            ),
+            "reviewer": _short_text(
+                payload.get("reviewer", "browser_operator"),
+                "reviewer",
+                max_length=64,
+            ),
+            "statuses": statuses,
+            "notes": _short_text(
+                payload.get("notes"),
+                "notes",
+                max_length=2048,
+                optional=True,
+            ),
+            "sample_count_at_review": len(self.samples),
+            "reset_count_at_review": len(self.reset_events),
+            "last_log_time_seconds": (
+                float(self.samples[-1]["time_seconds"]) if self.samples else 0.0
+            ),
+        }
+        self.manual_reviews.append(review)
+        self.write()
+        return self.summary()
+
     def _series(self, key: str) -> list[float]:
         return [
             float(sample[key])
@@ -265,11 +360,35 @@ class BrowserTrialRecorder:
             if sample.get(key) is not None
         ]
 
+    def _manual_review_summary(self) -> dict[str, Any]:
+        latest = self.manual_reviews[-1] if self.manual_reviews else None
+        latest_statuses = latest["statuses"] if latest else {}
+        assert isinstance(latest_statuses, dict)
+        status_by_gate = {
+            gate: str(latest_statuses.get(gate, "missing"))
+            for gate in MANUAL_REVIEW_GATES
+        }
+        blocking_gates = {
+            gate: status
+            for gate, status in status_by_gate.items()
+            if status != "pass"
+        }
+        return {
+            "manual_review_count": len(self.manual_reviews),
+            "manual_review_status_by_gate": status_by_gate,
+            "manual_review_completed": bool(latest),
+            "manual_review_all_passed": bool(latest) and not blocking_gates,
+            "manual_review_blocking_gates": blocking_gates,
+            "latest_manual_review_index": (
+                latest["review_index"] if latest is not None else None
+            ),
+        }
+
     def summary(self) -> dict[str, Any]:
         frames = [int(sample["logical_frame"]) for sample in self.samples]
         times = [float(sample["time_seconds"]) for sample in self.samples]
         max_time = max(times) if times else 0.0
-        return {
+        summary = {
             "scene": self.scene,
             "movement_profile": self.movement_profile,
             "sample_count": len(self.samples),
@@ -321,6 +440,8 @@ class BrowserTrialRecorder:
                 self._series("camera_time_spread_ms")
             ),
         }
+        summary.update(self._manual_review_summary())
+        return summary
 
     def report(self) -> dict[str, Any]:
         return {
@@ -344,9 +465,12 @@ class BrowserTrialRecorder:
                         "that reflects a sampled control state"
                     ),
                 },
+                "manual_review_scope": MANUAL_REVIEW_GATES,
+                "manual_review_statuses": sorted(MANUAL_REVIEW_STATUSES),
             },
             "summary": self.summary(),
             "reset_events": self.reset_events,
+            "manual_reviews": self.manual_reviews,
             "samples": self.samples,
         }
 

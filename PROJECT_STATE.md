@@ -307,16 +307,25 @@ Completed on 2026-07-21 without retraining:
 - added browser trial recording so the real operator run exposes `/trial.json`
   and, by default, writes
   `/home/yawei/stage3_external/artifacts/scene_040_browser_trial/browser_trial.json`;
+- added an in-browser manual review panel that writes the operator's
+  road/lane/curb, steering-response, nearby-artifact, physical-latency, and
+  dynamic-traffic decision gates into the same trial JSON;
 - validated the browser recording endpoint locally: the page trial report
   initialized with checkpoint step 7,999 and visible profile, a `W+A` tick
   returned logical frame 1 and server control-to-JPEG time of 89.88 ms, a
   trial sample was recorded, reset was recorded, and `/trial.json` returned
   `sample_count=1` and `reset_count=1`.
+- validated the manual review endpoint locally: initial `/trial.json` marked
+  all five gates missing, a blocking review preserved `unsure` and `fail`
+  verdicts, and a later all-pass review returned `manual_review_all_passed`
+  true with empty `manual_review_blocking_gates`.
 
 This is still not a completed human driving acceptance run. The preflight
 explicitly leaves road/lane continuity, steering direction by eye, nearby
 artifact judgment, physical key-to-display latency, and dynamic-traffic
-decision impact as manual review items.
+decision impact as manual review items. Those items are now recordable from
+the browser, but they are not accepted until a real operator completes and
+saves the review.
 
 ## 3. What The System Can Do Now
 
@@ -328,7 +337,7 @@ HumanControl
 → SplatADLoggedRenderer using accepted static-8k
 → six RGB arrays at about 13.4 Renderer observations/s
 → automated drivability preflight
-→ 10 Hz browser W/S/A/D/R driving loop with trial JSON recording
+→ 10 Hz browser W/S/A/D/R driving loop with timing and manual-review trial JSON
 ```
 
 This is the first repository state where simulated ego motion changes pixels
@@ -403,9 +412,10 @@ later mandatory gate.
 
 Stage H3 now prioritizes completing one stable human-driving loop around the
 accepted static-8k backend. Environment, acquisition, calibration, the static
-baseline, rejected actor ablations, and the logged-time Renderer are complete.
-Static 8k remains the accepted checkpoint; no further dynamic training starts
-until driving evidence makes it necessary.
+baseline, rejected actor ablations, logged-time Renderer, automated preflight,
+and browser-side trial recording are complete. Static 8k remains the accepted
+checkpoint; no further dynamic training starts until driving evidence makes it
+necessary.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -419,8 +429,8 @@ plan. The short version is:
    evidence is needed;
 5. accept only steering, throttle, brake, and reset during driving—never ask
    the operator to inspect or compensate for reconstruction defects;
-6. preserve `/trial.json` and the browser-reported control-event-to-screen p95
-   latency plus deterministic replay evidence;
+6. preserve `/trial.json`, including browser-reported control-event-to-screen
+   p95 latency, reset events, and the five manual drivability gate verdicts;
 7. execute the six separate gates in
    `docs/drivability_acceptance_criteria.md` on this low-interference segment;
 8. return dynamic traffic to the main line immediately if it obscures the

@@ -26,6 +26,8 @@ that should pass before a human operator trial is treated as meaningful.
 - Added `BrowserTrialRecorder` for browser-side trial samples and reset events.
 - The browser now exposes `/trial.json` and writes a server-owned JSON report
   by default.
+- The browser now also saves the operator's five manual drivability review
+  gates into the same trial JSON.
 - Added dependency-light tests for the preflight control script and recorder.
 
 ## Exact Preflight Run
@@ -146,6 +148,36 @@ The browser recorder distinguishes:
 
 Neither value includes monitor scan-out or an external hardware latency sensor.
 
+## Manual Review Endpoint Validation
+
+Validation command:
+
+```bash
+H3_BROWSER_PORT=8779 \
+H3_BROWSER_TRIAL_OUTPUT=/home/yawei/stage3_external/artifacts/scene_040_browser_review_validation/browser_trial.json \
+scripts/run_stage_h3_pandaset_040.sh logged-browser
+```
+
+Validated endpoints:
+
+```text
+GET /trial.json
+POST /trial-review
+POST /trial-review
+GET /trial.json
+```
+
+Evidence:
+
+```text
+initial report: manual_review_count 0, all five gates marked missing
+blocking review: manual_review_count 1, physical_input_display_latency unsure
+  and dynamic_traffic_decision_impact fail blocked acceptance
+all-pass review: manual_review_count 2, manual_review_all_passed true and
+  manual_review_blocking_gates empty
+trial output: /home/yawei/stage3_external/artifacts/scene_040_browser_review_validation/browser_trial.json
+```
+
 ## Remaining Human Review
 
 The preflight intentionally leaves these items open:
@@ -157,5 +189,5 @@ The preflight intentionally leaves these items open:
 - dynamic-traffic artifacts that could change obstacle or road decisions.
 
 The next acceptance run should use the browser, drive the complete 7.899 s log,
-then preserve `/trial.json` together with the operator's review of the two
-preflight images.
+then preserve `/trial.json`; it contains both browser-side latency samples and
+the operator's manual review of the five driving-relevant gates.

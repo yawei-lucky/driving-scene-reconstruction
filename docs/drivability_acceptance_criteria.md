@@ -69,4 +69,7 @@ the final acceptance verdict. It verifies backend repeatability,
 counterfactual-pose response, frame grouping, profile bounds, and renderer
 latency. A human operator still has to review road/lane continuity, steering
 direction, nearby artifacts, physical input-to-display latency, and
-traffic-decision impact during the browser trial.
+traffic-decision impact during the browser trial. The browser saves those five
+manual verdicts into `/trial.json` under `manual_reviews`; an item marked
+`fail`, `unsure`, or not yet saved blocks acceptance even when automated gates
+are green.

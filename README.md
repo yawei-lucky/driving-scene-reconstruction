@@ -134,6 +134,7 @@ Stage H3 Level 7B
 → automated drivability preflight for the accepted static-8k renderer
 → visible-profile preflight passed 17 backend gates over all 80 logical frames
 → browser loop now records trial JSON with request→image and input→image timing
+  plus in-browser manual drivability review gates
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -231,21 +232,23 @@ render scale produces a 1440-pixel-wide six-camera view; it is twice the
 linear camera resolution of the earlier 0.125 viewer that was judged too small.
 The browser also exposes `/trial.json` and writes the same trial report to
 `/home/yawei/stage3_external/artifacts/scene_040_browser_trial/browser_trial.json`
-by default.
+by default. After driving the segment, use the page's manual review panel to
+save the road/lane/curb, steering-response, nearby-artifact, physical-latency,
+and dynamic-traffic decision gates into the same JSON file.
 
 ## Current Next Step
 
-Static 8k remains the fixed accepted checkpoint. The next main-line step is a
-operator acceptance run of the new browser loop over the complete real
-7.899-second trajectory. Record the page's browser-side frame-update latency,
-road/curb continuity, steering direction, reset, and deterministic replay. Do
-not start another dynamic training run before this driving run reveals an
-artifact that affects the road or obstacle decision.
+Static 8k remains the fixed accepted checkpoint. The next main-line step is an
+operator acceptance run of the browser loop over the complete real
+7.899-second trajectory. Preserve `/trial.json` after the run; it now contains
+browser-side frame-update latency, reset events, and the operator's manual
+drivability verdicts. Do not start another dynamic training run before this
+driving run reveals an artifact that affects the road or obstacle decision.
 
 An automated preflight now exists before that operator run. It should be green
 before a human trial is treated as meaningful, but it deliberately leaves
-road/lane continuity, steering direction by eye, physical display latency, and
-dynamic-traffic decision impact as review items.
+road/lane continuity, steering direction by eye, nearby-artifact impact,
+physical display latency, and dynamic-traffic decision impact as review items.
 
 The success criteria are deliberately separate from generic image metrics:
 

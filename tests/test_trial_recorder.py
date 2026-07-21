@@ -12,6 +12,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from driving_scene_reconstruction.sim import BrowserTrialRecorder  # noqa: E402
+from driving_scene_reconstruction.sim.trial_recorder import (  # noqa: E402
+    MANUAL_REVIEW_GATES,
+)
 
 
 def sample_payload(**overrides: object) -> dict[str, object]:
@@ -111,6 +114,78 @@ class BrowserTrialRecorderTest(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 recorder.record_sample(payload)
+
+    def test_manual_review_persists_drivability_gates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_path = Path(tmp) / "trial.json"
+            recorder = self.make_recorder(output_path)
+
+            summary = recorder.record_manual_review(
+                {
+                    "client_unix_ms": 456.0,
+                    "reviewer": "operator",
+                    "gates": {gate: "pass" for gate in MANUAL_REVIEW_GATES},
+                    "notes": "lane, steering, latency, and traffic residue looked usable",
+                }
+            )
+            report = json.loads(output_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(summary["manual_review_count"], 1)
+        self.assertTrue(summary["manual_review_completed"])
+        self.assertTrue(summary["manual_review_all_passed"])
+        self.assertEqual(summary["manual_review_blocking_gates"], {})
+        self.assertEqual(report["manual_reviews"][0]["reviewer"], "operator")
+        self.assertEqual(
+            report["manual_reviews"][0]["statuses"][
+                "road_lane_curb_continuity"
+            ],
+            "pass",
+        )
+        self.assertIn("manual_review_scope", report["trial"])
+
+    def test_manual_review_unsure_gate_blocks_acceptance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            recorder = self.make_recorder(Path(tmp) / "trial.json")
+            gates = {gate: "pass" for gate in MANUAL_REVIEW_GATES}
+            gates["dynamic_traffic_decision_impact"] = "unsure"
+
+            summary = recorder.record_manual_review({"gates": gates})
+
+        self.assertFalse(summary["manual_review_all_passed"])
+        self.assertEqual(
+            summary["manual_review_blocking_gates"],
+            {"dynamic_traffic_decision_impact": "unsure"},
+        )
+
+    def test_manual_review_requires_every_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            recorder = self.make_recorder(Path(tmp) / "trial.json")
+            gates = {gate: "pass" for gate in MANUAL_REVIEW_GATES}
+            gates.pop("physical_input_display_latency")
+
+            with self.assertRaises(ValueError):
+                recorder.record_manual_review({"gates": gates})
+
+    def test_manual_review_rejects_unknown_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            recorder = self.make_recorder(Path(tmp) / "trial.json")
+            gates = {gate: "pass" for gate in MANUAL_REVIEW_GATES}
+            gates["photorealism_score"] = "pass"
+
+            with self.assertRaises(ValueError):
+                recorder.record_manual_review({"gates": gates})
+
+    def test_manual_review_rejects_long_notes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            recorder = self.make_recorder(Path(tmp) / "trial.json")
+
+            with self.assertRaises(ValueError):
+                recorder.record_manual_review(
+                    {
+                        "gates": {gate: "pass" for gate in MANUAL_REVIEW_GATES},
+                        "notes": "x" * 2049,
+                    }
+                )
 
 
 if __name__ == "__main__":
