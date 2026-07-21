@@ -225,6 +225,34 @@ This writes a JSON report plus counterfactual and sequence review images under
 `/home/yawei/stage3_external/artifacts/scene_040_drivability_preflight/`. It is
 a backend preflight, not a substitute for the human browser driving trial.
 
+### Fastest visual try
+
+On the project host `shidi`:
+
+```bash
+cd /home/yawei/driving-scene-reconstruction
+scripts/run_stage_h3_pandaset_040.sh logged-browser
+```
+
+Then open this from a Tailscale-connected browser:
+
+```text
+http://100.116.66.57:8766
+```
+
+Use `W/S/A/D` to apply visible counterfactual ego motion and `R` to reset. If
+port `8766` is already in use, choose another port:
+
+```bash
+H3_BROWSER_PORT=8781 scripts/run_stage_h3_pandaset_040.sh logged-browser
+```
+
+Then open:
+
+```text
+http://100.116.66.57:8781
+```
+
 To drive the same reconstruction from another Tailscale-connected computer:
 
 ```bash
