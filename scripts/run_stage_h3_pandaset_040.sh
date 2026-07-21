@@ -238,6 +238,7 @@ case "$MODE" in
       --output-scale "${H3_BROWSER_RENDER_SCALE:-0.25}" \
       --dt "${H3_LOGGED_RENDER_DT:-0.1}" \
       --movement-profile "${H3_BROWSER_MOVEMENT_PROFILE:-visible}" \
+      --time-mode "${H3_BROWSER_TIME_MODE:-manual}" \
       --host "${H3_BROWSER_HOST:-0.0.0.0}" \
       --port "${H3_BROWSER_PORT:-8766}" \
       --trial-output "$BROWSER_TRIAL_OUTPUT"

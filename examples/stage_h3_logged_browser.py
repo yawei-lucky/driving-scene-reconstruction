@@ -50,6 +50,15 @@ def parse_args() -> argparse.Namespace:
         choices=("safe", "visible"),
         default="visible",
     )
+    parser.add_argument(
+        "--time-mode",
+        choices=("manual", "auto"),
+        default="manual",
+        help=(
+            "manual holds the log still until W/S/A/D is pressed; auto advances "
+            "the logged trajectory at the fixed tick rate"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -60,6 +69,28 @@ def control_for_keys(keys: set[str]) -> HumanControl:
         throttle=float("w" in keys),
         brake=float("s" in keys),
     )
+
+
+def should_advance_log_time(time_mode: str, keys: set[str]) -> bool:
+    if time_mode == "auto":
+        return True
+    if time_mode == "manual":
+        return bool(keys)
+    raise ValueError(f"unknown time mode: {time_mode}")
+
+
+def mode_help_text(time_mode: str) -> str:
+    if time_mode == "manual":
+        return (
+            "手动推进：打开后不自动前进；按住 W/S/A/D 才沿日志邻域更新视角，"
+            "R 重置。"
+        )
+    if time_mode == "auto":
+        return (
+            "自动前进：轨迹按固定节奏播放；W/S 调整反事实前向偏移，"
+            "A/D 调整反事实朝向，R 重置。"
+        )
+    raise ValueError(f"unknown time mode: {time_mode}")
 
 
 def make_mosaic(
@@ -129,7 +160,7 @@ WEB_PAGE = """<!doctype html>
 <body>
   <h1>PandaSet 场景 040 · 六相机驾驶</h1>
   <img id="view" src="/frame.jpg" alt="six reconstructed driving cameras">
-  <div>轨迹自动前进；W/S 调整反事实前向偏移，A/D 调整反事实朝向，R 重置</div>
+  <div id="mode-help">__MODE_HELP__</div>
   <div id="status">单驾驶客户端 · 请勿同时打开多个标签页</div>
   <div><button data-key="w">W 前移</button></div>
   <div>
@@ -196,6 +227,7 @@ WEB_PAGE = """<!doctype html>
     let pendingInputStartedAt = null;
     let trialSamples = 0;
     const tickPeriodMs = __TICK_PERIOD_MS__;
+    const timeMode = "__TIME_MODE__";
     const drivingKeys = new Set(["w", "s", "a", "d"]);
 
     function markInputEdge() {
@@ -209,6 +241,7 @@ WEB_PAGE = """<!doctype html>
     }
     function scheduleNextTick(token, started) {
       if (!running || token !== generation) return;
+      if (timeMode === "manual" && held.size === 0) return;
       if (nextTimer !== null) clearTimeout(nextTimer);
       nextTimer = setTimeout(
         () => tick(token),
@@ -313,7 +346,9 @@ WEB_PAGE = """<!doctype html>
         `log 0.00s · 重置→图像加载 ${resetToScreen.toFixed(0)}ms · ` +
         `记录 ${trialSamples}`;
       running = true;
-      tick(token);
+      if (timeMode === "auto") {
+        tick(token);
+      }
     }
     async function tick(token) {
       if (token !== generation || inFlight) return;
@@ -372,7 +407,11 @@ WEB_PAGE = """<!doctype html>
       }
       scheduleNextTick(token, started);
     }
-    tick(generation);
+    if (timeMode === "auto") {
+      tick(generation);
+    } else {
+      status.textContent = "手动推进模式 · 按住 W/S/A/D 才会更新重建视角 · R 重置";
+    }
   </script>
 </body>
 </html>
@@ -454,6 +493,7 @@ def main() -> None:
             ),
             "camera_time_spread_ms": float(metadata["camera_time_spread_ms"]),
             "output_scale": args.output_scale,
+            "time_mode": args.time_mode,
         }
         if started is not None:
             payload["server_control_to_jpeg_ms"] = (
@@ -476,6 +516,12 @@ def main() -> None:
                 page = WEB_PAGE.replace(
                     "__TICK_PERIOD_MS__",
                     f"{args.dt * 1000.0:.6f}",
+                ).replace(
+                    "__TIME_MODE__",
+                    args.time_mode,
+                ).replace(
+                    "__MODE_HELP__",
+                    mode_help_text(args.time_mode),
                 )
                 self.send_bytes(200, "text/html; charset=utf-8", page.encode())
             elif path == "/frame.jpg":
@@ -547,15 +593,21 @@ def main() -> None:
                         raise ValueError("keys must contain only W/S/A/D")
                     state = runtime["state"]
                     assert isinstance(state, EgoState)
-                    runtime["state"] = controller.step(
-                        state,
-                        control_for_keys(keys),
-                        args.dt,
-                    )
+                    should_advance = should_advance_log_time(args.time_mode, keys)
+                    if should_advance:
+                        runtime["state"] = controller.step(
+                            state,
+                            control_for_keys(keys),
+                            args.dt,
+                        )
                 else:
                     self.send_bytes(404, "text/plain", b"not found")
                     return
-                render_frame()
+                if (
+                    parsed.path == "/reset"
+                    or should_advance_log_time(args.time_mode, keys)
+                ):
+                    render_frame()
                 payload = state_payload(started)
                 if parsed.path == "/reset":
                     recorder.record_reset(payload)
@@ -581,6 +633,7 @@ def main() -> None:
         f"+/-{profile.limits.max_abs_left_meters:.2f}m left, "
         f"+/-{math.degrees(profile.limits.max_abs_yaw_radians):.1f}deg yaw"
     )
+    print(f"time_mode={args.time_mode}")
     if args.trial_output:
         print(f"trial_output={Path(args.trial_output).expanduser().resolve()}")
     print("trial_report_endpoint=/trial.json")

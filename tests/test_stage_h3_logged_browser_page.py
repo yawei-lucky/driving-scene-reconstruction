@@ -10,7 +10,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "examples"))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from stage_h3_logged_browser import WEB_PAGE  # noqa: E402
+from stage_h3_logged_browser import (  # noqa: E402
+    WEB_PAGE,
+    mode_help_text,
+    should_advance_log_time,
+)
 
 
 class StageH3LoggedBrowserPageTest(unittest.TestCase):
@@ -22,6 +26,31 @@ class StageH3LoggedBrowserPageTest(unittest.TestCase):
         self.assertIn("browser_request_to_image_ms", WEB_PAGE)
         self.assertIn("browser_input_to_image_ms", WEB_PAGE)
         self.assertIn('fetch("/trial-sample"', WEB_PAGE)
+
+    def test_manual_time_mode_does_not_auto_tick_on_page_load(self) -> None:
+        startup_block = WEB_PAGE.split("async function tick", maxsplit=1)[1].split(
+            "</script>",
+            maxsplit=1,
+        )[0]
+
+        self.assertIn('if (timeMode === "auto")', startup_block)
+        self.assertIn("按住 W/S/A/D 才会更新", startup_block)
+        self.assertIn('timeMode === "manual" && held.size === 0', WEB_PAGE)
+
+    def test_time_mode_advance_rules(self) -> None:
+        self.assertFalse(should_advance_log_time("manual", set()))
+        self.assertTrue(should_advance_log_time("manual", {"w"}))
+        self.assertTrue(should_advance_log_time("manual", {"a"}))
+        self.assertTrue(should_advance_log_time("auto", set()))
+        self.assertTrue(should_advance_log_time("auto", {"s"}))
+        with self.assertRaises(ValueError):
+            should_advance_log_time("free_roam", set())
+
+    def test_mode_help_text_documents_manual_vs_auto(self) -> None:
+        self.assertIn("打开后不自动前进", mode_help_text("manual"))
+        self.assertIn("轨迹按固定节奏播放", mode_help_text("auto"))
+        with self.assertRaises(ValueError):
+            mode_help_text("invalid")
 
     def test_page_records_manual_drivability_review(self) -> None:
         self.assertIn("人工试驾验收", WEB_PAGE)

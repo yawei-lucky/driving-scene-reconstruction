@@ -153,12 +153,13 @@ conservative nearby-pose envelope of ±2 m forward, ±0.5 m left, and ±5° yaw.
 The current baseline is still not production quality. The accepted static H3
 8k checkpoint now supports logged-time, six-camera rendering with small human
 offsets at about 13.4 complete observations/s at 0.5 output scale. A browser
-W/S/A/D/R loop now advances that trajectory automatically at 10 Hz. This is a
-tested backend/browser-service result, not yet a real operator
-keyboard-to-display driving trial. Close vehicles remain blurred or baked into
-the background, and no collision or responsive traffic model exists. Such
-traffic artifacts are a mandatory later blocker whenever they can change the
-driving decision.
+W/S/A/D/R loop now defaults to manual time progression: it opens stopped and
+advances the logged trajectory only while a driving key is held. Auto playback
+is still available with `H3_BROWSER_TIME_MODE=auto`. This is a tested
+backend/browser-service result, not yet a real operator keyboard-to-display
+driving trial. Close vehicles remain blurred or baked into the background, and
+no collision or responsive traffic model exists. Such traffic artifacts are a
+mandatory later blocker whenever they can change the driving decision.
 
 ## Run
 
@@ -253,6 +254,40 @@ Then open:
 http://100.116.66.57:8781
 ```
 
+The browser defaults to manual time progression: the scene stays still after
+opening, and the logged trajectory advances only while a driving key is held.
+To restore the earlier auto-play behavior:
+
+```bash
+H3_BROWSER_TIME_MODE=auto scripts/run_stage_h3_pandaset_040.sh logged-browser
+```
+
+If your local browser traffic is routed through a proxy app on port `25378`,
+keep the proxy on but add a direct/bypass rule for the Tailscale address. In
+proxy tools such as Clash-like rule systems, the important direct rules are:
+
+```text
+IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
+IP-CIDR,100.116.66.57/32,DIRECT,no-resolve
+```
+
+If your proxy UI has a “bypass list”, “no proxy”, or “direct domains/IPs”
+field, add:
+
+```text
+100.116.66.57
+100.64.0.0/10
+localhost
+127.0.0.1
+*.ts.net
+```
+
+Then test direct access with:
+
+```text
+http://100.116.66.57:8766/trial.json
+```
+
 To drive the same reconstruction from another Tailscale-connected computer:
 
 ```bash
@@ -260,14 +295,15 @@ scripts/run_stage_h3_pandaset_040.sh logged-browser
 ```
 
 Then open `http://100.116.66.57:8766` in one browser tab only. The logged car
-advances automatically; `W/S` adjust its forward offset speed, `A/D` adjust
-the heading offset, and `R` restarts the log. `S` does not pause the underlying
-recorded trajectory. The browser now defaults to the visible movement profile
-so counterfactual motion is easy to see. Use `H3_BROWSER_MOVEMENT_PROFILE=safe`
-when running the conservative acceptance envelope. The default 0.25 browser
-render scale produces a 1440-pixel-wide six-camera view; it is twice the
-linear camera resolution of the earlier 0.125 viewer that was judged too small.
-The browser also exposes `/trial.json` and writes the same trial report to
+does not advance until a driving key is held. `W/S` adjust its forward offset
+speed, `A/D` adjust the heading offset, and `R` restarts the log. The browser
+now defaults to the visible movement profile so counterfactual motion is easy
+to see. Use `H3_BROWSER_MOVEMENT_PROFILE=safe` when running the conservative
+acceptance envelope, and `H3_BROWSER_TIME_MODE=auto` only when you want
+log-time playback. The default 0.25 browser render scale produces a
+1440-pixel-wide six-camera view; it is twice the linear camera resolution of
+the earlier 0.125 viewer that was judged too small. The browser also exposes
+`/trial.json` and writes the same trial report to
 `/home/yawei/stage3_external/artifacts/scene_040_browser_trial/browser_trial.json`
 by default. After driving the segment, use the page's manual review panel to
 save the road/lane/curb, steering-response, nearby-artifact, physical-latency,
