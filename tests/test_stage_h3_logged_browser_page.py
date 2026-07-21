@@ -33,9 +33,10 @@ class StageH3LoggedBrowserPageTest(unittest.TestCase):
             maxsplit=1,
         )[0]
 
-        self.assertIn('if (timeMode === "auto")', startup_block)
-        self.assertIn("按住 W/S/A/D 才会更新", startup_block)
-        self.assertIn('timeMode === "manual" && held.size === 0', WEB_PAGE)
+        self.assertIn('let autoplay = timeMode === "auto";', WEB_PAGE)
+        self.assertIn("if (autoplay)", startup_block)
+        self.assertIn("人工控制", startup_block)
+        self.assertIn("!autoplay && held.size === 0", WEB_PAGE)
 
     def test_time_mode_advance_rules(self) -> None:
         self.assertFalse(should_advance_log_time("manual", set()))
@@ -43,14 +44,26 @@ class StageH3LoggedBrowserPageTest(unittest.TestCase):
         self.assertTrue(should_advance_log_time("manual", {"a"}))
         self.assertTrue(should_advance_log_time("auto", set()))
         self.assertTrue(should_advance_log_time("auto", {"s"}))
+        self.assertTrue(should_advance_log_time("manual", set(), autoplay=True))
         with self.assertRaises(ValueError):
             should_advance_log_time("free_roam", set())
 
     def test_mode_help_text_documents_manual_vs_auto(self) -> None:
-        self.assertIn("打开后不自动前进", mode_help_text("manual"))
+        self.assertIn("默认人工控制", mode_help_text("manual"))
         self.assertIn("轨迹按固定节奏播放", mode_help_text("auto"))
         with self.assertRaises(ValueError):
             mode_help_text("invalid")
+
+    def test_page_supports_arrow_keys_and_autoplay_toggle(self) -> None:
+        self.assertIn('["arrowup", "w"]', WEB_PAGE)
+        self.assertIn('["arrowdown", "s"]', WEB_PAGE)
+        self.assertIn('["arrowleft", "a"]', WEB_PAGE)
+        self.assertIn('["arrowright", "d"]', WEB_PAGE)
+        self.assertIn('id="autoplay"', WEB_PAGE)
+        self.assertIn('autoplayButton.addEventListener("click"', WEB_PAGE)
+        self.assertIn('"&autoplay=" + autoplayQuery', WEB_PAGE)
+        self.assertIn("↑ / W 加速", WEB_PAGE)
+        self.assertIn("↓ / S 减速", WEB_PAGE)
 
     def test_page_records_manual_drivability_review(self) -> None:
         self.assertIn("人工试驾验收", WEB_PAGE)

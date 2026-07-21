@@ -71,8 +71,12 @@ def control_for_keys(keys: set[str]) -> HumanControl:
     )
 
 
-def should_advance_log_time(time_mode: str, keys: set[str]) -> bool:
-    if time_mode == "auto":
+def should_advance_log_time(
+    time_mode: str,
+    keys: set[str],
+    autoplay: bool = False,
+) -> bool:
+    if time_mode == "auto" or autoplay:
         return True
     if time_mode == "manual":
         return bool(keys)
@@ -82,8 +86,8 @@ def should_advance_log_time(time_mode: str, keys: set[str]) -> bool:
 def mode_help_text(time_mode: str) -> str:
     if time_mode == "manual":
         return (
-            "手动推进：打开后不自动前进；按住 W/S/A/D 才沿日志邻域更新视角，"
-            "R 重置。"
+            "默认人工控制：↑/W 加速，↓/S 减速，←/A 左转，"
+            "→/D 右转；也可点击自动播放，R 重置。"
         )
     if time_mode == "auto":
         return (
@@ -162,13 +166,17 @@ WEB_PAGE = """<!doctype html>
   <img id="view" src="/frame.jpg" alt="six reconstructed driving cameras">
   <div id="mode-help">__MODE_HELP__</div>
   <div id="status">单驾驶客户端 · 请勿同时打开多个标签页</div>
-  <div><button data-key="w">W 前移</button></div>
+  <div><button data-key="w">↑ / W 加速</button></div>
   <div>
-    <button data-key="a">A 左转</button>
-    <button data-key="s">S 减速</button>
-    <button data-key="d">D 右转</button>
+    <button data-key="a">← / A 左转</button>
+    <button data-key="s">↓ / S 减速</button>
+    <button data-key="d">→ / D 右转</button>
   </div>
-  <div><button data-key="r">R 重置</button><button id="fullscreen">全屏</button></div>
+  <div>
+    <button id="autoplay">自动播放</button>
+    <button data-key="r">R 重置</button>
+    <button id="fullscreen">全屏</button>
+  </div>
   <div><a href="/trial.json" target="_blank">试驾记录 JSON</a></div>
   <section id="review">
     <h2>人工试驾验收</h2>
@@ -218,6 +226,7 @@ WEB_PAGE = """<!doctype html>
     const view = document.getElementById("view");
     const status = document.getElementById("status");
     const reviewStatus = document.getElementById("review-status");
+    const autoplayButton = document.getElementById("autoplay");
     const held = new Set();
     let running = true;
     let inFlight = false;
@@ -229,6 +238,30 @@ WEB_PAGE = """<!doctype html>
     const tickPeriodMs = __TICK_PERIOD_MS__;
     const timeMode = "__TIME_MODE__";
     const drivingKeys = new Set(["w", "s", "a", "d"]);
+    const keyAliases = new Map([
+      ["arrowup", "w"],
+      ["arrowdown", "s"],
+      ["arrowleft", "a"],
+      ["arrowright", "d"]
+    ]);
+    let autoplay = timeMode === "auto";
+
+    function updateAutoplayButton() {
+      autoplayButton.textContent = autoplay ? "暂停自动播放" : "自动播放";
+    }
+    function setAutoplay(enabled) {
+      autoplay = enabled;
+      updateAutoplayButton();
+      if (!autoplay && nextTimer !== null) {
+        clearTimeout(nextTimer);
+        nextTimer = null;
+      }
+      if (autoplay) requestTickNow();
+    }
+    function normalizedDrivingKey(key) {
+      const lowered = key.toLowerCase();
+      return keyAliases.get(lowered) || lowered;
+    }
 
     function markInputEdge() {
       pendingInputStartedAt = performance.now();
@@ -236,12 +269,13 @@ WEB_PAGE = """<!doctype html>
     }
     function setHeld(key, active) {
       const wasHeld = held.has(key);
+      if (active && !wasHeld && autoplay) setAutoplay(false);
       if (active) held.add(key); else held.delete(key);
       if (wasHeld !== active) markInputEdge();
     }
     function scheduleNextTick(token, started) {
       if (!running || token !== generation) return;
-      if (timeMode === "manual" && held.size === 0) return;
+      if (!autoplay && held.size === 0) return;
       if (nextTimer !== null) clearTimeout(nextTimer);
       nextTimer = setTimeout(
         () => tick(token),
@@ -298,12 +332,12 @@ WEB_PAGE = """<!doctype html>
       }
     }
     document.addEventListener("keydown", event => {
-      const key = event.key.toLowerCase();
+      const key = normalizedDrivingKey(event.key);
       if (drivingKeys.has(key)) { event.preventDefault(); setHeld(key, true); }
       if (key === "r" && !event.repeat) { event.preventDefault(); reset(); }
     });
     document.addEventListener("keyup", event => {
-      const key = event.key.toLowerCase();
+      const key = normalizedDrivingKey(event.key);
       if (drivingKeys.has(key)) { event.preventDefault(); setHeld(key, false); }
     });
     window.addEventListener("blur", () => {
@@ -323,6 +357,7 @@ WEB_PAGE = """<!doctype html>
       }
     });
     document.getElementById("fullscreen").addEventListener("click", () => view.requestFullscreen());
+    autoplayButton.addEventListener("click", () => setAutoplay(!autoplay));
     document.getElementById("save-review").addEventListener("click", saveManualReview);
 
     async function reset() {
@@ -346,7 +381,7 @@ WEB_PAGE = """<!doctype html>
         `log 0.00s · 重置→图像加载 ${resetToScreen.toFixed(0)}ms · ` +
         `记录 ${trialSamples}`;
       running = true;
-      if (timeMode === "auto") {
+      if (autoplay) {
         tick(token);
       }
     }
@@ -362,7 +397,11 @@ WEB_PAGE = """<!doctype html>
       try {
         const keys = [...held].sort().join("");
         const query = encodeURIComponent(keys);
-        const response = await fetch("/tick?keys=" + query, {method: "POST"});
+        const autoplayQuery = autoplay ? "1" : "0";
+        const response = await fetch(
+          "/tick?keys=" + query + "&autoplay=" + autoplayQuery,
+          {method: "POST"}
+        );
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "request failed");
         await new Promise((resolve, reject) => {
@@ -397,6 +436,8 @@ WEB_PAGE = """<!doctype html>
         status.textContent += ` · 记录 ${displayedSampleCount}`;
         if (result.time >= result.duration) {
           running = false;
+          autoplay = false;
+          updateAutoplayButton();
           status.textContent += " · 已到终点，按 R 重置";
         }
       } catch (error) {
@@ -407,10 +448,11 @@ WEB_PAGE = """<!doctype html>
       }
       scheduleNextTick(token, started);
     }
-    if (timeMode === "auto") {
+    updateAutoplayButton();
+    if (autoplay) {
       tick(generation);
     } else {
-      status.textContent = "手动推进模式 · 按住 W/S/A/D 才会更新重建视角 · R 重置";
+      status.textContent = "人工控制 · ↑/W 加速 · ↓/S 减速 · ←/A 左转 · →/D 右转 · R 重置";
     }
   </script>
 </body>
@@ -585,28 +627,40 @@ def main() -> None:
                         json.dumps(response).encode(),
                     )
                     return
+                render_needed = False
                 if parsed.path == "/reset":
                     runtime["state"] = controller.reset()
+                    render_needed = True
                 elif parsed.path == "/tick":
-                    keys = set(parse_qs(parsed.query).get("keys", [""])[0])
+                    query = parse_qs(parsed.query)
+                    keys = set(query.get("keys", [""])[0])
                     if not keys <= {"w", "s", "a", "d"}:
                         raise ValueError("keys must contain only W/S/A/D")
+                    autoplay_value = query.get(
+                        "autoplay",
+                        ["1" if args.time_mode == "auto" else "0"],
+                    )[0]
+                    if autoplay_value not in {"0", "1"}:
+                        raise ValueError("autoplay must be 0 or 1")
+                    autoplay = autoplay_value == "1"
                     state = runtime["state"]
                     assert isinstance(state, EgoState)
-                    should_advance = should_advance_log_time(args.time_mode, keys)
+                    should_advance = should_advance_log_time(
+                        "manual",
+                        keys,
+                        autoplay,
+                    )
                     if should_advance:
                         runtime["state"] = controller.step(
                             state,
                             control_for_keys(keys),
                             args.dt,
                         )
+                        render_needed = True
                 else:
                     self.send_bytes(404, "text/plain", b"not found")
                     return
-                if (
-                    parsed.path == "/reset"
-                    or should_advance_log_time(args.time_mode, keys)
-                ):
+                if render_needed:
                     render_frame()
                 payload = state_payload(started)
                 if parsed.path == "/reset":

@@ -389,7 +389,8 @@ HumanControl
 → SplatADLoggedRenderer using accepted static-8k
 → six RGB arrays at about 13.4 Renderer observations/s
 → automated drivability preflight
-→ manual-default browser W/S/A/D/R driving loop with timing and trial JSON
+→ manual-default browser speed/steering loop with arrows or W/S/A/D,
+  an auto-play toggle, timing, and trial JSON
 → browser trial acceptance checker
 → scripted browser trial rehearsal
 ```
@@ -398,8 +399,9 @@ This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint. The default browser loop now
 uses the `visible` profile so those counterfactual changes are easier for a
 human to see, and it now opens stopped: logged time advances only while W/S/A/D
-is held. `H3_BROWSER_TIME_MODE=auto` restores the earlier log-time autoplay,
-and the `safe` profile preserves the previous conservative bounds.
+or the matching arrow key is held. The page can start/pause auto-play without
+restarting the server, while `H3_BROWSER_TIME_MODE=auto` still starts in
+auto-play mode. The `safe` profile preserves the previous conservative bounds.
 
 The earlier H2 fixed-pose Wayve renderer remains available. The H3 path now
 also loads real PandaSet scene 040, uses six cameras, Pandar64 geometry and

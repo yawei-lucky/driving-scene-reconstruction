@@ -241,7 +241,9 @@ Then open this from a Tailscale-connected browser:
 http://100.116.66.57:8766
 ```
 
-Use `W/S/A/D` to apply visible counterfactual ego motion and `R` to reset. If
+Use `W`/up arrow to increase speed, `S`/down arrow to decrease speed,
+`A`/left arrow and `D`/right arrow to steer, and `R` to reset. The page also
+has an auto-play/pause button and still opens in manual control by default. If
 port `8766` is already in use, choose another port:
 
 ```bash
@@ -276,9 +278,10 @@ proxy extension still captures `localhost`, add `localhost` and `127.0.0.1` to
 its bypass list. If the VS Code webview does not focus keyboard input reliably,
 click inside the page once or use the on-screen W/S/A/D buttons.
 
-The browser defaults to manual time progression: the scene stays still after
-opening, and the logged trajectory advances only while a driving key is held.
-To restore the earlier auto-play behavior:
+The browser defaults to manual control: the scene stays still after opening,
+and the logged trajectory advances only while a driving key is held. The page
+button can start or pause auto-play at any time; pressing a driving control
+takes back manual control. To start in auto-play mode instead:
 
 ```bash
 H3_BROWSER_TIME_MODE=auto scripts/run_stage_h3_pandaset_040.sh logged-browser
@@ -317,12 +320,12 @@ scripts/run_stage_h3_pandaset_040.sh logged-browser
 ```
 
 Then open `http://100.116.66.57:8766` in one browser tab only. The logged car
-does not advance until a driving key is held. `W/S` adjust its forward offset
-speed, `A/D` adjust the heading offset, and `R` restarts the log. The browser
-now defaults to the visible movement profile so counterfactual motion is easy
-to see. Use `H3_BROWSER_MOVEMENT_PROFILE=safe` when running the conservative
-acceptance envelope, and `H3_BROWSER_TIME_MODE=auto` only when you want
-log-time playback. The default 0.25 browser render scale produces a
+does not advance until a driving key is held. `W`/up and `S`/down provide the
+simple speed control, `A`/left and `D`/right provide steering, and `R` restarts
+the log. Auto-play can be started or paused from the page. The browser defaults
+to the visible movement profile so counterfactual motion is easy to see. Use
+`H3_BROWSER_MOVEMENT_PROFILE=safe` when running the conservative acceptance
+envelope. The default 0.25 browser render scale produces a
 1440-pixel-wide six-camera view; it is twice the linear camera resolution of
 the earlier 0.125 viewer that was judged too small. The browser also exposes
 `/trial.json` and writes the same trial report to
