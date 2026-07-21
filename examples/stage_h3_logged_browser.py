@@ -24,6 +24,7 @@ from driving_scene_reconstruction.sim import (  # noqa: E402
     HumanControl,
     LoggedEgoOffsetController,
     SplatADLoggedRenderer,
+    logged_movement_profile,
 )
 
 
@@ -42,6 +43,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dt", type=float, default=0.1)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8766)
+    parser.add_argument(
+        "--movement-profile",
+        choices=("safe", "visible"),
+        default="visible",
+    )
     return parser.parse_args()
 
 
@@ -59,6 +65,7 @@ def make_mosaic(
     image_draw_module: Any,
     frames: dict[str, object],
     state: EgoState,
+    movement_profile: str,
 ) -> object:
     cell = (480, 270)
     status_height = 34
@@ -81,8 +88,9 @@ def make_mosaic(
         )
         canvas.paste(tile, (x, y))
     status = (
-        f"log={state.time:05.2f}s  offset forward={state.x:+.2f}m "
-        f"left={state.y:+.2f}m  yaw={math.degrees(state.yaw):+.1f}deg"
+        f"{movement_profile}  log={state.time:05.2f}s  "
+        f"offset forward={state.x:+.2f}m left={state.y:+.2f}m  "
+        f"yaw={math.degrees(state.yaw):+.1f}deg"
     )
     image_draw_module.Draw(canvas).text(
         (10, cell[1] * 2 + 10),
@@ -109,12 +117,12 @@ WEB_PAGE = """<!doctype html>
 <body>
   <h1>PandaSet 场景 040 · 六相机驾驶</h1>
   <img id="view" src="/frame.jpg" alt="six reconstructed driving cameras">
-  <div>轨迹自动前进；W/S 调整前向微偏移，A/D 小幅转向，R 重置</div>
+  <div>轨迹自动前进；W/S 调整反事实前向偏移，A/D 调整反事实朝向，R 重置</div>
   <div id="status">单驾驶客户端 · 请勿同时打开多个标签页</div>
-  <div><button data-key="w">W 增加前向微调</button></div>
+  <div><button data-key="w">W 前移</button></div>
   <div>
     <button data-key="a">A 左转</button>
-    <button data-key="s">S 降低微调速度</button>
+    <button data-key="s">S 减速</button>
     <button data-key="d">D 右转</button>
   </div>
   <div><button data-key="r">R 重置</button><button id="fullscreen">全屏</button></div>
@@ -213,16 +221,21 @@ def main() -> None:
         raise ValueError("--port must be between 1 and 65535")
     from PIL import Image, ImageDraw
 
+    profile = logged_movement_profile(args.movement_profile)
     renderer = SplatADLoggedRenderer(
         args.config,
         output_scale=args.output_scale,
+        limits=profile.limits,
     )
     renderer.load()
     if renderer.checkpoint_step != 7999:
         raise RuntimeError(
             f"expected accepted static step 7999, got {renderer.checkpoint_step}"
         )
-    controller = LoggedEgoOffsetController(renderer.logged_duration)
+    controller = LoggedEgoOffsetController.from_profile(
+        renderer.logged_duration,
+        profile,
+    )
     rig = CameraRig(tuple(CameraSpec(name) for name in CAMERAS))
     runtime: dict[str, object] = {
         "state": controller.reset(),
@@ -234,7 +247,13 @@ def main() -> None:
         state = runtime["state"]
         assert isinstance(state, EgoState)
         observation = renderer.render("040", state, rig)
-        mosaic = make_mosaic(Image, ImageDraw, dict(observation.frames), state)
+        mosaic = make_mosaic(
+            Image,
+            ImageDraw,
+            dict(observation.frames),
+            state,
+            profile.name,
+        )
         buffer = io.BytesIO()
         mosaic.save(buffer, format="JPEG", quality=88)
         runtime["jpeg"] = buffer.getvalue()
@@ -294,6 +313,7 @@ def main() -> None:
                     "y": state.y,
                     "yaw_degrees": math.degrees(state.yaw),
                     "renderer_ms": float(metadata["render_seconds"]) * 1000.0,
+                    "movement_profile": profile.name,
                     "server_control_to_jpeg_ms": (
                         time.perf_counter() - started
                     ) * 1000.0,
@@ -313,6 +333,13 @@ def main() -> None:
     render_frame()
     server = HTTPServer((args.host, args.port), Handler)
     print(f"browser_url=http://{args.host}:{args.port}")
+    print(
+        "movement_profile="
+        f"{profile.name} "
+        f"limits=+/-{profile.limits.max_abs_forward_meters:.2f}m forward, "
+        f"+/-{profile.limits.max_abs_left_meters:.2f}m left, "
+        f"+/-{math.degrees(profile.limits.max_abs_yaw_radians):.1f}deg yaw"
+    )
     print("controls=W/S/A/D, reset=R")
     try:
         server.serve_forever()

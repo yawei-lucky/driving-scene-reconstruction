@@ -2,7 +2,11 @@
 
 from .control import HumanControl
 from .nerfstudio_renderer import NerfstudioRenderer
-from .logged_offset_controller import LoggedEgoOffsetController
+from .logged_offset_controller import (
+    LoggedEgoOffsetController,
+    LoggedMovementProfile,
+    logged_movement_profile,
+)
 from .renderer_interface import CameraRig, CameraSpec, RenderedObservation, Renderer
 from .scene_coordinates import NearbyPoseLimits, SceneReferenceFrame
 from .splatad_logged_renderer import SplatADLoggedRenderer
@@ -15,6 +19,7 @@ __all__ = [
     "EgoState",
     "HumanControl",
     "LoggedEgoOffsetController",
+    "LoggedMovementProfile",
     "NearbyPoseLimits",
     "NerfstudioRenderer",
     "RenderedObservation",
@@ -22,4 +27,5 @@ __all__ = [
     "SceneReferenceFrame",
     "SimpleVehicleModel",
     "SplatADLoggedRenderer",
+    "logged_movement_profile",
 ]

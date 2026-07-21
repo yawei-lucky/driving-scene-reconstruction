@@ -17,12 +17,14 @@ from driving_scene_reconstruction.sim import (  # noqa: E402
     EgoState,
     HumanControl,
     LoggedEgoOffsetController,
+    LoggedMovementProfile,
     NearbyPoseLimits,
     NerfstudioRenderer,
     RenderedObservation,
     SceneReferenceFrame,
     SimpleVehicleModel,
     SplatADLoggedRenderer,
+    logged_movement_profile,
 )
 
 
@@ -302,6 +304,48 @@ class LoggedEgoOffsetControllerTest(unittest.TestCase):
     def test_reset_is_complete_and_repeatable(self) -> None:
         self.assertEqual(self.controller.reset(), EgoState())
         self.assertEqual(self.controller.reset(), self.controller.reset())
+
+    def test_visible_profile_moves_more_than_safe_profile(self) -> None:
+        safe = logged_movement_profile("safe")
+        visible = logged_movement_profile("visible")
+        safe_controller = LoggedEgoOffsetController.from_profile(1.0, safe)
+        visible_controller = LoggedEgoOffsetController.from_profile(1.0, visible)
+        safe_state = EgoState()
+        visible_state = EgoState()
+        control = HumanControl(throttle=1.0, steer=1.0)
+
+        for _ in range(10):
+            safe_state = safe_controller.step(safe_state, control, 0.1)
+            visible_state = visible_controller.step(visible_state, control, 0.1)
+
+        self.assertGreater(visible_state.x, safe_state.x)
+        self.assertGreater(abs(visible_state.yaw), abs(safe_state.yaw))
+        self.assertGreater(
+            visible.limits.max_abs_forward_meters,
+            safe.limits.max_abs_forward_meters,
+        )
+        self.assertGreater(
+            visible.limits.max_abs_yaw_radians,
+            safe.limits.max_abs_yaw_radians,
+        )
+
+    def test_unknown_logged_movement_profile_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            logged_movement_profile("not-a-profile")
+
+    def test_profile_probe_must_fit_limits(self) -> None:
+        with self.assertRaises(ValueError):
+            LoggedMovementProfile(
+                name="bad",
+                limits=NearbyPoseLimits(max_abs_forward_meters=0.5),
+                max_relative_speed=1.0,
+                relative_acceleration=1.0,
+                relative_braking=1.0,
+                max_yaw_rate_radians=1.0,
+                probe_forward_meters=0.6,
+                probe_left_meters=0.0,
+                probe_yaw_radians=0.0,
+            )
 
 
 if __name__ == "__main__":

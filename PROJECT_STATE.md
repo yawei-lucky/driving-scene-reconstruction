@@ -258,12 +258,38 @@ pass a complete human driving trial or physical-input-to-display latency, and
 does not accept static/baked traffic as correct. Exact evidence is in
 `experiments/stage_h3_logged_renderer_mvp.md`.
 
+### Stage H3 Level 7A — Visible counterfactual movement profile
+
+Completed on 2026-07-21 without retraining:
+
+- kept the accepted static-8k step-7,999 checkpoint fixed;
+- added two explicit logged-time movement profiles:
+  - `safe`: the previous conservative envelope of +/−0.5 m forward,
+    +/−0.25 m left, and +/−2 degrees yaw;
+  - `visible`: +/−2.0 m forward, +/−0.75 m left, and +/−8 degrees yaw, with
+    faster relative acceleration and yaw response for demonstrations;
+- confirmed the earlier small counterfactual probe did change the trained
+  reconstruction, but was visually subtle: +0.10 m left changed the front view
+  by 9.069/255 mean absolute pixels and +1 degree yaw by 14.486/255;
+- confirmed the visible profile has much stronger same-time counterfactual
+  response: +1.25 m forward changed the front view by 13.530/255, +0.60 m left
+  by 16.300/255, and +7 degrees yaw by 33.934/255;
+- rendered the complete 80-frame, six-camera visible-motion sequence with all
+  automated smoke gates passing and p95 Renderer latency of 73.62 ms at 0.5
+  output scale;
+- validated the browser default is now `visible`: three held `W+A` ticks reached
+  x=0.239 m and yaw=7.2 degrees, with server control-to-JPEG times of roughly
+  78-87 ms.
+
+This is a demonstrability improvement, not a new certified safe pose envelope.
+Use `H3_BROWSER_MOVEMENT_PROFILE=safe` for the conservative acceptance run.
+
 ## 3. What The System Can Do Now
 
 ```text
 HumanControl
 → LoggedEgoOffsetController
-→ PandaSet logged pose(time) + bounded EgoState offset
+→ PandaSet logged pose(time) + profiled EgoState offset
 → one rigid transform of the calibrated six-camera rig
 → SplatADLoggedRenderer using accepted static-8k
 → six RGB arrays at about 13.4 Renderer observations/s
@@ -271,7 +297,9 @@ HumanControl
 ```
 
 This is the first repository state where simulated ego motion changes pixels
-produced by the trained reconstruction checkpoint.
+produced by the trained reconstruction checkpoint. The default browser loop now
+uses the `visible` profile so those counterfactual changes are easier for a
+human to see; the `safe` profile preserves the previous conservative bounds.
 
 The earlier H2 fixed-pose Wayve renderer remains available. The H3 path now
 also loads real PandaSet scene 040, uses six cameras, Pandar64 geometry and
@@ -285,6 +313,9 @@ timing. Dynamic traffic remains a later mandatory gate.
 
 - The nearby-pose limits are conservative engineering bounds, not empirically
   certified safe regions.
+- The `visible` browser movement profile deliberately exceeds the earlier
+  conservative envelope to make counterfactual motion obvious; it is not a
+  certified driving-safe region.
 - Static Splatfacto blurs moving vehicles and pedestrians.
 - There is no collision, road-boundary, traffic-agent, or map constraint.
 - H3 uses the logged rig-center trajectory tangent as its offset basis; the
@@ -342,16 +373,19 @@ plan. The short version is:
 
 1. keep static 8k as the fixed visual and geometry checkpoint;
 2. run the Level-7 10 Hz browser loop through the full segment with a human;
-3. accept only steering, throttle, brake, and reset during driving—never ask
+3. start with the visible movement profile when inspecting whether motion is
+   perceptible, then repeat the acceptance run with `safe` if strict envelope
+   evidence is needed;
+4. accept only steering, throttle, brake, and reset during driving—never ask
    the operator to inspect or compensate for reconstruction defects;
-4. preserve the browser-reported control-event-to-screen p95 latency and
+5. preserve the browser-reported control-event-to-screen p95 latency and
    deterministic replay evidence;
-5. execute the six separate gates in
+6. execute the six separate gates in
    `docs/drivability_acceptance_criteria.md` on this low-interference segment;
-6. return dynamic traffic to the main line immediately if it obscures the
+7. return dynamic traffic to the main line immediately if it obscures the
    road, creates a false obstacle, or closed-loop autonomous-driving testing
    begins;
-7. then fix the offending dynamic object/window with the existing actor bounds
+8. then fix the offending dynamic object/window with the existing actor bounds
    and timing evidence rather than restarting broad, ungated training.
 
 In this plan, camera images remain the source of visual appearance. LiDAR

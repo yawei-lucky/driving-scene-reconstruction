@@ -20,6 +20,7 @@ from driving_scene_reconstruction.sim import (  # noqa: E402
     HumanControl,
     LoggedEgoOffsetController,
     SplatADLoggedRenderer,
+    logged_movement_profile,
 )
 
 
@@ -45,6 +46,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-scale", type=float, default=0.5)
     parser.add_argument("--steps", type=int, default=10)
     parser.add_argument("--dt", type=float, default=0.1)
+    parser.add_argument(
+        "--movement-profile",
+        choices=("safe", "visible"),
+        default="safe",
+    )
     return parser.parse_args()
 
 
@@ -66,7 +72,23 @@ def distribution(values: list[float]) -> dict[str, float | int]:
     }
 
 
-def control_for_step(step: int) -> HumanControl:
+def control_for_step(step: int, movement_profile: str) -> HumanControl:
+    if movement_profile == "visible":
+        script = (
+            HumanControl(throttle=1.0, steer=1.0),
+            HumanControl(throttle=1.0, steer=1.0),
+            HumanControl(throttle=1.0, steer=1.0),
+            HumanControl(throttle=1.0, steer=0.6),
+            HumanControl(throttle=0.8),
+            HumanControl(throttle=0.8, steer=-1.0),
+            HumanControl(throttle=0.6, steer=-1.0),
+            HumanControl(steer=-1.0),
+            HumanControl(brake=0.7, steer=-0.5),
+            HumanControl(brake=0.7),
+            HumanControl(throttle=0.6, steer=1.0),
+            HumanControl(throttle=0.8, steer=1.0),
+        )
+        return script[step % len(script)]
     script = (
         HumanControl(throttle=1.0),
         HumanControl(throttle=1.0, steer=0.6),
@@ -94,6 +116,29 @@ def mosaic(image_module: object, frames: dict[str, object]) -> object:
     return canvas
 
 
+def front_probe_comparison(
+    image_module: object,
+    image_draw_module: object,
+    probes: dict[str, object],
+) -> object:
+    cell = (480, 270)
+    canvas = image_module.new("RGB", (cell[0] * 2, cell[1] * 2), "black")
+    for index, (label, frame) in enumerate(probes.items()):
+        tile = image_module.fromarray(frame).convert("RGB")
+        tile.thumbnail(cell, image_module.Resampling.LANCZOS)
+        x = (index % 2) * cell[0] + (cell[0] - tile.width) // 2
+        y = (index // 2) * cell[1] + (cell[1] - tile.height) // 2
+        image_draw_module.Draw(tile).text(
+            (8, 7),
+            label,
+            fill=(255, 216, 77),
+            stroke_width=2,
+            stroke_fill=(0, 0, 0),
+        )
+        canvas.paste(tile, (x, y))
+    return canvas
+
+
 def mean_absolute_pixel_difference(first: object, second: object) -> float:
     import numpy as np
 
@@ -108,15 +153,17 @@ def main() -> None:
         raise ValueError("steps must be positive")
     if not math.isfinite(args.dt) or args.dt <= 0.0:
         raise ValueError("dt must be finite and positive")
-    from PIL import Image
+    from PIL import Image, ImageDraw
     import numpy as np
 
+    profile = logged_movement_profile(args.movement_profile)
     output_dir = args.output_dir.expanduser().resolve()
     frames_dir = output_dir / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
     renderer = SplatADLoggedRenderer(
         args.config,
         output_scale=args.output_scale,
+        limits=profile.limits,
     )
     renderer.load()
     if renderer.checkpoint_step != 7999:
@@ -124,7 +171,10 @@ def main() -> None:
             f"expected accepted static step 7999, got {renderer.checkpoint_step}"
         )
     rig = CameraRig(tuple(CameraSpec(name) for name in CAMERAS))
-    controller = LoggedEgoOffsetController(renderer.logged_duration)
+    controller = LoggedEgoOffsetController.from_profile(
+        renderer.logged_duration,
+        profile,
+    )
 
     # Warm every camera head before timing or repeatability checks.
     renderer.render("040", EgoState(), rig)
@@ -144,14 +194,29 @@ def main() -> None:
 
     probe_time = min(0.4, renderer.logged_duration)
     centre = renderer.render("040", EgoState(time=probe_time), rig)
-    left = renderer.render("040", EgoState(y=0.1, time=probe_time), rig)
+    forward = renderer.render(
+        "040",
+        EgoState(x=profile.probe_forward_meters, time=probe_time),
+        rig,
+    )
+    left = renderer.render(
+        "040",
+        EgoState(y=profile.probe_left_meters, time=probe_time),
+        rig,
+    )
     yaw = renderer.render(
         "040",
-        EgoState(yaw=math.radians(1.0), time=probe_time),
+        EgoState(yaw=profile.probe_yaw_radians, time=probe_time),
         rig,
     )
     pose_probe = {
         "time_seconds": probe_time,
+        "forward_probe_meters": profile.probe_forward_meters,
+        "left_probe_meters": profile.probe_left_meters,
+        "yaw_probe_degrees": math.degrees(profile.probe_yaw_radians),
+        "front_mean_abs_diff_forward": mean_absolute_pixel_difference(
+            centre.frames["front"], forward.frames["front"]
+        ),
         "front_mean_abs_diff_left": mean_absolute_pixel_difference(
             centre.frames["front"], left.frames["front"]
         ),
@@ -161,13 +226,28 @@ def main() -> None:
     }
     for label, observation in (
         ("centre", centre),
-        ("left_p0.10m", left),
-        ("yaw_p1.0deg", yaw),
+        ("forward_probe", forward),
+        ("left_probe", left),
+        ("yaw_probe", yaw),
     ):
         mosaic(Image, dict(observation.frames)).save(
             output_dir / f"pose_probe_{label}.jpg",
             quality=92,
         )
+    front_probe_comparison(
+        Image,
+        ImageDraw,
+        {
+            "centre": centre.frames["front"],
+            f"forward +{profile.probe_forward_meters:.2f}m": forward.frames[
+                "front"
+            ],
+            f"left +{profile.probe_left_meters:.2f}m": left.frames["front"],
+            f"yaw +{math.degrees(profile.probe_yaw_radians):.1f}deg": yaw.frames[
+                "front"
+            ],
+        },
+    ).save(output_dir / "counterfactual_front_probe_comparison.jpg", quality=92)
 
     state = controller.reset()
     latency_ms: list[float] = []
@@ -178,7 +258,7 @@ def main() -> None:
         if step:
             state = controller.step(
                 state,
-                control_for_step(step - 1),
+                control_for_step(step - 1, profile.name),
                 args.dt,
             )
         observation = renderer.render("040", state, rig)
@@ -228,6 +308,20 @@ def main() -> None:
         "scene": "040",
         "logged_duration_seconds": renderer.logged_duration,
         "output_scale": args.output_scale,
+        "movement_profile": profile.name,
+        "movement_limits": {
+            "max_abs_forward_meters": profile.limits.max_abs_forward_meters,
+            "max_abs_left_meters": profile.limits.max_abs_left_meters,
+            "max_abs_yaw_degrees": math.degrees(
+                profile.limits.max_abs_yaw_radians
+            ),
+        },
+        "controller_parameters": {
+            "max_relative_speed_mps": profile.max_relative_speed,
+            "relative_acceleration_mps2": profile.relative_acceleration,
+            "relative_braking_mps2": profile.relative_braking,
+            "max_yaw_rate_dps": math.degrees(profile.max_yaw_rate_radians),
+        },
         "cameras": list(CAMERAS),
         "steps": args.steps,
         "dt_seconds": args.dt,

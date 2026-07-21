@@ -122,6 +122,13 @@ Stage H3 Level 7
 → full 7.899 s sequence rendered as logical frames 0-79
 → six-camera Renderer p95 74.37 ms at 0.5 scale; exact reset passed
 → browser W/S/A/D/R loop validated; server control-to-JPEG p95 78.19 ms
+
+Stage H3 Level 7A
+→ explicit `safe` and `visible` logged-movement profiles
+→ visible profile defaults for the browser: ±2.0 m forward, ±0.75 m left,
+  and ±8° yaw
+→ counterfactual probe confirmed stronger same-time view changes and produced
+  a 7.9 s visible-movement demo
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -186,6 +193,13 @@ This produces the full 80-frame, six-camera sequence plus nearby-pose and reset
 evidence under `/home/yawei/stage3_external/artifacts/`. It requires the pinned
 H3 environment and the existing scene-040 static-8k checkpoint.
 
+For a visibly larger counterfactual-motion check:
+
+```bash
+H3_LOGGED_MOVEMENT_PROFILE=visible \
+scripts/run_stage_h3_pandaset_040.sh logged-renderer-smoke
+```
+
 To drive the same reconstruction from another Tailscale-connected computer:
 
 ```bash
@@ -193,11 +207,13 @@ scripts/run_stage_h3_pandaset_040.sh logged-browser
 ```
 
 Then open `http://100.116.66.57:8766` in one browser tab only. The logged car
-advances automatically; `W/S` adjust its small forward offset speed, `A/D`
-adjust the small heading offset, and `R` restarts the log. `S` does not pause
-the underlying recorded trajectory. The default 0.25 browser render scale
-produces a 1440-pixel-wide six-camera view; it is twice the linear camera
-resolution of the earlier 0.125 viewer that was judged too small.
+advances automatically; `W/S` adjust its forward offset speed, `A/D` adjust
+the heading offset, and `R` restarts the log. `S` does not pause the underlying
+recorded trajectory. The browser now defaults to the visible movement profile
+so counterfactual motion is easy to see. Use `H3_BROWSER_MOVEMENT_PROFILE=safe`
+when running the conservative acceptance envelope. The default 0.25 browser
+render scale produces a 1440-pixel-wide six-camera view; it is twice the
+linear camera resolution of the earlier 0.125 viewer that was judged too small.
 
 ## Current Next Step
 

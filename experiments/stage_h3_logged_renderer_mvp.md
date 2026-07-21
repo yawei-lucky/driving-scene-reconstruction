@@ -162,3 +162,63 @@ Next, run the browser from the real Tailscale client through the complete
 segment and record its displayed key/request-to-frame time plus the remaining
 six drivability gates. Do not train a new dynamic checkpoint before that run
 reveals a road- or obstacle-relevant failure.
+
+## Visible Counterfactual-Movement Follow-Up
+
+Date: 2026-07-21
+
+The first operator impression was that the logged browser's human-controlled
+offset was too small to see clearly. I therefore separated the movement
+envelope into two explicit profiles without changing or retraining the
+accepted static-8k checkpoint:
+
+- `safe`: the original conservative envelope, +/−0.5 m forward, +/−0.25 m
+  left, and +/−2 degrees yaw;
+- `visible`: a demonstration envelope, +/−2.0 m forward, +/−0.75 m left, and
+  +/−8 degrees yaw, with faster acceleration and yaw response.
+
+The safe baseline was rerun first at 12 observations to confirm the original
+counterfactual path was real but subtle:
+
+```text
+artifact: /home/yawei/stage3_external/artifacts/scene_040_counterfactual_baseline
+front +0.10 m left mean absolute change: 9.069/255
+front +1 degree yaw mean absolute change: 14.486/255
+maximum offset after 1.1 s scripted control: x=0.109 m, y=0.0004 m
+```
+
+Then the visible profile rendered the complete 80-frame, six-camera sequence:
+
+```text
+artifact: /home/yawei/stage3_external/artifacts/scene_040_counterfactual_visible
+movement profile: visible
+front +1.25 m forward mean absolute change: 13.530/255
+front +0.60 m left mean absolute change: 16.300/255
+front +7 degree yaw mean absolute change: 33.934/255
+logical frames: 0 through 79
+six-camera Renderer p95: 73.62 ms at 0.5 output scale
+all automated smoke gates: PASS
+```
+
+The new comparison image is:
+
+```text
+/home/yawei/stage3_external/artifacts/scene_040_counterfactual_visible/counterfactual_front_probe_comparison.jpg
+```
+
+The new 7.9-second visible-motion video is:
+
+```text
+/home/yawei/stage3_external/artifacts/scene_040_counterfactual_visible/scene_040_counterfactual_visible_7p9s.mp4
+```
+
+The browser entrypoint now defaults to `visible`, while
+`logged-renderer-smoke` defaults to `safe` unless
+`H3_LOGGED_MOVEMENT_PROFILE=visible` is set. A local browser-service check on
+port 8777 confirmed that default visible browser controls are active: three
+held `W+A` ticks reached x=0.239 m and yaw=7.2 degrees, with server
+control-to-JPEG responses around 78-87 ms.
+
+This follow-up improves demonstrability. It does not certify that the full
+visible envelope is safe for formal driving acceptance; use
+`H3_BROWSER_MOVEMENT_PROFILE=safe` for the conservative acceptance pass.

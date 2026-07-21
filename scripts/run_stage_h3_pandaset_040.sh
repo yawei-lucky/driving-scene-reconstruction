@@ -205,7 +205,8 @@ case "$MODE" in
       --output-dir "$LOGGED_RENDER_ROOT" \
       --output-scale "${H3_LOGGED_RENDER_SCALE:-0.5}" \
       --steps "${H3_LOGGED_RENDER_STEPS:-80}" \
-      --dt "${H3_LOGGED_RENDER_DT:-0.1}"
+      --dt "${H3_LOGGED_RENDER_DT:-0.1}" \
+      --movement-profile "${H3_LOGGED_MOVEMENT_PROFILE:-safe}"
     ;;
   logged-browser)
     if [[ ! -f "$STATIC_CONFIG" || ! -f "$STATIC_CHECKPOINT" ]]; then
@@ -216,6 +217,7 @@ case "$MODE" in
       --config "$STATIC_CONFIG" \
       --output-scale "${H3_BROWSER_RENDER_SCALE:-0.25}" \
       --dt "${H3_LOGGED_RENDER_DT:-0.1}" \
+      --movement-profile "${H3_BROWSER_MOVEMENT_PROFILE:-visible}" \
       --host "${H3_BROWSER_HOST:-0.0.0.0}" \
       --port "${H3_BROWSER_PORT:-8766}"
     ;;
