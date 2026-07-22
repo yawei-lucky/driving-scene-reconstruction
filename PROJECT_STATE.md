@@ -513,6 +513,33 @@ dataparser, shared checkpoint, or MTGS implementation exists yet. Exact evidence
 and the minimum pilot gates are in
 `experiments/stage_h3_multi_trajectory_inventory.md`.
 
+### Stage H3 Level 9B — External multi-trajectory resource probe
+
+Completed on 2026-07-22 without downloading a full sensor log or training:
+
+- enumerated all 1,043 public Argoverse TbV logs and downloaded only their
+  city-frame pose files, totalling 531,619,590 bytes;
+- retained 1,039 trajectories longer than 5 m and scanned pairs only within
+  the same city;
+- generated non-exclusive review queues with 990 same-direction, 301 branch,
+  and 168 opposite-direction candidates;
+- visually verified the Miami TbV logs `OCa... + QMn...` as a common
+  residential approach followed by a right turn versus straight travel;
+- measured 116.83/115.05 m shared-path coverage, 0.319 m nearest-distance p50,
+  and 0.398/54.939-degree heading-difference p50/p95;
+- found no third TbV trajectory within 10 m of that exact junction, so this is
+  a two-branch pilot rather than a straight/left/right trio;
+- confirmed that the public S3 layout permits per-file timestamp-window
+  download and selected two ten-second windows centred on the reviewed branch
+  for a small static SplatAD smoke;
+- added a reproducible inventory/downloader, trajectory plot, machine-readable
+  report, six reviewed source frames outside Git, and four lightweight tests.
+
+This promotes TbV above PandaSet `003+057` for spatial coverage. It does not
+claim cross-traversal LiDAR registration, a working TbV parser, or a trained
+multi-log checkpoint. Exact evidence and the external-resource comparison are
+in `experiments/stage_h3_external_multi_trajectory_resources.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -637,13 +664,23 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 - The selected 003+057 pair changes from daylight to night. A shared model must
   namespace appearance by traversal, and its apparent 3 m GPS offset still
   needs static-LiDAR registration before it counts as added road coverage.
+- TbV supplies no object annotations. Its selected branch pair has different
+  parked/moving vehicles, so the first static smoke may expose ghosts and
+  cannot stand in for a dynamic-traffic solution.
+- The selected TbV location has straight and right-turn traversals but no
+  observed left-turn traversal. It expands the driving topology without yet
+  providing a three-way action set.
+- Free AV2/TbV and MTGS data use is non-commercial under CC BY-NC-SA 4.0; this
+  does not establish commercial data rights for a later product.
 
 ## 5. Current Next Action — Stage H3
 
 Stage H3 now prioritizes a separate minimum multi-trajectory coverage pilot on
-PandaSet scenes 003+057. The accepted scene-040 static-8k checkpoint and its
-world-coordinate browser remain fixed regression evidence; no new PandaSet
-scene can be joined directly to that 64.6 m corridor.
+the verified Argoverse TbV Miami `OCa... + QMn...` straight/right pair. The
+accepted scene-040 static-8k checkpoint and its world-coordinate browser remain
+fixed regression evidence; no new PandaSet scene can be joined directly to
+that 64.6 m corridor. PandaSet `003+057` remains a same-direction parser and
+alignment control, not the main coverage candidate.
 
 Static 8k remains the accepted visual and geometry checkpoint. The agreed
 technical direction is recorded in
@@ -654,12 +691,16 @@ limitation, and borrow UniSim's compositional closed-loop concepts without
 treating generated completion as observed ground truth. NeuRAD, MTGS, and
 UniSim are not currently integrated.
 
-The next implementation is deliberately narrow: parse the shared slices
-`003[0:39] + 057[50:80]`, fit each local scene into common GPS ENU, refine the
-overlap with dynamic-filtered static LiDAR, namespace sensor IDs by traversal,
-disable actor training, and run a 100-step SplatAD save/reload/finite-render
-smoke. Only a passing alignment and smoke justify a 2,000-step shared-static
-pilot. This is MTGS-style data/representation work, not an MTGS integration.
+The next implementation is deliberately narrow: adapt the existing Argoverse
+2 parser to TbV's direct-log layout and missing annotations/per-return offsets,
+while loading each ego-frame sweep as one aggregate LiDAR rather than reusing
+AV2's upper/lower split; fetch only `315972566.15..576.15` from `OCa...` and
+`315968138.15..148.15` from `QMn...`; retain seven ring cameras and LiDAR;
+refine the shared city-pose alignment with static LiDAR; namespace sensor IDs
+by traversal; disable actor training; and run a 100-step SplatAD save/reload/
+finite-render smoke. Only a passing alignment and smoke justify a 2,000-step
+shared-static pilot. This is MTGS-style data/representation work, not an MTGS
+integration.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -672,12 +713,13 @@ plan. The short version is:
    keep-or-rebuild gate;
 4. retain the completed 103-scene trajectory inventory and its negative
    scene-040/multi-direction findings;
-5. validate 003+057 with dynamic-filtered static LiDAR before accepting the
-   apparent lateral separation as added coverage;
-6. implement the smallest shared-static multi-sequence parser and pass a
-   100-step save/reload/finite-render smoke before any longer training;
-7. run a matched 2,000-step pilot only if alignment and smoke gates pass, with
-   per-traversal metrics and shared-road double-geometry review;
+5. retain PandaSet 003+057 only as a low-risk same-direction parser/alignment
+   control;
+6. implement the smallest TbV plus shared-static multi-sequence parser and pass
+   a 100-step save/reload/finite-render smoke before any longer training;
+7. run a matched 2,000-step single-log versus two-log pilot only if alignment
+   and smoke gates pass, with per-traversal metrics, straight/right branch
+   renders, and shared-road double-geometry review;
 8. keep the implemented provisional scene-040 world browser and operator trial
    as regression/acceptance work rather than coupling them to this new scene;
 9. return dynamic actors to the main line when they obscure the road, create a

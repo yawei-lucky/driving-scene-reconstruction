@@ -180,6 +180,12 @@ Stage H3 Level 9A
 → no verified same-intersection multi-direction set remains
 → selected daylight/night scenes 003+057 for a small shared-static coverage pilot
 → about 38 m overlaps for registration and the estimated union route is 127.9 m
+
+Stage H3 Level 9B
+→ listed all 1,043 public Argoverse TbV logs and downloaded only 531.6 MB of poses
+→ found 301 branch-review and 168 opposite-direction metadata candidates
+→ verified one Miami pair with about 115 m of shared approach, then straight/right branches
+→ selected two ten-second windows centred on that branch for the first smoke
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -205,12 +211,15 @@ to retain static-8k for the first restricted human-driving prototype, but it is
 not final 360-degree or geometry-trustworthy acceptance: close side objects
 still deform. Wider +/-2 m and +/-3 m views remain failure/coverage diagnostics.
 
-An archive-wide metadata pilot now shows that the existing PandaSet release
+An archive-wide metadata pilot shows that the existing PandaSet release
 cannot expand scene 040 directly and does not provide a verified straight/left/
 right set at one intersection. It does contain same-direction repeats recorded
-under daylight and night conditions. Scenes 003+057 are the selected separate
-multi-trajectory pilot; this is a data-selection result, not a trained model or
-an MTGS integration.
+under daylight and night conditions. A follow-up metadata-only scan of
+Argoverse TbV found and visually verified a better spatial-coverage candidate:
+two daylight Miami logs share about 115 m of one approach, then split into a
+straight route and a right turn. No left-turn traversal was found at the exact
+junction. This is a data-selection result, not a trained model or an MTGS
+integration.
 
 ## Run
 
@@ -457,12 +466,13 @@ manual drivability gates as `pass`.
 ## Current Next Step
 
 Static 8k remains the fixed accepted scene-040 checkpoint. The current
-engineering next step is a separate, small `003+057` multi-trajectory pilot:
-align the two local scenes through GPS and static LiDAR, merge only a shared
-static background with traversal-specific sensor appearance IDs, and run a
-100-step save/reload/finite-render smoke before considering a 2,000-step result.
-The first slice is `003[0:39] + 057[50:80]`; it deliberately excludes actor
-training.
+engineering next step is a small Argoverse TbV straight/right pilot on the
+verified `OCa... + QMn...` Miami pair. Add the minimum TbV adapter, fetch only
+the ten-second window centred on the reviewed branch from each log, align the
+shared static LiDAR, namespace appearance IDs by traversal, disable actors, and
+run a 100-step save/reload/finite-render smoke before considering a 2,000-step
+result. PandaSet `003+057` is retained only as the lower-risk same-direction
+multi-log parser control.
 
 Do not join another scene to 040: the nearest available track is about 165.3 m
 away. Do not claim intersection branching from the current archive: the scan
@@ -492,6 +502,9 @@ The success criteria are deliberately separate from generic image metrics:
   keep-or-rebuild decision and its limits.
 - `experiments/stage_h3_multi_trajectory_inventory.md` records the all-scene
   trajectory scan, selected 003+057 candidate, and the minimum pilot gates.
+- `experiments/stage_h3_external_multi_trajectory_resources.md` records the
+  external-resource comparison, complete TbV pose scan, verified Miami branch
+  pair, and revised minimum pilot.
 
 See also `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 
