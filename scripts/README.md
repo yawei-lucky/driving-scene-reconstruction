@@ -11,6 +11,24 @@ The scripts now cover five workflows:
 
 ## Stage H3
 
+Before extracting another sequence, scan the existing verified PandaSet ZIP
+for repeat, offset, and multi-direction trajectories:
+
+```bash
+python3 scripts/analyze_stage_h3_pandaset_trajectories.py \
+  --output-json /home/yawei/stage3_external/artifacts/pandaset_multi_trajectory_inventory/trajectory_inventory.json
+```
+
+The scan reads metadata directly from the ZIP and does not extract sensor
+payloads. The optional front-camera contact sheet uses Pillow from the H3
+environment:
+
+```bash
+/home/yawei/stage3_external/envs/h3_splatad/bin/python \
+  scripts/analyze_stage_h3_pandaset_trajectories.py \
+  --contact-sheet /home/yawei/stage3_external/artifacts/pandaset_multi_trajectory_inventory/front_contact_sheet.jpg
+```
+
 Prepare or verify the separate H3 environment:
 
 ```bash

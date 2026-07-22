@@ -486,6 +486,33 @@ reconstruction become the next action only for a concrete segment that harms
 driving or when geometry-trustworthy closed-loop evaluation begins. Evidence
 is in `experiments/stage_h3_corridor_sweep.md`.
 
+### Stage H3 Level 9A — PandaSet multi-trajectory inventory
+
+Completed on 2026-07-22 without extracting another full scene or training:
+
+- scanned GPS, timestamps, front-camera poses, and semantic availability for
+  all 103 scenes directly from the verified PandaSet ZIP;
+- found no second traversal near scene 040: scene 072 is nearest at 165.337 m;
+- flagged 054+078 for direction-change review, then identified it from its
+  trajectory shape and front-camera samples as a partial repeat of the shared
+  approach that exposes no second outbound branch; no verified common-intersection
+  straight/left/right pilot remains;
+- found ten same-direction repeat pairs, generally separated by about 2.9
+  hours and visibly changing from daylight to night;
+- selected scenes 003+057 as the first coverage pilot: 38.0-38.8 m overlap,
+  2.991 m nearest-distance p50, 1.509-degree heading-difference p50, semantics
+  on both scenes, and 127.87 m estimated union route length;
+- measured front-pose-to-GPS rigid-fit p95 residuals of 0.112 m and 0.118 m,
+  sufficient for candidate initialization but not a substitute for static
+  LiDAR registration;
+- added a dependency-free reproducible inventory script, optional H3/Pillow
+  contact sheet, machine-readable report, and six lightweight tests.
+
+This is a metadata and visual candidate-selection result. No multi-sequence
+dataparser, shared checkpoint, or MTGS implementation exists yet. Exact evidence
+and the minimum pilot gates are in
+`experiments/stage_h3_multi_trajectory_inventory.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -603,14 +630,20 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
   did not prove a quality benefit.
 - SplatAD discards trajectory `exists_at_time` during rendering, so an
   out-of-window actor can appear at its nearest pose.
+- No released PandaSet trajectory is close enough to join directly to scene
+  040; the nearest observed track is about 165.3 m away.
+- The current archive scan found same-direction repeat traversals but no
+  verified same-intersection straight/left/right or opposite-direction set.
+- The selected 003+057 pair changes from daylight to night. A shared model must
+  namespace appearance by traversal, and its apparent 3 m GPS offset still
+  needs static-LiDAR registration before it counts as added road coverage.
 
 ## 5. Current Next Action — Stage H3
 
-Stage H3 now prioritizes genuine world-coordinate free driving around the
-accepted static-8k backend. The logged-time Renderer, browser trial tooling,
-and scripted rehearsal remain valid regression evidence, but the logged
-trajectory still supplies the main road motion. They must not be reported as
-acceptance of a vehicle whose steering determines its future world path.
+Stage H3 now prioritizes a separate minimum multi-trajectory coverage pilot on
+PandaSet scenes 003+057. The accepted scene-040 static-8k checkpoint and its
+world-coordinate browser remain fixed regression evidence; no new PandaSet
+scene can be joined directly to that 64.6 m corridor.
 
 Static 8k remains the accepted visual and geometry checkpoint. The agreed
 technical direction is recorded in
@@ -621,10 +654,12 @@ limitation, and borrow UniSim's compositional closed-loop concepts without
 treating generated completion as observed ground truth. NeuRAD, MTGS, and
 UniSim are not currently integrated.
 
-The world-pose Renderer, corrected effective camera time, symmetric vehicle
-paths, brake-to-rest gate, first restricted interactive browser, and cheap
-full-corridor visual sweep have passed. Static-8k is therefore retained for the
-first operator drive; another reconstruction run is not the next blocker.
+The next implementation is deliberately narrow: parse the shared slices
+`003[0:39] + 057[50:80]`, fit each local scene into common GPS ENU, refine the
+overlap with dynamic-filtered static LiDAR, namespace sensor IDs by traversal,
+disable actor training, and run a 100-step SplatAD save/reload/finite-render
+smoke. Only a passing alignment and smoke justify a 2,000-step shared-static
+pilot. This is MTGS-style data/representation work, not an MTGS integration.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -635,17 +670,16 @@ plan. The short version is:
    gate;
 3. retain the completed five-station y=-1/0/+1 m visual sweep as the cheap
    keep-or-rebuild gate;
-4. run a human trial in the implemented provisional world-space browser;
-5. distinguish render completion, human-usable coverage, and
-   geometry-trustworthy closed-loop coverage;
-6. run the existing preflight and logged browser tools as regressions after the
-   renderer/control change, not as substitutes for the new free-driving gates;
-7. use road-region LiDAR evidence on a concrete visually/driving-relevant
-   failure, then compare SplatAD with NeuRAD under matched conditions if known
-   observed surfaces still fail;
-8. if the requested views expose unobserved surfaces, expand to multi-lane,
-   multi-pass, or multi-branch data and an MTGS-style shared reconstruction
-   rather than increasing training steps blindly;
+4. retain the completed 103-scene trajectory inventory and its negative
+   scene-040/multi-direction findings;
+5. validate 003+057 with dynamic-filtered static LiDAR before accepting the
+   apparent lateral separation as added coverage;
+6. implement the smallest shared-static multi-sequence parser and pass a
+   100-step save/reload/finite-render smoke before any longer training;
+7. run a matched 2,000-step pilot only if alignment and smoke gates pass, with
+   per-traversal metrics and shared-road double-geometry review;
+8. keep the implemented provisional scene-040 world browser and operator trial
+   as regression/acceptance work rather than coupling them to this new scene;
 9. return dynamic actors to the main line when they obscure the road, create a
     false obstacle, or responsive traffic/closed-loop agent evaluation begins;
 10. never ask the operator to inspect or compensate for reconstruction defects

@@ -172,6 +172,14 @@ Stage H3 Level 8C
   at -1/0/+1 m, so static-8k is retained as the first simulator background
 → the manual browser now spawns at the recorded corridor start
 → a 30 s GPU/HTTP drive produced 300 observations and progressed 58.61 m
+
+Stage H3 Level 9A
+→ all 103 PandaSet GPS tracks scanned directly from the verified archive
+→ scene 040 has no joinable second traversal; the nearest is 165.3 m away
+→ one direction-change pair only repeats an approach and exposes no second branch
+→ no verified same-intersection multi-direction set remains
+→ selected daylight/night scenes 003+057 for a small shared-static coverage pilot
+→ about 38 m overlaps for registration and the estimated union route is 127.9 m
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -196,6 +204,13 @@ the road readable at five stations and -1/0/+1 m lateral offsets. This is enough
 to retain static-8k for the first restricted human-driving prototype, but it is
 not final 360-degree or geometry-trustworthy acceptance: close side objects
 still deform. Wider +/-2 m and +/-3 m views remain failure/coverage diagnostics.
+
+An archive-wide metadata pilot now shows that the existing PandaSet release
+cannot expand scene 040 directly and does not provide a verified straight/left/
+right set at one intersection. It does contain same-direction repeats recorded
+under daylight and night conditions. Scenes 003+057 are the selected separate
+multi-trajectory pilot; this is a data-selection result, not a trained model or
+an MTGS integration.
 
 ## Run
 
@@ -441,20 +456,20 @@ manual drivability gates as `pass`.
 
 ## Current Next Step
 
-Static 8k remains the fixed accepted checkpoint. The first world-coordinate
-free-driving probe is now implemented and GPU-tested without retraining.
-Simulation time and source-scene time are separated, the six camera poses are
-synchronized to one fixed anchor, and `SimpleVehicleModel` owns position, yaw,
-speed, and the future path.
+Static 8k remains the fixed accepted scene-040 checkpoint. The current
+engineering next step is a separate, small `003+057` multi-trajectory pilot:
+align the two local scenes through GPS and static LiDAR, merge only a shared
+static background with traversal-specific sensor appearance IDs, and run a
+100-step save/reload/finite-render smoke before considering a 2,000-step result.
+The first slice is `003[0:39] + 057[50:80]`; it deliberately excludes actor
+training.
 
-The existing logged-time browser, preflight, trial rehearsal, and trial checker
-remain useful regression tools, but they are not acceptance evidence for
-genuine free driving. The symmetric path/braking probe and separate restricted
-world browser are now implemented. The five-station y=-1/0/+1 m visual sweep
-supports keeping static-8k for the first prototype. The next step is a real
-operator trial; add road-region LiDAR evidence or new training only where that
-trial identifies a driving-relevant failure. Wider +/-2/3 m views remain
-coverage/failure probes.
+Do not join another scene to 040: the nearest available track is about 165.3 m
+away. Do not claim intersection branching from the current archive: the scan
+found same-direction repeats but no verified moving multi-direction pair.
+The existing world browser, corridor sweep, logged-time tools, and eventual
+operator trial remain valid regression evidence while this separate coverage
+pilot is built.
 
 The reconstruction-model decision is recorded in
 `docs/drivable_reconstruction_model_strategy.md`: SplatAD remains the primary
@@ -475,6 +490,8 @@ The success criteria are deliberately separate from generic image metrics:
   visual findings, and remaining corridor boundary.
 - `experiments/stage_h3_corridor_sweep.md` records the full-corridor
   keep-or-rebuild decision and its limits.
+- `experiments/stage_h3_multi_trajectory_inventory.md` records the all-scene
+  trajectory scan, selected 003+057 candidate, and the minimum pilot gates.
 
 See also `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 

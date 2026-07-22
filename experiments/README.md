@@ -34,6 +34,9 @@ Recorded experiments:
 - `stage_h3_drivability_preflight.md`: automated H3 drivability preflight,
   generated review artifacts, browser trial JSON recording, and remaining
   human-review items.
+- `stage_h3_multi_trajectory_inventory.md`: all-scene PandaSet GPS overlap
+  scan, negative scene-040/multi-direction result, selected 003+057 coverage
+  candidate, and the minimum shared-static SplatAD pilot.
 
 Stage H2 connects that H1 checkpoint to the simulator interface. Its design and
 GPU validation record live in `docs/stage_h2_reconstruction_renderer.md`.
