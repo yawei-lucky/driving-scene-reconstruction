@@ -540,6 +540,34 @@ claim cross-traversal LiDAR registration, a working TbV parser, or a trained
 multi-log checkpoint. Exact evidence and the external-resource comparison are
 in `experiments/stage_h3_external_multi_trajectory_resources.md`.
 
+### Stage H3 Level 9C — MTGS published-block trajectory probe
+
+Completed on 2026-07-22 without downloading a complete road block or model:
+
+- audited registered metadata for all six released MTGS road blocks;
+- confirmed every block has eight surround cameras and 3-6 traversals covering
+  approximately 57-105 m per traversal;
+- selected the smallest 3.98 GB Singapore block
+  `365000_144000_365100_144080` as a normal-road candidate;
+- measured three same-direction 84-87 m routes with gentle 11-16 degree bends;
+- confirmed that official training traversals 4 and 5 are 5.17 m apart at
+  nearest-distance p50, while evaluation traversal 3 lies between them at
+  2.36/2.87 m p50;
+- found 270 accepted ego frames, 2,160 valid camera images, and prepared LiDAR,
+  masks, boxes, and instance data;
+- indexed the release tar and identified a selectively downloadable
+  773,241,943-byte checkpoint for this block;
+- recorded the official unseen-traversal-3 metrics as PSNR 22.658, SSIM 0.673,
+  and LPIPS 0.259, without treating them as host or driving measurements;
+- confirmed that official MTGS dependencies conflict with the accepted H3
+  environment and that its guide calls for at least 40 GB training VRAM.
+
+This removes intersection branching as a first-pilot requirement and promotes
+the released MTGS block to the cheapest next checkpoint-load gate. It does not
+claim that the checkpoint fits the host's 24 GB GPU, renders a usable driving
+corridor, or replaces SplatAD. Exact evidence and stop conditions are in
+`experiments/stage_h3_mtgs_published_block_probe.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -670,17 +698,27 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 - The selected TbV location has straight and right-turn traversals but no
   observed left-turn traversal. It expands the driving topology without yet
   providing a three-way action set.
+- A route branch is not required for the first expanded driving pilot. Longer
+  straight or gently curving observed roads remain valid targets.
+- The selected MTGS block is trajectory- and checkpoint-qualified but has not
+  been visually reviewed or loaded on this host. Official training guidance
+  asks for at least 40 GB VRAM, versus the available 24 GB.
+- MTGS requires a separate environment because its Nerfstudio, gsplat, NumPy,
+  and tyro versions conflict with the accepted `h3_splatad` environment.
+- The selected MTGS block contains substantial annotated traffic. Its dynamic
+  reconstruction may be an advantage over static TbV, but false obstacles or
+  actor ghosts remain a driving rejection condition.
 - Free AV2/TbV and MTGS data use is non-commercial under CC BY-NC-SA 4.0; this
   does not establish commercial data rights for a later product.
 
 ## 5. Current Next Action — Stage H3
 
-Stage H3 now prioritizes a separate minimum multi-trajectory coverage pilot on
-the verified Argoverse TbV Miami `OCa... + QMn...` straight/right pair. The
-accepted scene-040 static-8k checkpoint and its world-coordinate browser remain
-fixed regression evidence; no new PandaSet scene can be joined directly to
-that 64.6 m corridor. PandaSet `003+057` remains a same-direction parser and
-alignment control, not the main coverage candidate.
+Stage H3 now prioritizes a checkpoint-only feasibility gate on the released
+MTGS Singapore block `365000_144000_365100_144080`. The accepted scene-040
+static-8k checkpoint and its world-coordinate browser remain fixed regression
+evidence. The verified TbV Miami `OCa... + QMn...` pair remains the first
+SplatAD-native fallback, while PandaSet `003+057` remains a same-direction
+parser/alignment control.
 
 Static 8k remains the accepted visual and geometry checkpoint. The agreed
 technical direction is recorded in
@@ -691,16 +729,14 @@ limitation, and borrow UniSim's compositional closed-loop concepts without
 treating generated completion as observed ground truth. NeuRAD, MTGS, and
 UniSim are not currently integrated.
 
-The next implementation is deliberately narrow: adapt the existing Argoverse
-2 parser to TbV's direct-log layout and missing annotations/per-return offsets,
-while loading each ego-frame sweep as one aggregate LiDAR rather than reusing
-AV2's upper/lower split; fetch only `315972566.15..576.15` from `OCa...` and
-`315968138.15..148.15` from `QMn...`; retain seven ring cameras and LiDAR;
-refine the shared city-pose alignment with static LiDAR; namespace sensor IDs
-by traversal; disable actor training; and run a 100-step SplatAD save/reload/
-finite-render smoke. Only a passing alignment and smoke justify a 2,000-step
-shared-static pilot. This is MTGS-style data/representation work, not an MTGS
-integration.
+The next implementation is deliberately narrow: keep `h3_splatad` untouched;
+create an isolated MTGS environment; download only the 3.98 GB selected block
+and its 773 MB checkpoint member; load the released checkpoint without
+training; record startup and peak VRAM; and render first one, then all eight
+cameras at an observed pose. Only a passing 24 GB load gate justifies a
+five-station visual sweep along evaluation traversal 3 and offsets toward
+training traversals 4 and 5. If load or visual gates fail, stop MTGS and resume
+the already specified TbV adapter and 100-step SplatAD smoke.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -715,11 +751,10 @@ plan. The short version is:
    scene-040/multi-direction findings;
 5. retain PandaSet 003+057 only as a low-risk same-direction parser/alignment
    control;
-6. implement the smallest TbV plus shared-static multi-sequence parser and pass
-   a 100-step save/reload/finite-render smoke before any longer training;
-7. run a matched 2,000-step single-log versus two-log pilot only if alignment
-   and smoke gates pass, with per-traversal metrics, straight/right branch
-   renders, and shared-road double-geometry review;
+6. run the isolated released-MTGS checkpoint load/VRAM/render gate without
+   training or changing the accepted H3 environment;
+7. accept the approximately 84 m MTGS gentle curve only after observed-pose and
+   between-traversal visual sweeps; otherwise resume the TbV/SplatAD pilot;
 8. keep the implemented provisional scene-040 world browser and operator trial
    as regression/acceptance work rather than coupling them to this new scene;
 9. return dynamic actors to the main line when they obscure the road, create a

@@ -37,6 +37,11 @@ Recorded experiments:
 - `stage_h3_multi_trajectory_inventory.md`: all-scene PandaSet GPS overlap
   scan, negative scene-040/multi-direction result, selected 003+057 coverage
   candidate, and the minimum shared-static SplatAD pilot.
+- `stage_h3_external_multi_trajectory_resources.md`: external dataset survey,
+  complete TbV pose scan, verified Miami straight/right pair, and TbV pilot.
+- `stage_h3_mtgs_published_block_probe.md`: trajectory audit of all six MTGS
+  releases, selected Singapore gentle curve, checkpoint evidence, and the
+  isolated load-only gate.
 
 Stage H2 connects that H1 checkpoint to the simulator interface. Its design and
 GPU validation record live in `docs/stage_h2_reconstruction_renderer.md`.

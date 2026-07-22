@@ -5,6 +5,12 @@ Date: 2026-07-22
 Status: metadata and image review passed for one real straight/right branch
 pair; no sensor-window extraction, parser adapter, or training run has started.
 
+Update on 2026-07-22: a route branch is no longer required for the first
+coverage pilot. The data evidence below remains valid, but its resource order
+is superseded by `stage_h3_mtgs_published_block_probe.md`, which identifies an
+approximately 84 m published MTGS gentle-curve block and checkpoint as the
+cheapest next load-only gate.
+
 ## Decision
 
 Do not force the PandaSet `003+057` same-direction pair to carry the spatial

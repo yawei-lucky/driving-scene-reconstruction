@@ -4,6 +4,23 @@ Date: 2026-07-19
 
 Last strategy update: 2026-07-22
 
+## Multi-Trajectory Pilot Update — 2026-07-22
+
+A route branch is no longer required for the first expanded driving pilot. An
+audit of all six published MTGS blocks found a smaller, lower-code-risk gate:
+the 3.98 GB Singapore `365000_144000_365100_144080` release contains three
+same-direction, eight-camera trajectories over an 84-87 m gentle curve, and an
+official checkpoint is available.
+
+Before implementing the TbV adapter, load that checkpoint in a separate MTGS
+environment and test whether it fits the host's 24 GB GPU and renders a usable
+corridor between the three observed tracks. Do not retrain first; the official
+guide calls for at least 40 GB training VRAM. If checkpoint load or visual
+gates fail, return to the verified TbV/SplatAD pilot. This update does not
+replace the accepted scene-040 checkpoint or its regression/operator gates.
+Evidence and exact stop conditions are in
+`../experiments/stage_h3_mtgs_published_block_probe.md`.
+
 ## Free-Driving Architecture Update — 2026-07-22
 
 This decision supersedes older next-action wording later in this document.

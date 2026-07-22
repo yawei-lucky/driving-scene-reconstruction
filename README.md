@@ -186,6 +186,13 @@ Stage H3 Level 9B
 → found 301 branch-review and 168 opposite-direction metadata candidates
 → verified one Miami pair with about 115 m of shared approach, then straight/right branches
 → selected two ten-second windows centred on that branch for the first smoke
+
+Stage H3 Level 9C
+→ audited registered trajectories for all six released MTGS road blocks
+→ promoted the smallest 3.98 GB Singapore block to a normal-road pilot candidate
+→ three same-direction eight-camera traversals cover an 84-87 m gentle curve
+→ official train paths are about 5.2 m apart and the held-out path lies between them
+→ selected a checkpoint-only 24 GB VRAM gate before any new training or parser work
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -220,6 +227,13 @@ two daylight Miami logs share about 115 m of one approach, then split into a
 straight route and a right turn. No left-turn traversal was found at the exact
 junction. This is a data-selection result, not a trained model or an MTGS
 integration.
+
+A follow-up audit removed the unnecessary branch requirement. The smallest
+published MTGS block contains three same-direction 84-87 m trajectories along
+a gentle curve, with two outer training paths and a held-out path between them.
+It is now a credible normal-driving pilot rather than only a method smoke. Its
+released checkpoint still needs a separate-environment load and visual test on
+this host before it can displace the TbV/SplatAD plan.
 
 ## Run
 
@@ -466,13 +480,14 @@ manual drivability gates as `pass`.
 ## Current Next Step
 
 Static 8k remains the fixed accepted scene-040 checkpoint. The current
-engineering next step is a small Argoverse TbV straight/right pilot on the
-verified `OCa... + QMn...` Miami pair. Add the minimum TbV adapter, fetch only
-the ten-second window centred on the reviewed branch from each log, align the
-shared static LiDAR, namespace appearance IDs by traversal, disable actors, and
-run a 100-step save/reload/finite-render smoke before considering a 2,000-step
-result. PandaSet `003+057` is retained only as the lower-risk same-direction
-multi-log parser control.
+engineering next step is a load-only gate for the released MTGS checkpoint on
+`road_block-365000_144000_365100_144080`. Keep it isolated from `h3_splatad`,
+measure peak VRAM on the 24 GB host, render an observed pose, then sample the
+approximately 84 m gentle curve and the space between its three traversals. Do
+not retrain MTGS first: its official guide calls for at least 40 GB GPU memory.
+If checkpoint inference or the driving corridor fails, resume the verified TbV
+`OCa... + QMn...` SplatAD adapter pilot. PandaSet `003+057` remains the
+same-direction parser/alignment control.
 
 Do not join another scene to 040: the nearest available track is about 165.3 m
 away. Do not claim intersection branching from the current archive: the scan
@@ -505,6 +520,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_external_multi_trajectory_resources.md` records the
   external-resource comparison, complete TbV pose scan, verified Miami branch
   pair, and revised minimum pilot.
+- `experiments/stage_h3_mtgs_published_block_probe.md` records the six released
+  MTGS trajectories, selected Singapore gentle curve, official checkpoint
+  evidence, environment conflict, and checkpoint-only gate.
 
 See also `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 
