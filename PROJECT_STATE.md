@@ -462,6 +462,30 @@ still provisional. The next main-line experiment is multi-station visual and
 LiDAR road-support checking along this tube, followed by an operator-driven
 run. Multi-anchor stitching is only needed for segments that fail those checks.
 
+### Stage H3 Level 8C — Full-corridor keep-or-rebuild decision
+
+Completed on 2026-07-22 without retraining:
+
+- added a reproducible five-station x three-lateral-offset sweep over the full
+  64.595 m logged centreline;
+- rendered 15 complete six-camera observations at -1/0/+1 m. All frames were
+  valid; 0.5-scale Renderer latency was 67.41 ms p50, 70.78 ms p95, and
+  73.22 ms maximum;
+- visual inspection found a continuous, readable front road at every sampled
+  station. Close parked cars, foliage, and some side views still stretch, so
+  this is not final 360-degree or closed-loop geometry acceptance;
+- retained static-8k as the background for the first restricted human-driving
+  prototype instead of starting another training run;
+- moved the world-browser spawn to the beginning of the recorded corridor;
+- ran a 30 s GPU/HTTP drive through 300 observations, reaching 58.607 m of
+  64.595 m with no boundary hit and 0.0182 m maximum centreline distance.
+
+This cheap test answers the immediate keep-or-rebuild question. The next gate
+is an operator drive. LiDAR checking, new multi-traversal data, and MTGS-style
+reconstruction become the next action only for a concrete segment that harms
+driving or when geometry-trustworthy closed-loop evaluation begins. Evidence
+is in `experiments/stage_h3_corridor_sweep.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -491,8 +515,10 @@ HumanControl
 ```
 
 This path proves that steering changes the future simulated trajectory and is
-now wired into a restricted browser. It does not certify the full +/-3 m probe,
-or even the provisional +/-1 m logged-centreline tube, as a safe corridor.
+now wired into a restricted browser. The sampled +/-1 m logged-centreline tube
+is accepted for a first human-driving prototype, but it is not certified for
+closed-loop autonomous-driving evaluation; the full +/-3 m probe remains a
+coverage diagnostic.
 
 This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint. The logged browser loop now
@@ -529,12 +555,12 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
   complete envelope still needs systematic visual certification.
 - The world-pose probe freezes one static scene time and disables source
   rolling-shutter motion. Simulated-vehicle rolling shutter is not implemented.
-- The world-pose backend renders +/-3 m and a 21.98-degree turn, but only the
-  plumbing and vehicle-motion semantics pass; +/-1 m is provisional and no
-  visual/geometry corridor is certified.
-- The world browser uses a fixed anchor-centred rectangular boundary rather
-  than distance to a complete logged-road polyline. It intentionally stops and
-  requires reset at the boundary; no reverse gear or collision model exists.
+- The world-pose backend renders +/-3 m and a 21.98-degree turn. The sampled
+  +/-1 m corridor is sufficient for a restricted human trial, not a certified
+  visual/geometry corridor for autonomous-driving evaluation.
+- The world browser uses distance to the complete logged centreline and starts
+  at its recorded beginning. It stops at the provisional tube boundary and
+  requires reset; no reverse gear or collision model exists.
 - H3 Renderer latency passes 100 ms at 0.5 scale, but this excludes physical
   input, mosaic/JPEG encoding, browser transport, and display refresh.
 - Browser trial recording measures browser request-to-image and input-to-image
@@ -596,9 +622,9 @@ treating generated completion as observed ground truth. NeuRAD, MTGS, and
 UniSim are not currently integrated.
 
 The world-pose Renderer, corrected effective camera time, symmetric vehicle
-paths, brake-to-rest gate, and first restricted interactive browser have passed
-their automated/GPU plumbing tests. The main line now moves to corridor
-certification, not another reconstruction run.
+paths, brake-to-rest gate, first restricted interactive browser, and cheap
+full-corridor visual sweep have passed. Static-8k is therefore retained for the
+first operator drive; another reconstruction run is not the next blocker.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -607,15 +633,16 @@ plan. The short version is:
    regression gate;
 2. retain the completed symmetric path and brake-to-rest suite as a regression
    gate;
-3. sample y=-1/0/+1 m at multiple forward stations and compare rendered
-   road-region geometry against static LiDAR where visibility permits;
+3. retain the completed five-station y=-1/0/+1 m visual sweep as the cheap
+   keep-or-rebuild gate;
 4. run a human trial in the implemented provisional world-space browser;
 5. distinguish render completion, human-usable coverage, and
    geometry-trustworthy closed-loop coverage;
 6. run the existing preflight and logged browser tools as regressions after the
    renderer/control change, not as substitutes for the new free-driving gates;
-7. if known observed surfaces fail, compare SplatAD with NeuRAD under matched
-   conditions before replacing the main renderer;
+7. use road-region LiDAR evidence on a concrete visually/driving-relevant
+   failure, then compare SplatAD with NeuRAD under matched conditions if known
+   observed surfaces still fail;
 8. if the requested views expose unobserved surfaces, expand to multi-lane,
    multi-pass, or multi-branch data and an MTGS-style shared reconstruction
    rather than increasing training steps blindly;

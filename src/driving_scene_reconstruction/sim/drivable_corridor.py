@@ -113,6 +113,37 @@ class LoggedCenterlineCorridor:
         assert best is not None
         return best
 
+    def pose_at_progress(
+        self,
+        progress: float,
+        *,
+        simulation_time: float = 0.0,
+        speed: float = 0.0,
+    ) -> EgoState:
+        """Interpolate a world pose at distance ``progress`` along the log."""
+
+        if not math.isfinite(progress) or not 0.0 <= progress <= self.length:
+            raise ValueError(
+                f"corridor progress must be within [0, {self.length:.3f}]m"
+            )
+        travelled = 0.0
+        segments = tuple(zip(self.samples, self.samples[1:]))
+        for index, (left, right) in enumerate(segments):
+            dx = right.x - left.x
+            dy = right.y - left.y
+            segment_length = math.hypot(dx, dy)
+            if progress <= travelled + segment_length or index == len(segments) - 1:
+                fraction = min(1.0, max(0.0, (progress - travelled) / segment_length))
+                return EgoState(
+                    x=left.x + dx * fraction,
+                    y=left.y + dy * fraction,
+                    yaw=math.atan2(dy, dx),
+                    speed=speed,
+                    time=simulation_time,
+                )
+            travelled += segment_length
+        raise RuntimeError("failed to interpolate corridor pose")
+
     def validate(self, state: EgoState) -> None:
         """Reject poses outside the provisional observed-path tube."""
 

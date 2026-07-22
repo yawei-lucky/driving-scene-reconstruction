@@ -165,6 +165,13 @@ Stage H3 Level 8B
 → the manual vehicle remains free, while the centreline supplies a provisional
   data-coverage tube instead of the old fixed 6 m rectangle
 → a 10 s GPU/HTTP run reached x=18.61 m with no boundary hit
+
+Stage H3 Level 8C
+→ a five-station x three-offset sweep sampled the complete 64.6 m corridor
+→ all 15 six-camera observations were valid and the front road stayed usable
+  at -1/0/+1 m, so static-8k is retained as the first simulator background
+→ the manual browser now spawns at the recorded corridor start
+→ a 30 s GPU/HTTP drive produced 300 observations and progressed 58.61 m
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -182,12 +189,13 @@ driving trial. Close vehicles remain blurred or baked into the background, and
 no collision or responsive traffic model exists. Such traffic artifacts are a
 mandatory later blocker whenever they can change the driving decision.
 
-The Level-8B world-pose backend is connected to a separate restricted browser.
+The Level-8 world-pose backend is connected to a separate restricted browser.
 The 64.6 m centreline comes from the synchronized recorded rig trajectory; it
-does not replay or pull the simulated vehicle. Its +/-1 m tube is still an
-experimental width, not a certified corridor. Wider +/-2 m and +/-3 m views
-remain failure/coverage diagnostics because near poles, trees, curbs, and
-sidewalks visibly deform away from the source path.
+does not replay or pull the simulated vehicle. A cheap full-length sweep kept
+the road readable at five stations and -1/0/+1 m lateral offsets. This is enough
+to retain static-8k for the first restricted human-driving prototype, but it is
+not final 360-degree or geometry-trustworthy acceptance: close side objects
+still deform. Wider +/-2 m and +/-3 m views remain failure/coverage diagnostics.
 
 ## Run
 
@@ -266,6 +274,16 @@ turn, left/right lane-change, and full-brake paths with `SimpleVehicleModel`.
 The output JSON deliberately separates plumbing success, motion success, and
 the still-open human/geometry corridor verdict.
 
+For the cheap five-station keep-or-rebuild sweep:
+
+```bash
+scripts/run_stage_h3_pandaset_040.sh corridor-sweep
+```
+
+This reuses static-8k and writes 15 six-camera mosaics, a front-view contact
+sheet, and a JSON timing report. It is a visual coverage decision, not a LiDAR
+geometry certificate.
+
 ### Fastest visual try
 
 For the first browser where steering changes the vehicle's future world path,
@@ -282,14 +300,16 @@ Then open this from a Tailscale-connected browser:
 http://100.116.66.57:8767
 ```
 
-The page opens stopped. Use `W`/up arrow for throttle, release it to coast,
+The page opens stopped at the beginning of the recorded 64.6 m corridor. Use
+`W`/up arrow for throttle, release it to coast,
 `S`/down arrow to brake, `A`/left arrow and `D`/right arrow to steer, and `R`
 to reset. There is no implicit log playback: x/y/yaw come from the vehicle
 model. A 64.6 m centreline derived from the real log now replaces the old fixed
 x +/-6 m rectangle. The vehicle can move freely within a provisional +/-1 m
 tube and +/-30-degree road-heading difference; reaching that support boundary
 stops it and asks for reset. The centreline is a coverage reference, not auto
-playback, and the tube width is not yet a certified road corridor. Use one
+playback. Its +/-1 m width is accepted for this restricted first prototype,
+not certified for closed-loop autonomous-driving evaluation. Use one
 driving browser tab at a time because the service owns one shared vehicle.
 
 For a larger 2880-pixel-wide six-camera image:
@@ -430,9 +450,11 @@ speed, and the future path.
 The existing logged-time browser, preflight, trial rehearsal, and trial checker
 remain useful regression tools, but they are not acceptance evidence for
 genuine free driving. The symmetric path/braking probe and separate restricted
-world browser are now implemented. The next step is to repeat y=-1/0/+1 m
-checks at multiple forward stations, add road-region geometry evidence, and run
-a real operator trial. Wider +/-2/3 m views remain coverage/failure probes.
+world browser are now implemented. The five-station y=-1/0/+1 m visual sweep
+supports keeping static-8k for the first prototype. The next step is a real
+operator trial; add road-region LiDAR evidence or new training only where that
+trial identifies a driving-relevant failure. Wider +/-2/3 m views remain
+coverage/failure probes.
 
 The reconstruction-model decision is recorded in
 `docs/drivable_reconstruction_model_strategy.md`: SplatAD remains the primary
@@ -451,6 +473,8 @@ The success criteria are deliberately separate from generic image metrics:
   acceptance boundary.
 - `experiments/stage_h3_world_pose_probe.md` records the Level-8 world-pose run,
   visual findings, and remaining corridor boundary.
+- `experiments/stage_h3_corridor_sweep.md` records the full-corridor
+  keep-or-rebuild decision and its limits.
 
 See also `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 

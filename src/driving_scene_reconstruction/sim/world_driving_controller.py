@@ -43,6 +43,7 @@ class WorldDrivingController:
         default_factory=lambda: H3_PROVISIONAL_WORLD_DRIVING_LIMITS
     )
     corridor: LoggedCenterlineCorridor | None = None
+    spawn_state: EgoState = field(default_factory=EgoState)
     vehicle_model: SimpleVehicleModel = field(
         default_factory=lambda: SimpleVehicleModel(
             max_steer_angle=math.radians(15.0),
@@ -55,7 +56,11 @@ class WorldDrivingController:
     def reset(self) -> EgoState:
         """Return the fixed world-space spawn state."""
 
-        state = EgoState()
+        state = EgoState(
+            x=self.spawn_state.x,
+            y=self.spawn_state.y,
+            yaw=self.spawn_state.yaw,
+        )
         self._validate(state)
         return state
 

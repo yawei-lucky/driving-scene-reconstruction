@@ -493,7 +493,10 @@ def main() -> None:
                 CORRIDOR_MAX_HEADING_ERROR_DEGREES
             ),
         )
-        controller = WorldDrivingController(corridor=corridor)
+        controller = WorldDrivingController(
+            corridor=corridor,
+            spawn_state=corridor.pose_at_progress(0.0),
+        )
         initial = controller.reset()
         jpeg, metadata = render_candidate(initial)
         commit_state(

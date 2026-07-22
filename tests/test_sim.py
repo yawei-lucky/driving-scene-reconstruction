@@ -245,6 +245,23 @@ class WorldDrivingControllerTest(unittest.TestCase):
         assert measurement is not None
         self.assertAlmostEqual(measurement.distance, 0.0)
 
+    def test_logged_corridor_can_spawn_at_recorded_start(self) -> None:
+        corridor = self.straight_corridor()
+        spawn = corridor.pose_at_progress(0.0)
+        controller = WorldDrivingController(
+            corridor=corridor,
+            spawn_state=spawn,
+        )
+
+        self.assertEqual(controller.reset(), spawn)
+        update = controller.step(
+            controller.reset(),
+            HumanControl(throttle=1.0),
+            dt=0.1,
+        )
+        self.assertFalse(update.boundary_hit)
+        self.assertGreater(update.state.x, spawn.x)
+
     def test_logged_corridor_rejects_leaving_observed_tube(self) -> None:
         corridor = self.straight_corridor()
 
@@ -263,6 +280,19 @@ class WorldDrivingControllerTest(unittest.TestCase):
         self.assertAlmostEqual(measurement.progress, 6.0)
         self.assertAlmostEqual(measurement.lateral_offset, 0.5)
         self.assertAlmostEqual(measurement.distance, 0.5)
+
+    def test_logged_corridor_interpolates_pose_by_progress(self) -> None:
+        corridor = self.straight_corridor()
+
+        state = corridor.pose_at_progress(7.0, simulation_time=2.0, speed=1.5)
+
+        self.assertAlmostEqual(state.x, 5.0)
+        self.assertAlmostEqual(state.y, 0.0)
+        self.assertAlmostEqual(state.yaw, 0.0)
+        self.assertAlmostEqual(state.time, 2.0)
+        self.assertAlmostEqual(state.speed, 1.5)
+        with self.assertRaises(ValueError):
+            corridor.pose_at_progress(corridor.length + 0.01)
 
 
 class SceneCoordinateTest(unittest.TestCase):

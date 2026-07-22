@@ -42,11 +42,16 @@ After independent review, the backend now passes plumbing and motion gates over
 changes, and braking to a fixed pose. A learned 7.036 ms per-camera effective
 time spread was found and removed before the final run. A separate restricted
 world browser now uses a 64.595 m centreline derived from synchronized logged
-poses instead of the initial fixed 6 m rectangle. A 10 s run reached x=18.606 m
-without a boundary hit. The +/-1 m tube remains provisional: the next main-line
-work is multi-station visual/LiDAR road-support evaluation and an operator trial.
-Exact evidence is in
-`../experiments/stage_h3_world_pose_probe.md`.
+poses instead of the initial fixed 6 m rectangle. A five-station x three-offset
+visual sweep kept the front road readable across the route at -1/0/+1 m, so the
+static-8k background is retained for the first restricted human-driving
+prototype. The browser now starts at the recorded corridor beginning; a 30 s
+GPU/HTTP run progressed 58.607 m through 300 observations without a boundary
+hit. The next main-line gate is an operator drive. LiDAR diagnosis or a new
+multi-traversal reconstruction follows a concrete driving-relevant failure,
+not the assumption that every static checkpoint is unusable. Exact evidence is
+in `../experiments/stage_h3_world_pose_probe.md` and
+`../experiments/stage_h3_corridor_sweep.md`.
 
 ## Product-Priority Update — 2026-07-21
 

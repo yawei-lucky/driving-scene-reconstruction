@@ -27,6 +27,7 @@ STATIC_CONFIG="${STATIC_RUN_ROOT}/config.yml"
 STATIC_CHECKPOINT="${STATIC_RUN_ROOT}/nerfstudio_models/step-000007999.ckpt"
 LOGGED_RENDER_ROOT="${H3_LOGGED_RENDER_ROOT:-${H3_ROOT}/artifacts/scene_040_logged_renderer_mvp}"
 WORLD_POSE_PROBE_ROOT="${H3_WORLD_POSE_PROBE_ROOT:-${H3_ROOT}/artifacts/scene_040_world_pose_probe}"
+CORRIDOR_SWEEP_ROOT="${H3_CORRIDOR_SWEEP_ROOT:-${H3_ROOT}/artifacts/scene_040_corridor_sweep}"
 DRIVABILITY_ROOT="${H3_DRIVABILITY_ROOT:-${H3_ROOT}/artifacts/scene_040_drivability_preflight}"
 BROWSER_TRIAL_ROOT="${H3_BROWSER_TRIAL_ROOT:-${H3_ROOT}/artifacts/scene_040_browser_trial}"
 BROWSER_TRIAL_OUTPUT="${H3_BROWSER_TRIAL_OUTPUT:-${BROWSER_TRIAL_ROOT}/browser_trial.json}"
@@ -57,7 +58,7 @@ TIMED_CHECKPOINT="${TIMED_RUN_ROOT}/nerfstudio_models/step-000001999.ckpt"
 PYTHON="${H3_ENV}/bin/python"
 
 usage() {
-  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|logged-renderer-smoke|world-pose-probe|drivability-preflight|logged-browser|world-browser|trial-rehearsal|trial-check|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
+  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|logged-renderer-smoke|world-pose-probe|corridor-sweep|drivability-preflight|logged-browser|world-browser|trial-rehearsal|trial-check|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
 }
 
 if [[ ! -x "$PYTHON" ]]; then
@@ -235,6 +236,19 @@ case "$MODE" in
       --dt "${H3_WORLD_POSE_DT:-0.1}" \
       --initial-speed "${H3_WORLD_POSE_INITIAL_SPEED:-2.0}" \
       --turn-steer "${H3_WORLD_POSE_TURN_STEER:-0.35}"
+    ;;
+  corridor-sweep)
+    if [[ ! -f "$STATIC_CONFIG" || ! -f "$STATIC_CHECKPOINT" ]]; then
+      echo "Accepted static-8k config/checkpoint is missing: $STATIC_RUN_ROOT" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/examples/stage_h3_corridor_sweep.py" \
+      --config "$STATIC_CONFIG" \
+      --output-dir "$CORRIDOR_SWEEP_ROOT" \
+      --output-scale "${H3_CORRIDOR_SWEEP_SCALE:-0.5}" \
+      --anchor-log-time "${H3_CORRIDOR_SWEEP_ANCHOR_TIME:-4.0}" \
+      --forward-stations="${H3_CORRIDOR_SWEEP_STATIONS:--34,-17,0,15,29}" \
+      --lateral-offsets="${H3_CORRIDOR_SWEEP_LATERAL_OFFSETS:--1,0,1}"
     ;;
   drivability-preflight)
     if [[ ! -f "$STATIC_CONFIG" || ! -f "$STATIC_CHECKPOINT" ]]; then
