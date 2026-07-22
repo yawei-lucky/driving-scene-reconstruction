@@ -27,6 +27,7 @@ STATIC_CONFIG="${STATIC_RUN_ROOT}/config.yml"
 STATIC_CHECKPOINT="${STATIC_RUN_ROOT}/nerfstudio_models/step-000007999.ckpt"
 STATIC_RENDER_ROOT="${H3_TBV_STATIC_RENDER_ROOT:-${H3_ROOT}/artifacts/tbv_branch_pair_static_8000_render}"
 STATIC_WORLD_PROBE_ROOT="${H3_TBV_STATIC_WORLD_PROBE_ROOT:-${H3_ROOT}/artifacts/tbv_branch_pair_static_8000_world_pose_probe}"
+DRIVING_EVIDENCE_ROOT="${H3_TBV_DRIVING_EVIDENCE_ROOT:-${H3_ROOT}/artifacts/tbv_branch_pair_driving_adapter}"
 STATIC_SOURCE_CHECKPOINT="${H3_TBV_STATIC_SOURCE_CHECKPOINT:-$PILOT_CHECKPOINT}"
 STATIC_ADDITIONAL_ITERATIONS="${H3_TBV_STATIC_ADDITIONAL_ITERATIONS:-6000}"
 PYTHON="${H3_ENV}/bin/python"
@@ -180,6 +181,19 @@ case "$MODE" in
       --output-scale "${H3_TBV_WORLD_PROBE_SCALE:-0.5}" \
       --expected-checkpoint-step 7999
     ;;
+  driving-adapter)
+    if [[ ! -f "$STATIC_CONFIG" || ! -f "$STATIC_CHECKPOINT" ]]; then
+      echo "TbV 8,000-step config/checkpoint is missing under: $STATIC_RUN_ROOT" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/examples/stage_h3_tbv_driving_adapter.py" \
+      --config "$STATIC_CONFIG" \
+      --output-scale "${H3_TBV_DRIVING_SCALE:-0.5}" \
+      --host "${H3_TBV_DRIVING_HOST:-127.0.0.1}" \
+      --port "${H3_TBV_DRIVING_PORT:-8768}" \
+      --evidence-output "$DRIVING_EVIDENCE_ROOT/tbv_driving_evidence.json" \
+      --expected-checkpoint-step 7999
+    ;;
   paths)
     echo "data: $DATA_ROOT"
     echo "config: $CONFIG"
@@ -193,9 +207,10 @@ case "$MODE" in
     echo "static checkpoint: $STATIC_CHECKPOINT"
     echo "static render: $STATIC_RENDER_ROOT"
     echo "static world pose probe: $STATIC_WORLD_PROBE_ROOT"
+    echo "driving evidence: $DRIVING_EVIDENCE_ROOT"
     ;;
   *)
-    echo "Usage: $0 {download|data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|render-static-8k|world-pose-probe|world-pose-probe-8k|paths}" >&2
+    echo "Usage: $0 {download|data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|render-static-8k|world-pose-probe|world-pose-probe-8k|driving-adapter|paths}" >&2
     exit 2
     ;;
 esac

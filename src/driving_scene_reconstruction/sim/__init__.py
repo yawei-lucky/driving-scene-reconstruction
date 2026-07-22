@@ -1,6 +1,12 @@
 """Lightweight interfaces for the human-drivable simulator loop."""
 
 from .control import HumanControl
+from .branched_route_adapter import (
+    BranchedRouteDrivingAdapter,
+    BranchedRouteUpdate,
+    RouteSupportEvidence,
+    SupportedRoute,
+)
 from .drivable_corridor import (
     CorridorMeasurement,
     LoggedCenterlineCorridor,
@@ -13,6 +19,7 @@ from .logged_offset_controller import (
     logged_movement_profile,
 )
 from .renderer_interface import CameraRig, CameraSpec, RenderedObservation, Renderer
+from .route_driving_evidence import RouteDrivingEvidenceRecorder
 from .scene_coordinates import NearbyPoseLimits, SceneReferenceFrame
 from .splatad_logged_renderer import SplatADLoggedRenderer
 from .splatad_world_renderer import (
@@ -36,6 +43,8 @@ from .world_driving_controller import (
 
 __all__ = [
     "AcceptanceGate",
+    "BranchedRouteDrivingAdapter",
+    "BranchedRouteUpdate",
     "BrowserTrialRecorder",
     "CameraRig",
     "CameraSpec",
@@ -51,11 +60,14 @@ __all__ = [
     "NearbyPoseLimits",
     "NerfstudioRenderer",
     "RenderedObservation",
+    "RouteDrivingEvidenceRecorder",
+    "RouteSupportEvidence",
     "Renderer",
     "SceneReferenceFrame",
     "SimpleVehicleModel",
     "SplatADLoggedRenderer",
     "SplatADWorldRenderer",
+    "SupportedRoute",
     "TrialAcceptanceConfig",
     "WorldDrivingController",
     "WorldDrivingUpdate",

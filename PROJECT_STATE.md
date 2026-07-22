@@ -639,6 +639,42 @@ keyboard-to-display run has been completed. Do not add more static iterations
 before that trial. Exact evidence is in
 `experiments/stage_h3_tbv_world_pose_corridor_probe.md`.
 
+### Stage H3 Level 9F — TbV route adapter and evidence outlet
+
+Completed on 2026-07-22 without retraining:
+
+- added a dependency-light shared-approach/branch adapter around the existing
+  vehicle model and logged-centreline support boundary;
+- spawns at TbV common progress -20 m, stops within 0.5 m of the shared anchor,
+  and requires an explicit straight or right selection before continuing;
+- evaluates both branch candidates at the anchor while retaining their
+  traversal-specific renderer profiles and route-support margins;
+- rejects a candidate beyond the +/-1 m tube without snapping the vehicle pose,
+  then rejects all further control until reset;
+- added a browser that preserves heterogeneous TbV camera aspect ratios,
+  prioritizes the three forward cameras, and exposes `/state.json`,
+  `/frame.jpg`, and `/evidence.json`;
+- added `route_driving_evidence.v0`, recording world state, control keys,
+  route/branch phase, support margins, renderer profile, seven-camera finite
+  status, frame SHA-256, latency, reset/branch events, and optional browser
+  input-to-image timing;
+- ran the actual H3 environment on the RTX 4090 D with checkpoint step 7,999:
+  241 sequential samples, two resets, both branch selections, all camera frames
+  finite, zero committed support violations, and one intentional rejected
+  1.013 m boundary candidate;
+- measured the preserved 0.5-scale machine run at 57.61/59.77 ms p50/p95 for
+  seven-camera rendering and 82.55/85.01 ms p50/p95 for server control through
+  normalized-mosaic JPEG, with 99.46 ms maximum;
+- visually found and fixed an initial mosaic-only crop that showed only the top
+  of the portrait front-centre frame; preserved normalized mosaics now retain
+  the complete forward road view.
+
+This proves route/control/render/evidence plumbing, not human drivability. The
+scripted HTTP run has zero browser timing coverage and is not a physical
+keyboard-to-display test. Artifacts remain outside Git under
+`/home/yawei/stage3_external/artifacts/tbv_branch_pair_driving_adapter/`.
+Exact evidence is in `experiments/stage_h3_tbv_driving_adapter.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -673,20 +709,23 @@ is accepted for a first human-driving prototype, but it is not certified for
 closed-loop autonomous-driving evaluation; the full +/-3 m probe remains a
 coverage diagnostic.
 
-The separate Level-9E experiment path now supports:
+The Level-9F TbV path now supports:
 
 ```text
 Branch-local world pose plus traversal route role
 → experiment-local TbVWorldRenderer at one frozen static scene time
 → one synchronized seven-camera rig with traversal-specific appearance IDs
 → common entrance, straight route, or right-turn route at +/-1 m
-→ seven finite RGB arrays in 58.48 ms p50 at 0.5 output scale
-→ contact sheets, seven-camera mosaics, route plot, and JSON evidence
+→ SimpleVehicleModel continuous control from common progress -20 m
+→ an explicit anchor stop followed by straight or right branch selection
+→ seven finite RGB arrays plus an aspect-ratio-preserving driving mosaic
+→ fail-closed route support and per-control machine-readable JSON evidence
 ```
 
-This is not yet connected to the manual browser or common `Renderer` protocol.
-It establishes the visual/geometry candidate boundary needed for that small
-adapter without changing the accepted PandaSet simulator backend.
+This is connected to a dedicated manual browser but not the common `Renderer`
+protocol. A GPU/HTTP machine rehearsal has exercised both branch transitions
+and the route boundary. A real operator keyboard-to-display trial remains
+required before any human-drivability claim.
 
 This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint. The logged browser loop now
@@ -787,9 +826,10 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 - A route branch is not required for the first expanded driving pilot. Longer
   straight or gently curving observed roads remain valid targets.
 - The TbV 8,000-step checkpoint has passed a sparse seven-camera world-pose
-  probe over two branches and +/-1 m, but not a continuous browser drive,
-  physical input/display latency, wider departure, or lateral ground-truth
-  test. Its 58.48 ms p50 is backend render time only.
+  probe and a machine-driven browser rehearsal over both branches and +/-1 m,
+  but not a real operator trial, physical input/display latency, wider
+  departure, or lateral ground-truth test. The evidence outlet deliberately
+  reports zero browser timing coverage for the machine rehearsal.
 - TbV 8k held-out quality still differs by traversal (PSNR 24.32 versus 22.11).
   Close foliage and parked vehicles deform, and no-annotation vehicle ghosts
   remain a rejection condition if they block the lane or create a false
@@ -807,12 +847,11 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 
 ## 5. Current Next Action — Stage H3
 
-Stage H3 now prioritizes a minimal route-constrained driving adapter for the
-completed TbV Miami `OCa... + QMn...` 8,000-step checkpoint. The accepted
-scene-040 static-8k checkpoint and its world-coordinate browser remain fixed
-regression evidence. The released MTGS Singapore checkpoint remains an
-isolated fallback, while PandaSet `003+057` remains a same-direction
-parser/alignment control.
+Stage H3 now prioritizes the real operator trial for the completed TbV Miami
+`OCa... + QMn...` route adapter. The accepted scene-040 static-8k checkpoint
+and its world-coordinate browser remain fixed regression evidence. The
+released MTGS Singapore checkpoint remains an isolated fallback, while
+PandaSet `003+057` remains a same-direction parser/alignment control.
 
 Both PandaSet scene-040 static-8k and the new TbV static-8k candidate remain
 fixed; they have different data and acceptance boundaries. The agreed
@@ -824,13 +863,12 @@ limitation, and borrow UniSim's compositional closed-loop concepts without
 treating generated completion as observed ground truth. NeuRAD, MTGS, and
 UniSim are not currently integrated.
 
-The next implementation is deliberately narrow: wrap the completed
-experiment-local TbV renderer with the existing lightweight vehicle/browser
-interfaces; spawn at common progress -20 m; clamp the first trial to +/-1 m;
-choose straight or right-turn routing at the shared anchor; and record
-continuous backend plus physical keyboard-to-display latency. Stop the trial
-if baked vehicles obscure the road or permanent geometry becomes unstable. Do
-not train beyond 8k before this gate.
+The adapter implementation is complete. The next action is deliberately
+narrow: run straight and right as separate human reset trials, capture browser
+request-to-image and physical input-to-image timing, inspect the transition
+when the renderer changes traversal profile, and reject any segment where
+baked vehicles, permanent geometry, or temporal artifacts alter the driving
+decision. Do not train beyond 8k before this gate.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -847,8 +885,8 @@ plan. The short version is:
    control;
 6. retain the completed TbV download, registration, 8k checkpoint, held-out
    render, and 36-pose sweep as the multi-traversal regression gate;
-7. implement one minimal route-constrained TbV browser adapter and run a
-   continuous +/-1 m straight/right-turn operator trial before more training;
+7. retain the completed route-constrained TbV browser/evidence adapter and run
+   a continuous +/-1 m straight/right-turn human trial before more training;
 8. keep the released MTGS checkpoint as a separate-environment fallback if the
    TbV continuous trial exposes a model/data limitation rather than plumbing;
 9. keep the implemented provisional scene-040 world browser and operator trial

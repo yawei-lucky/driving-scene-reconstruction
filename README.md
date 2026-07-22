@@ -210,6 +210,17 @@ Stage H3 Level 9E
 → exact-resumed to step 7,999; held-out quality reached 23.2130 / 0.7734 / 0.3805
 → the identical 8k probe removed most road floaters and retained both branches
 → accepted as a restricted front-corridor candidate; continuous driving is pending
+
+Stage H3 Level 9F
+→ connected the TbV 8k world-pose renderer to a route-constrained browser
+→ spawns at common progress -20 m and stops at the shared anchor until the
+  operator selects straight or right
+→ enforces a fail-closed +/-1 m centreline tube and rejects further control
+  after a support-boundary hit until reset
+→ emits state, route support/margins, renderer profile, frame hash, seven-camera
+  render time, server-to-JPEG time, and optional browser timing per control
+→ a 241-sample GPU/HTTP machine rehearsal exercised both branches and one
+  intentional boundary hit; physical keyboard-to-display review remains open
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -320,6 +331,20 @@ scripts/run_stage_h3_pandaset_040.sh drivability-preflight
 This writes a JSON report plus counterfactual and sequence review images under
 `/home/yawei/stage3_external/artifacts/scene_040_drivability_preflight/`. It is
 a backend preflight, not a substitute for the human browser driving trial.
+
+For the minimal TbV shared-entrance driving adapter, using the fixed 8k
+checkpoint without retraining:
+
+```bash
+scripts/run_stage_h3_tbv_pilot.sh driving-adapter
+```
+
+Open `http://localhost:8768` through the existing SSH/VS Code port-forwarding
+path. Drive with W/S/A/D, reset with R, and choose `1` for straight or `2` for
+right when the vehicle stops at the shared anchor. The live evidence report is
+available at `/evidence.json` and is also written outside Git under
+`/home/yawei/stage3_external/artifacts/tbv_branch_pair_driving_adapter/`.
+The report is evidence-only; it does not certify the rendered scene.
 
 For the true world-pose backend and current corridor probe, without retraining:
 
@@ -500,15 +525,16 @@ manual drivability gates as `pass`.
 
 ## Current Next Step
 
-The PandaSet and TbV static-8k checkpoints now remain fixed. The current
-engineering next step is a minimal route-constrained TbV driving adapter using
-the completed seven-camera world-pose renderer: spawn at the -20 m common
-station, clamp the first trial to +/-1 m, offer straight versus right-turn
-routing at the shared anchor, and record continuous backend plus physical
-keyboard-to-display latency. Do not add more static TbV iterations before this
-operator trial. The published MTGS checkpoint remains a separate-environment
-fallback; PandaSet `003+057` remains the same-direction parser/alignment
-control.
+The PandaSet and TbV static-8k checkpoints now remain fixed. The minimal
+route-constrained TbV adapter and evidence outlet are implemented and have
+passed a GPU/HTTP machine rehearsal. The next gate is the real operator run:
+drive the common approach, select straight and right in separate reset runs,
+capture physical keyboard-to-image timing through the browser evidence path,
+and record whether road continuity, branch choice, traversal-profile switching,
+and baked traffic remain decision-safe. Do not add more static TbV iterations
+before this operator gate. The published MTGS checkpoint remains a
+separate-environment fallback; PandaSet `003+057` remains the same-direction
+parser/alignment control.
 
 Do not join another scene to 040: the nearest available track is about 165.3 m
 away. Do not claim intersection branching from the current archive: the scan
@@ -548,6 +574,9 @@ The success criteria are deliberately separate from generic image metrics:
   multi-traversal parser, LiDAR alignment, and 100/2,000-step reload renders.
 - `experiments/stage_h3_tbv_world_pose_corridor_probe.md` records the 2k/8k
   world-pose sweeps, exact-resume recovery, visual decision, and next gate.
+- `experiments/stage_h3_tbv_driving_adapter.md` records the route adapter,
+  evidence schema, GPU/HTTP rehearsal, display correction, and remaining human
+  gate.
 
 See also `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 
@@ -565,6 +594,7 @@ scripts/run_stage_h3_tbv_pilot.sh world-pose-probe
 scripts/run_stage_h3_tbv_pilot.sh static-8k
 scripts/run_stage_h3_tbv_pilot.sh render-static-8k
 scripts/run_stage_h3_tbv_pilot.sh world-pose-probe-8k
+scripts/run_stage_h3_tbv_pilot.sh driving-adapter
 scripts/run_stage_h3_tbv_pilot.sh paths
 ```
 
