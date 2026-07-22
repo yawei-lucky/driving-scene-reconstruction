@@ -405,6 +405,63 @@ full corridor does not. +/-1 m is the current first candidate for a restricted
 interactive prototype. Exact evidence is in
 `experiments/stage_h3_world_pose_probe.md`.
 
+The initial claim of zero effective camera-time spread in this Level-8 run was
+superseded by the independent review and corrected Level-8A run below.
+
+### Stage H3 Level 8A — Reviewed motion paths and restricted browser
+
+Completed on 2026-07-22 without retraining:
+
+- independent review found that SplatAD still added learned per-camera
+  time-to-centre adjustments after input rolling-shutter metadata was zeroed;
+- disabled that model path, removing the measured 7.036 ms effective scene-time
+  spread, and added a same-pose/different-simulation-time pixel-exact gate;
+- made anchor initialization transactional and restricted anchors to the real
+  six-camera interpolation interval of 0.031291-7.849195 seconds;
+- expanded the probe to 206 complete six-camera observations over straight,
+  symmetric left/right turns, symmetric left/right lane changes, and full
+  braking from 3 m/s;
+- passed all plumbing and motion gates: mirrored paths, no straight drift,
+  lane-change heading recovery, exact brake-rest pose/pixels, and non-frozen
+  moving imagery;
+- measured 0.5-scale Renderer latency of 68.14 ms p50, 70.99 ms p95, and
+  72.19 ms maximum;
+- added a separate `world-browser` on port 8767 with W/S/A/D/R, 2 m/s speed
+  cap, 15-degree maximum wheel angle, transactional render-before-state commit,
+  and explicit stop-on-boundary behavior;
+- GPU/HTTP exercised left acceleration, right recovery, coasting, braking,
+  reset, and a deliberate yaw-boundary hit. Warm sampled requests were about
+  68-74 ms; physical browser input-to-display remains an operator measurement.
+
+The provisional browser boundary is x +/-6 m, y +/-1 m, and yaw +/-15 degrees.
+It is containment for an experiment, not a certified drivable corridor.
+
+This fixed rectangle was superseded by Level 8B below.
+
+### Stage H3 Level 8B — Logged-centreline free-driving tube
+
+Completed on 2026-07-22 without retraining:
+
+- transformed the synchronized recorded rig path into the same anchor-local
+  world coordinates used by free driving, producing a 64.595 m centreline;
+- replaced the arbitrary 6 m browser rectangle with a provisional tube around
+  that centreline. The centreline constrains reconstruction support only; the
+  vehicle pose remains entirely controlled by `SimpleVehicleModel` and human
+  steering/throttle/brake input;
+- exposed road progress and distance from the recorded centreline in the
+  browser status;
+- ran a 10.0 s GPU/HTTP control sequence through 100 six-camera observations.
+  It reached x=18.606 m at 2 m/s without a boundary hit, with maximum distance
+  from the centreline of 0.0134 m and a final server control-to-JPEG time of
+  68.07 ms at 0.25 scale;
+- visually inspected start, 5 s, and 10 s mosaics. The road and intersection
+  advance coherently well beyond the former 6 m limit.
+
+The logged centreline is genuine source-data support, but its +/-1 m tube is
+still provisional. The next main-line experiment is multi-station visual and
+LiDAR road-support checking along this tube, followed by an operator-driven
+run. Multi-anchor stitching is only needed for segments that fail those checks.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -429,15 +486,16 @@ HumanControl
 → SplatADWorldRenderer at one frozen static scene time
 → time-synchronized fixed six-camera rig
 → six RGB views from the simulated future world pose
-→ lateral/yaw and continuous-turn probe artifacts plus JSON evidence
+→ six symmetric/straight/braking trajectory artifacts plus JSON evidence
+→ a separate manual-default browser bounded by the logged-centreline tube
 ```
 
-This path proves that steering changes the future simulated trajectory. It is
-not yet wired into the browser and it does not certify the full +/-3 m probe as
-a safe driving corridor.
+This path proves that steering changes the future simulated trajectory and is
+now wired into a restricted browser. It does not certify the full +/-3 m probe,
+or even the provisional +/-1 m logged-centreline tube, as a safe corridor.
 
 This is the first repository state where simulated ego motion changes pixels
-produced by the trained reconstruction checkpoint. The default browser loop now
+produced by the trained reconstruction checkpoint. The logged browser loop now
 uses the `visible` profile so those counterfactual changes are easier for a
 human to see, and it now opens stopped: logged time advances only while W/S/A/D
 or the matching arrow key is used to begin driving. Releasing the accelerator
@@ -472,7 +530,11 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 - The world-pose probe freezes one static scene time and disables source
   rolling-shutter motion. Simulated-vehicle rolling shutter is not implemented.
 - The world-pose backend renders +/-3 m and a 21.98-degree turn, but only the
-  plumbing passes; +/-1 m is provisional and no corridor is certified.
+  plumbing and vehicle-motion semantics pass; +/-1 m is provisional and no
+  visual/geometry corridor is certified.
+- The world browser uses a fixed anchor-centred rectangular boundary rather
+  than distance to a complete logged-road polyline. It intentionally stops and
+  requires reset at the boundary; no reverse gear or collision model exists.
 - H3 Renderer latency passes 100 ms at 0.5 scale, but this excludes physical
   input, mosaic/JPEG encoding, browser transport, and display refresh.
 - Browser trial recording measures browser request-to-image and input-to-image
@@ -533,21 +595,21 @@ limitation, and borrow UniSim's compositional closed-loop concepts without
 treating generated completion as observed ground truth. NeuRAD, MTGS, and
 UniSim are not currently integrated.
 
-The first backend milestone is complete: the world-pose Renderer, synchronized
-rig, vehicle-model path, +/-1/2/3 m probes, and continuous left turn passed GPU
-plumbing tests. The main line now moves to corridor certification and a
-restricted interactive world-space browser, not another reconstruction run.
+The world-pose Renderer, corrected effective camera time, symmetric vehicle
+paths, brake-to-rest gate, and first restricted interactive browser have passed
+their automated/GPU plumbing tests. The main line now moves to corridor
+certification, not another reconstruction run.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
 
 1. keep static 8k fixed and retain the completed world-pose probe as a
    regression gate;
-2. add symmetric left/right turns, a lane change, straight motion, and braking
-   to a fixed world position;
-3. compare rendered road-region geometry against static LiDAR where visibility
-   permits;
-4. start a separate world-space browser around a provisional +/-1 m envelope;
+2. retain the completed symmetric path and brake-to-rest suite as a regression
+   gate;
+3. sample y=-1/0/+1 m at multiple forward stations and compare rendered
+   road-region geometry against static LiDAR where visibility permits;
+4. run a human trial in the implemented provisional world-space browser;
 5. distinguish render completion, human-usable coverage, and
    geometry-trustworthy closed-loop coverage;
 6. run the existing preflight and logged browser tools as regressions after the

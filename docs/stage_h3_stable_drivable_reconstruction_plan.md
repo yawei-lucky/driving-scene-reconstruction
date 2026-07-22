@@ -37,12 +37,15 @@ The complete decision, method boundaries, execution order, promotion gates,
 and primary references are recorded in
 `drivable_reconstruction_model_strategy.md`.
 
-The backend passed all plumbing gates over 45 six-camera observations and a
-continuous 21.98-degree left turn. The full +/-3 m corridor is not accepted:
-near poles, trees, curbs, and sidewalks deform away from the source path. The
-next main-line work is symmetric continuous-path and road-geometry evaluation,
-followed by a separate restricted world-space browser around the provisional
-+/-1 m candidate. Exact evidence is in
+After independent review, the backend now passes plumbing and motion gates over
+206 six-camera observations: straight motion, symmetric turns, symmetric lane
+changes, and braking to a fixed pose. A learned 7.036 ms per-camera effective
+time spread was found and removed before the final run. A separate restricted
+world browser now uses a 64.595 m centreline derived from synchronized logged
+poses instead of the initial fixed 6 m rectangle. A 10 s run reached x=18.606 m
+without a boundary hit. The +/-1 m tube remains provisional: the next main-line
+work is multi-station visual/LiDAR road-support evaluation and an operator trial.
+Exact evidence is in
 `../experiments/stage_h3_world_pose_probe.md`.
 
 ## Product-Priority Update — 2026-07-21

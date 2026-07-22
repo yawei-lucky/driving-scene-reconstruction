@@ -16,7 +16,10 @@ from driving_scene_reconstruction.sim import (  # noqa: E402
     CameraSpec,
     EgoState,
     HumanControl,
+    H3_PROVISIONAL_WORLD_DRIVING_LIMITS,
     H3_WORLD_POSE_PROBE_LIMITS,
+    LoggedCenterlineCorridor,
+    LoggedCenterlineSample,
     LoggedEgoOffsetController,
     LoggedMovementProfile,
     NearbyPoseLimits,
@@ -26,6 +29,7 @@ from driving_scene_reconstruction.sim import (  # noqa: E402
     SimpleVehicleModel,
     SplatADLoggedRenderer,
     SplatADWorldRenderer,
+    WorldDrivingController,
     logged_movement_profile,
 )
 
@@ -115,6 +119,23 @@ class SimpleVehicleModelTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             SimpleVehicleModel(wheelbase=math.nan)
 
+    def test_optional_speed_limit_caps_forward_speed(self) -> None:
+        model = SimpleVehicleModel(max_speed=2.0)
+
+        next_state = model.step(
+            EgoState(speed=1.9),
+            HumanControl(throttle=1.0),
+            dt=1.0,
+        )
+
+        self.assertAlmostEqual(next_state.speed, 2.0)
+
+    def test_invalid_optional_speed_limit_is_rejected(self) -> None:
+        for max_speed in (0.0, -1.0, math.inf, math.nan):
+            with self.subTest(max_speed=max_speed):
+                with self.assertRaises(ValueError):
+                    SimpleVehicleModel(max_speed=max_speed)
+
     def test_non_finite_state_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             SimpleVehicleModel().step(
@@ -132,6 +153,116 @@ class RendererInterfaceTest(unittest.TestCase):
 
         self.assertEqual(tuple(observation.frames), ("front", "rear"))
         self.assertEqual(observation.metadata["scene"], "test_scene")
+
+
+class WorldDrivingControllerTest(unittest.TestCase):
+    @staticmethod
+    def straight_corridor() -> LoggedCenterlineCorridor:
+        return LoggedCenterlineCorridor(
+            (
+                LoggedCenterlineSample(0, 0.0, -2.0, 0.0, 0.0),
+                LoggedCenterlineSample(1, 0.1, 0.0, 0.0, 0.0),
+                LoggedCenterlineSample(2, 0.2, 10.0, 0.0, 0.0),
+            ),
+            half_width=1.0,
+            max_heading_error=math.radians(30.0),
+        )
+
+    def test_throttle_and_steering_change_absolute_future_pose(self) -> None:
+        controller = WorldDrivingController()
+        state = controller.reset()
+
+        for _ in range(10):
+            update = controller.step(
+                state,
+                HumanControl(throttle=1.0, steer=0.4),
+                dt=0.1,
+            )
+            self.assertFalse(update.boundary_hit)
+            state = update.state
+
+        self.assertGreater(state.x, 0.0)
+        self.assertGreater(state.y, 0.0)
+        self.assertGreater(state.yaw, 0.0)
+        self.assertGreater(state.speed, 0.0)
+
+    def test_releasing_throttle_coasts_and_brake_stops(self) -> None:
+        controller = WorldDrivingController()
+        accelerated = controller.step(
+            controller.reset(),
+            HumanControl(throttle=1.0),
+            dt=0.5,
+        ).state
+        coasting = controller.step(accelerated, HumanControl(), dt=0.1).state
+        state = coasting
+        for _ in range(10):
+            state = controller.step(
+                state,
+                HumanControl(brake=1.0),
+                dt=0.1,
+            ).state
+
+        self.assertGreater(coasting.x, accelerated.x)
+        self.assertLess(coasting.speed, accelerated.speed)
+        self.assertAlmostEqual(state.speed, 0.0)
+
+    def test_boundary_rejects_pose_instead_of_clamping_it(self) -> None:
+        controller = WorldDrivingController()
+        state = EgoState(
+            x=H3_PROVISIONAL_WORLD_DRIVING_LIMITS.max_abs_forward_meters - 0.01,
+            speed=2.0,
+        )
+
+        update = controller.step(state, HumanControl(throttle=1.0), dt=0.1)
+
+        self.assertTrue(update.boundary_hit)
+        self.assertIsNotNone(update.boundary_reason)
+        self.assertAlmostEqual(update.state.x, state.x)
+        self.assertAlmostEqual(update.state.y, state.y)
+        self.assertAlmostEqual(update.state.yaw, state.yaw)
+        self.assertAlmostEqual(update.state.speed, 0.0)
+        self.assertAlmostEqual(update.state.time, state.time + 0.1)
+
+    def test_reset_is_exact(self) -> None:
+        controller = WorldDrivingController()
+
+        self.assertEqual(controller.reset(), EgoState())
+        self.assertEqual(controller.reset(), controller.reset())
+
+    def test_logged_corridor_replaces_fixed_six_meter_rectangle(self) -> None:
+        controller = WorldDrivingController(corridor=self.straight_corridor())
+
+        update = controller.step(
+            EgoState(x=5.95, speed=2.0),
+            HumanControl(),
+            dt=0.1,
+        )
+
+        self.assertFalse(update.boundary_hit)
+        self.assertGreater(update.state.x, 6.0)
+        measurement = controller.corridor_measurement(update.state)
+        self.assertIsNotNone(measurement)
+        assert measurement is not None
+        self.assertAlmostEqual(measurement.distance, 0.0)
+
+    def test_logged_corridor_rejects_leaving_observed_tube(self) -> None:
+        corridor = self.straight_corridor()
+
+        corridor.validate(EgoState(x=3.0, y=1.0))
+        with self.assertRaises(ValueError):
+            corridor.validate(EgoState(x=3.0, y=1.01))
+        with self.assertRaises(ValueError):
+            corridor.validate(EgoState(x=3.0, yaw=math.radians(31.0)))
+
+    def test_logged_corridor_reports_progress_and_signed_offset(self) -> None:
+        corridor = self.straight_corridor()
+
+        measurement = corridor.measure(EgoState(x=4.0, y=0.5))
+
+        self.assertAlmostEqual(corridor.length, 12.0)
+        self.assertAlmostEqual(measurement.progress, 6.0)
+        self.assertAlmostEqual(measurement.lateral_offset, 0.5)
+        self.assertAlmostEqual(measurement.distance, 0.5)
 
 
 class SceneCoordinateTest(unittest.TestCase):
@@ -235,6 +366,7 @@ class SplatADWorldRendererConfigurationTest(unittest.TestCase):
             renderer = SplatADWorldRenderer(config.name)
 
         self.assertFalse(renderer.is_loaded)
+        self.assertFalse(renderer.is_world_ready)
         self.assertAlmostEqual(renderer.anchor_log_time, 4.0)
 
     def test_invalid_anchor_time_is_rejected_before_loading(self) -> None:

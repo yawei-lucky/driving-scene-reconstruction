@@ -28,6 +28,7 @@ class SimpleVehicleModel:
     max_acceleration: float = 3.0
     max_braking: float = 7.0
     linear_drag: float = 0.1
+    max_speed: float | None = None
 
     def __post_init__(self) -> None:
         parameters = {
@@ -49,6 +50,9 @@ class SimpleVehicleModel:
             raise ValueError("max_braking cannot be negative")
         if self.linear_drag < 0.0:
             raise ValueError("linear_drag cannot be negative")
+        if self.max_speed is not None:
+            if not math.isfinite(self.max_speed) or self.max_speed <= 0.0:
+                raise ValueError("max_speed must be finite and positive when set")
 
     def step(
         self,
@@ -71,6 +75,8 @@ class SimpleVehicleModel:
             - self.linear_drag * state.speed
         )
         next_speed = max(0.0, state.speed + acceleration * dt)
+        if self.max_speed is not None:
+            next_speed = min(next_speed, self.max_speed)
         travel_speed = 0.5 * (state.speed + next_speed)
 
         steering_angle = control.steer * self.max_steer_angle

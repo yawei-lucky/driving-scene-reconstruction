@@ -1,6 +1,11 @@
 """Lightweight interfaces for the human-drivable simulator loop."""
 
 from .control import HumanControl
+from .drivable_corridor import (
+    CorridorMeasurement,
+    LoggedCenterlineCorridor,
+    LoggedCenterlineSample,
+)
 from .nerfstudio_renderer import NerfstudioRenderer
 from .logged_offset_controller import (
     LoggedEgoOffsetController,
@@ -23,16 +28,25 @@ from .trial_acceptance import (
 )
 from .trial_recorder import BrowserTrialRecorder
 from .vehicle_model import SimpleVehicleModel
+from .world_driving_controller import (
+    H3_PROVISIONAL_WORLD_DRIVING_LIMITS,
+    WorldDrivingController,
+    WorldDrivingUpdate,
+)
 
 __all__ = [
     "AcceptanceGate",
     "BrowserTrialRecorder",
     "CameraRig",
     "CameraSpec",
+    "CorridorMeasurement",
     "EgoState",
     "HumanControl",
     "H3_WORLD_POSE_PROBE_LIMITS",
+    "H3_PROVISIONAL_WORLD_DRIVING_LIMITS",
     "LoggedEgoOffsetController",
+    "LoggedCenterlineCorridor",
+    "LoggedCenterlineSample",
     "LoggedMovementProfile",
     "NearbyPoseLimits",
     "NerfstudioRenderer",
@@ -43,6 +57,8 @@ __all__ = [
     "SplatADLoggedRenderer",
     "SplatADWorldRenderer",
     "TrialAcceptanceConfig",
+    "WorldDrivingController",
+    "WorldDrivingUpdate",
     "evaluate_trial_report",
     "logged_movement_profile",
     "load_trial_report",

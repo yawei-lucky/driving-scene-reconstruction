@@ -151,6 +151,20 @@ Stage H3 Level 8
 → six camera poses synchronized to one anchor time and moved as one rigid rig
 → +/-1/2/3 m, +/-5/10 deg, and a continuous 22 deg left turn rendered
 → 45 six-camera observations passed; 0.5-scale Renderer p95 68.46 ms
+
+Stage H3 Level 8A
+→ independent review found and removed a learned 7.04 ms camera-time spread
+→ 206 six-camera observations cover straight, symmetric turns, symmetric lane
+  changes, and a complete brake-to-rest path
+→ plumbing and vehicle-motion gates pass; 0.5-scale Renderer p95 70.99 ms
+→ separate manual-default world browser uses real x/y/yaw dynamics and stops at
+  an explicit provisional x +/-6 m, y +/-1 m, yaw +/-15 deg boundary
+
+Stage H3 Level 8B
+→ synchronized source poses provide a 64.6 m logged centreline in world space
+→ the manual vehicle remains free, while the centreline supplies a provisional
+  data-coverage tube instead of the old fixed 6 m rectangle
+→ a 10 s GPU/HTTP run reached x=18.61 m with no boundary hit
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -168,10 +182,12 @@ driving trial. Close vehicles remain blurred or baked into the background, and
 no collision or responsive traffic model exists. Such traffic artifacts are a
 mandatory later blocker whenever they can change the driving decision.
 
-The Level-8 world-pose backend is not yet connected to the browser. Its visual
-probe suggests +/-1 m is a reasonable first restricted free-driving candidate;
-the wider +/-2 m and +/-3 m views remain unaccepted because near poles, trees,
-curbs, and sidewalks visibly deform away from the source path.
+The Level-8B world-pose backend is connected to a separate restricted browser.
+The 64.6 m centreline comes from the synchronized recorded rig trajectory; it
+does not replay or pull the simulated vehicle. Its +/-1 m tube is still an
+experimental width, not a certified corridor. Wider +/-2 m and +/-3 m views
+remain failure/coverage diagnostics because near poles, trees, curbs, and
+sidewalks visibly deform away from the source path.
 
 ## Run
 
@@ -245,33 +261,50 @@ scripts/run_stage_h3_pandaset_040.sh world-pose-probe
 ```
 
 This freezes one static scene time, synchronizes the six camera poses, renders
-the requested +/-1/2/3 m and yaw probes, and drives one continuous turn with
-`SimpleVehicleModel`. The output JSON deliberately separates plumbing success
-from the still-open human/geometry corridor verdict.
+the requested +/-1/2/3 m and yaw probes, then executes straight, left/right
+turn, left/right lane-change, and full-brake paths with `SimpleVehicleModel`.
+The output JSON deliberately separates plumbing success, motion success, and
+the still-open human/geometry corridor verdict.
 
 ### Fastest visual try
 
-On the project host `shidi`:
+For the first browser where steering changes the vehicle's future world path,
+run this on the project host `shidi`:
 
 ```bash
 cd /home/yawei/driving-scene-reconstruction
-scripts/run_stage_h3_pandaset_040.sh logged-browser
+scripts/run_stage_h3_pandaset_040.sh world-browser
 ```
 
 Then open this from a Tailscale-connected browser:
 
 ```text
-http://100.116.66.57:8766
+http://100.116.66.57:8767
 ```
 
-Use `W`/up arrow to increase speed, release it to coast at the current speed,
-`S`/down arrow to brake to a stop, `A`/left arrow and `D`/right arrow to steer,
-and `R` to reset. The page also
-has an auto-play/pause button and still opens in manual control by default. If
-port `8766` is already in use, choose another port:
+The page opens stopped. Use `W`/up arrow for throttle, release it to coast,
+`S`/down arrow to brake, `A`/left arrow and `D`/right arrow to steer, and `R`
+to reset. There is no implicit log playback: x/y/yaw come from the vehicle
+model. A 64.6 m centreline derived from the real log now replaces the old fixed
+x +/-6 m rectangle. The vehicle can move freely within a provisional +/-1 m
+tube and +/-30-degree road-heading difference; reaching that support boundary
+stops it and asks for reset. The centreline is a coverage reference, not auto
+playback, and the tube width is not yet a certified road corridor. Use one
+driving browser tab at a time because the service owns one shared vehicle.
+
+For a larger 2880-pixel-wide six-camera image:
 
 ```bash
-H3_BROWSER_PORT=8781 scripts/run_stage_h3_pandaset_040.sh logged-browser
+H3_WORLD_BROWSER_RENDER_SCALE=0.5 \
+scripts/run_stage_h3_pandaset_040.sh world-browser
+```
+
+The launcher never kills an unknown old process. It reserves the port before
+loading the checkpoint and fails fast if the port is occupied. Choose another
+port when needed:
+
+```bash
+H3_WORLD_BROWSER_PORT=8781 scripts/run_stage_h3_pandaset_040.sh world-browser
 ```
 
 Then open:
@@ -280,19 +313,24 @@ Then open:
 http://100.116.66.57:8781
 ```
 
-Preferred when working through VS Code Remote SSH: forward the browser service
-through VS Code instead of visiting the Tailscale IP directly. Start the service
+The earlier `logged-browser` remains available as a full-trajectory replay and
+regression tool on port 8766; it is not genuine free driving.
+
+Preferred when working through VS Code Remote SSH: forward the world browser
+service through VS Code instead of visiting the Tailscale IP directly. Start
+the service
 from a VS Code terminal on `shidi`:
 
 ```bash
-H3_BROWSER_HOST=127.0.0.1 scripts/run_stage_h3_pandaset_040.sh logged-browser
+H3_WORLD_BROWSER_HOST=127.0.0.1 \
+scripts/run_stage_h3_pandaset_040.sh world-browser
 ```
 
-Then open VS Code's `Ports` panel, forward port `8766` if it was not detected
+Then open VS Code's `Ports` panel, forward port `8767` if it was not detected
 automatically, and open:
 
 ```text
-http://localhost:8766
+http://localhost:8767
 ```
 
 You can also run the command `Simple Browser: Show` inside VS Code and enter
@@ -302,18 +340,10 @@ proxy extension still captures `localhost`, add `localhost` and `127.0.0.1` to
 its bypass list. If the VS Code webview does not focus keyboard input reliably,
 click inside the page once or use the on-screen W/S/A/D buttons.
 
-The browser defaults to manual control and stays still after opening. Once the
-driver has accelerated, releasing the accelerator keeps the current speed and
-rendering continues; braking reduces the speed until the loop stops at zero.
-The six-camera mosaic fills the available browser width by default. The
-on-screen shortcut pad and manual acceptance form start collapsed and can be
-shown independently from the compact toolbar when needed.
-The page button can start or pause auto-play at any time; pressing a driving
-control takes back manual control. To start in auto-play mode instead:
-
-```bash
-H3_BROWSER_TIME_MODE=auto scripts/run_stage_h3_pandaset_040.sh logged-browser
-```
+The world browser's six-camera mosaic preserves the selected Renderer output
+resolution and fills the available browser width. Its on-screen shortcut pad
+starts collapsed. Trial recording remains separate because the existing
+recorder is intentionally specific to completed logged-path playback.
 
 If your local browser traffic is routed through a proxy app on port `25378`,
 keep the proxy on but add a direct/bypass rule for the Tailscale address. In
@@ -338,10 +368,10 @@ localhost
 Then test direct access with:
 
 ```text
-http://100.116.66.57:8766/trial.json
+http://100.116.66.57:8767/state.json
 ```
 
-To drive the same reconstruction from another Tailscale-connected computer:
+To run the earlier logged-path replay/regression instead:
 
 ```bash
 scripts/run_stage_h3_pandaset_040.sh logged-browser
@@ -363,7 +393,8 @@ by default. After driving the segment, use the page's manual review panel to
 save the road/lane/curb, steering-response, nearby-artifact, physical-latency,
 and dynamic-traffic decision gates into the same JSON file.
 
-Before a real operator run, the service can be rehearsed from another terminal:
+Before a real logged-path operator run, the logged service can be rehearsed
+from another terminal:
 
 ```bash
 scripts/run_stage_h3_pandaset_040.sh trial-rehearsal
@@ -398,11 +429,10 @@ speed, and the future path.
 
 The existing logged-time browser, preflight, trial rehearsal, and trial checker
 remain useful regression tools, but they are not acceptance evidence for
-genuine free driving. The next step is to extend the accepted backend probe to
-symmetric turns, a lane change, straight motion, braking to a fixed position,
-and road-region geometry checks. Then expose a separate restricted world-space
-browser starting around +/-1 m. Wider +/-2/3 m views remain probes until those
-checks pass.
+genuine free driving. The symmetric path/braking probe and separate restricted
+world browser are now implemented. The next step is to repeat y=-1/0/+1 m
+checks at multiple forward stations, add road-region geometry evidence, and run
+a real operator trial. Wider +/-2/3 m views remain coverage/failure probes.
 
 The reconstruction-model decision is recorded in
 `docs/drivable_reconstruction_model_strategy.md`: SplatAD remains the primary

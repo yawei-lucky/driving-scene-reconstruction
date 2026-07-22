@@ -8,10 +8,10 @@ record**.
 ## Decision
 
 The project will not replace the current reconstruction stack merely because
-the logged-time browser does not yet produce a genuinely free vehicle
+the earlier logged-time browser did not produce a genuinely free vehicle
 trajectory. The accepted scene-040 static-8k SplatAD checkpoint remains the
-fixed visual and geometry baseline while the simulator is changed to render
-from an absolute world-space ego pose.
+fixed visual and geometry baseline while the new world-space browser is
+evaluated inside its provisional coverage boundary.
 
 The longer-term reconstruction target is:
 
@@ -271,8 +271,8 @@ interactive renderer.
 As of 2026-07-22:
 
 - SplatAD static-8k and logged-time bounded-offset rendering are implemented;
-- the separate world-coordinate Renderer and vehicle-model probe are
-  implemented and GPU-tested, but are not yet connected to the browser;
+- the separate world-coordinate Renderer, symmetric vehicle-path probe, and
+  restricted browser are implemented and GPU-tested;
 - the broad scene-040 driving envelope is not certified;
 - the accepted dynamic actor model does not exist;
 - NeuRAD comparison, MTGS-style multi-traversal reconstruction, and UniSim-like

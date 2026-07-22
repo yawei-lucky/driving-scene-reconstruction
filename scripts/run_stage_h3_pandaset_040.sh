@@ -57,7 +57,7 @@ TIMED_CHECKPOINT="${TIMED_RUN_ROOT}/nerfstudio_models/step-000001999.ckpt"
 PYTHON="${H3_ENV}/bin/python"
 
 usage() {
-  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|logged-renderer-smoke|world-pose-probe|drivability-preflight|logged-browser|trial-rehearsal|trial-check|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
+  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|logged-renderer-smoke|world-pose-probe|drivability-preflight|logged-browser|world-browser|trial-rehearsal|trial-check|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
 }
 
 if [[ ! -x "$PYTHON" ]]; then
@@ -229,6 +229,9 @@ case "$MODE" in
       --lateral-offsets="${H3_WORLD_POSE_LATERAL_OFFSETS:--3,-2,-1,0,1,2,3}" \
       --yaw-degrees="${H3_WORLD_POSE_YAW_DEGREES:--10,-5,0,5,10}" \
       --turn-steps "${H3_WORLD_POSE_TURN_STEPS:-30}" \
+      --straight-steps "${H3_WORLD_POSE_STRAIGHT_STEPS:-30}" \
+      --lane-change-steps "${H3_WORLD_POSE_LANE_CHANGE_STEPS:-40}" \
+      --brake-steps "${H3_WORLD_POSE_BRAKE_STEPS:-15}" \
       --dt "${H3_WORLD_POSE_DT:-0.1}" \
       --initial-speed "${H3_WORLD_POSE_INITIAL_SPEED:-2.0}" \
       --turn-steer "${H3_WORLD_POSE_TURN_STEER:-0.35}"
@@ -260,6 +263,19 @@ case "$MODE" in
       --host "${H3_BROWSER_HOST:-0.0.0.0}" \
       --port "${H3_BROWSER_PORT:-8766}" \
       --trial-output "$BROWSER_TRIAL_OUTPUT"
+    ;;
+  world-browser)
+    if [[ ! -f "$STATIC_CONFIG" || ! -f "$STATIC_CHECKPOINT" ]]; then
+      echo "Accepted static-8k config/checkpoint is missing: $STATIC_RUN_ROOT" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/examples/stage_h3_world_browser.py" \
+      --config "$STATIC_CONFIG" \
+      --output-scale "${H3_WORLD_BROWSER_RENDER_SCALE:-0.25}" \
+      --anchor-log-time "${H3_WORLD_BROWSER_ANCHOR_TIME:-4.0}" \
+      --dt "${H3_WORLD_BROWSER_DT:-0.1}" \
+      --host "${H3_WORLD_BROWSER_HOST:-100.116.66.57}" \
+      --port "${H3_WORLD_BROWSER_PORT:-8767}"
     ;;
   trial-check)
     "$PYTHON" "$REPO_ROOT/examples/stage_h3_trial_acceptance_check.py" \
