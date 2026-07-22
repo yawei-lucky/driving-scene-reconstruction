@@ -3,13 +3,15 @@
 Date: 2026-07-22
 
 Status: metadata and image review passed for one real straight/right branch
-pair; no sensor-window extraction, parser adapter, or training run has started.
+pair. Update: its bounded sensor extraction, parser, registration gate,
+100-step smoke, and 2,000-step SplatAD pilot subsequently passed; see
+`stage_h3_tbv_splatad_pilot.md`.
 
-Update on 2026-07-22: a route branch is no longer required for the first
+Earlier update on 2026-07-22: a route branch is no longer required for the first
 coverage pilot. The data evidence below remains valid, but its resource order
-is superseded by `stage_h3_mtgs_published_block_probe.md`, which identifies an
-approximately 84 m published MTGS gentle-curve block and checkpoint as the
-cheapest next load-only gate.
+was temporarily superseded by `stage_h3_mtgs_published_block_probe.md`. The
+user then selected the lower-setup-cost TbV route, and the resulting completed
+pilot is recorded separately rather than rewriting this selection record.
 
 ## Decision
 

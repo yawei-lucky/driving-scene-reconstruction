@@ -4,6 +4,20 @@ Date: 2026-07-19
 
 Last strategy update: 2026-07-22
 
+## TbV Execution Update — 2026-07-22
+
+The user selected the lower-setup-cost TbV/SplatAD route before creating a
+separate MTGS environment. This supersedes the MTGS-first next action in the
+update below while preserving it as historical decision evidence.
+
+The two selected ten-second Miami windows now pass bounded download, a
+multi-traversal parser, shared-route LiDAR registration, 100-step save/reload,
+and a 2,000-step held-out visual pilot in the accepted H3 environment. The
+immediate next gate is a seven-camera TbV world-pose sweep over the common
+approach, straight branch, right-turn branch, and bounded lateral offsets. Do
+not train longer before checking that counterfactual corridor. Exact evidence
+is in `../experiments/stage_h3_tbv_splatad_pilot.md`.
+
 ## Multi-Trajectory Pilot Update — 2026-07-22
 
 A route branch is no longer required for the first expanded driving pilot. An
