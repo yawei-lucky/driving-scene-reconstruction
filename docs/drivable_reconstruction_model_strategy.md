@@ -271,7 +271,8 @@ interactive renderer.
 As of 2026-07-22:
 
 - SplatAD static-8k and logged-time bounded-offset rendering are implemented;
-- true world-coordinate free driving is not implemented;
+- the separate world-coordinate Renderer and vehicle-model probe are
+  implemented and GPU-tested, but are not yet connected to the browser;
 - the broad scene-040 driving envelope is not certified;
 - the accepted dynamic actor model does not exist;
 - NeuRAD comparison, MTGS-style multi-traversal reconstruction, and UniSim-like
@@ -279,6 +280,9 @@ As of 2026-07-22:
 
 This boundary must remain explicit in `PROJECT_STATE.md` and experiment
 reports.
+
+The first implementation evidence is recorded in
+`../experiments/stage_h3_world_pose_probe.md`.
 
 ## Primary References
 

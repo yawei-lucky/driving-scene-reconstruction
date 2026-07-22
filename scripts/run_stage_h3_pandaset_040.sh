@@ -26,6 +26,7 @@ STATIC_RUN_ROOT="${TRAIN_ROOT}/${STATIC_EXPERIMENT}/splatad/${STATIC_TIMESTAMP}"
 STATIC_CONFIG="${STATIC_RUN_ROOT}/config.yml"
 STATIC_CHECKPOINT="${STATIC_RUN_ROOT}/nerfstudio_models/step-000007999.ckpt"
 LOGGED_RENDER_ROOT="${H3_LOGGED_RENDER_ROOT:-${H3_ROOT}/artifacts/scene_040_logged_renderer_mvp}"
+WORLD_POSE_PROBE_ROOT="${H3_WORLD_POSE_PROBE_ROOT:-${H3_ROOT}/artifacts/scene_040_world_pose_probe}"
 DRIVABILITY_ROOT="${H3_DRIVABILITY_ROOT:-${H3_ROOT}/artifacts/scene_040_drivability_preflight}"
 BROWSER_TRIAL_ROOT="${H3_BROWSER_TRIAL_ROOT:-${H3_ROOT}/artifacts/scene_040_browser_trial}"
 BROWSER_TRIAL_OUTPUT="${H3_BROWSER_TRIAL_OUTPUT:-${BROWSER_TRIAL_ROOT}/browser_trial.json}"
@@ -56,7 +57,7 @@ TIMED_CHECKPOINT="${TIMED_RUN_ROOT}/nerfstudio_models/step-000001999.ckpt"
 PYTHON="${H3_ENV}/bin/python"
 
 usage() {
-  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|logged-renderer-smoke|drivability-preflight|logged-browser|trial-rehearsal|trial-check|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
+  echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|logged-renderer-smoke|world-pose-probe|drivability-preflight|logged-browser|trial-rehearsal|trial-check|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
 }
 
 if [[ ! -x "$PYTHON" ]]; then
@@ -215,6 +216,23 @@ case "$MODE" in
       --dt "${H3_LOGGED_RENDER_DT:-0.1}" \
       --movement-profile "${H3_LOGGED_MOVEMENT_PROFILE:-safe}"
     ;;
+  world-pose-probe)
+    if [[ ! -f "$STATIC_CONFIG" || ! -f "$STATIC_CHECKPOINT" ]]; then
+      echo "Accepted static-8k config/checkpoint is missing: $STATIC_RUN_ROOT" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/examples/stage_h3_world_pose_probe.py" \
+      --config "$STATIC_CONFIG" \
+      --output-dir "$WORLD_POSE_PROBE_ROOT" \
+      --output-scale "${H3_WORLD_POSE_RENDER_SCALE:-0.25}" \
+      --anchor-log-time "${H3_WORLD_POSE_ANCHOR_TIME:-4.0}" \
+      --lateral-offsets="${H3_WORLD_POSE_LATERAL_OFFSETS:--3,-2,-1,0,1,2,3}" \
+      --yaw-degrees="${H3_WORLD_POSE_YAW_DEGREES:--10,-5,0,5,10}" \
+      --turn-steps "${H3_WORLD_POSE_TURN_STEPS:-30}" \
+      --dt "${H3_WORLD_POSE_DT:-0.1}" \
+      --initial-speed "${H3_WORLD_POSE_INITIAL_SPEED:-2.0}" \
+      --turn-steer "${H3_WORLD_POSE_TURN_STEER:-0.35}"
+    ;;
   drivability-preflight)
     if [[ ! -f "$STATIC_CONFIG" || ! -f "$STATIC_CHECKPOINT" ]]; then
       echo "Accepted static-8k config/checkpoint is missing: $STATIC_RUN_ROOT" >&2
@@ -358,6 +376,7 @@ case "$MODE" in
     echo "static 8k config: $STATIC_CONFIG"
     echo "static 8k checkpoint: $STATIC_CHECKPOINT"
     echo "logged renderer smoke: $LOGGED_RENDER_ROOT"
+    echo "world pose probe: $WORLD_POSE_PROBE_ROOT"
     echo "drivability preflight: $DRIVABILITY_ROOT"
     echo "browser trial report: $BROWSER_TRIAL_OUTPUT"
     echo "browser trial acceptance check: $TRIAL_CHECK_OUTPUT"

@@ -11,8 +11,9 @@ The logged-time bounded-offset browser remains useful regression evidence, but
 it is not acceptance of genuine free driving: the recorded trajectory still
 supplies the main road motion.
 
-The next main-line task is a world-coordinate free-driving probe using the
-accepted scene-040 static-8k checkpoint without retraining:
+The first world-coordinate free-driving backend probe was implemented and
+GPU-tested on 2026-07-22 using the accepted scene-040 static-8k checkpoint
+without retraining:
 
 1. separate simulation time, source-log time, absolute world ego pose, and the
    fixed six-camera rig extrinsics;
@@ -35,6 +36,14 @@ integration.
 The complete decision, method boundaries, execution order, promotion gates,
 and primary references are recorded in
 `drivable_reconstruction_model_strategy.md`.
+
+The backend passed all plumbing gates over 45 six-camera observations and a
+continuous 21.98-degree left turn. The full +/-3 m corridor is not accepted:
+near poles, trees, curbs, and sidewalks deform away from the source path. The
+next main-line work is symmetric continuous-path and road-geometry evaluation,
+followed by a separate restricted world-space browser around the provisional
++/-1 m candidate. Exact evidence is in
+`../experiments/stage_h3_world_pose_probe.md`.
 
 ## Product-Priority Update — 2026-07-21
 

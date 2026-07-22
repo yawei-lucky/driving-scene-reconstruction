@@ -144,6 +144,13 @@ Stage H3 Level 7C
 Stage H3 Level 7D
 → scripted browser trial rehearsal drives the live HTTP loop
 → validates full-sample/reset/latency plumbing while leaving manual gates unsure
+
+Stage H3 Level 8
+→ new SplatADWorldRenderer freezes scene time and accepts simulated world poses
+→ SimpleVehicleModel owns future x/y/yaw/speed instead of the logged trajectory
+→ six camera poses synchronized to one anchor time and moved as one rigid rig
+→ +/-1/2/3 m, +/-5/10 deg, and a continuous 22 deg left turn rendered
+→ 45 six-camera observations passed; 0.5-scale Renderer p95 68.46 ms
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -160,6 +167,11 @@ backend/browser-service result, not yet a real operator keyboard-to-display
 driving trial. Close vehicles remain blurred or baked into the background, and
 no collision or responsive traffic model exists. Such traffic artifacts are a
 mandatory later blocker whenever they can change the driving decision.
+
+The Level-8 world-pose backend is not yet connected to the browser. Its visual
+probe suggests +/-1 m is a reasonable first restricted free-driving candidate;
+the wider +/-2 m and +/-3 m views remain unaccepted because near poles, trees,
+curbs, and sidewalks visibly deform away from the source path.
 
 ## Run
 
@@ -225,6 +237,17 @@ scripts/run_stage_h3_pandaset_040.sh drivability-preflight
 This writes a JSON report plus counterfactual and sequence review images under
 `/home/yawei/stage3_external/artifacts/scene_040_drivability_preflight/`. It is
 a backend preflight, not a substitute for the human browser driving trial.
+
+For the true world-pose backend and current corridor probe, without retraining:
+
+```bash
+scripts/run_stage_h3_pandaset_040.sh world-pose-probe
+```
+
+This freezes one static scene time, synchronizes the six camera poses, renders
+the requested +/-1/2/3 m and yaw probes, and drives one continuous turn with
+`SimpleVehicleModel`. The output JSON deliberately separates plumbing success
+from the still-open human/geometry corridor verdict.
 
 ### Fastest visual try
 
@@ -367,18 +390,19 @@ manual drivability gates as `pass`.
 
 ## Current Next Step
 
-Static 8k remains the fixed accepted checkpoint. The next main-line step is a
-world-coordinate free-driving probe without retraining. Simulation time,
-source-log time, absolute ego pose, and six-camera rig extrinsics must be
-separated; the vehicle model must own position, yaw, and speed so steering
-changes the future path rather than only the rendered view.
+Static 8k remains the fixed accepted checkpoint. The first world-coordinate
+free-driving probe is now implemented and GPU-tested without retraining.
+Simulation time and source-scene time are separated, the six camera poses are
+synchronized to one fixed anchor, and `SimpleVehicleModel` owns position, yaw,
+speed, and the future path.
 
 The existing logged-time browser, preflight, trial rehearsal, and trial checker
 remain useful regression tools, but they are not acceptance evidence for
-genuine free driving. After the world-pose connection, measure isolated
-lateral/yaw poses and continuous lane-change, braking, and turn paths. Use the
-result to decide whether scene 040 supports the required road corridor or
-whether multi-lane, multi-pass, or multi-branch data is required.
+genuine free driving. The next step is to extend the accepted backend probe to
+symmetric turns, a lane change, straight motion, braking to a fixed position,
+and road-region geometry checks. Then expose a separate restricted world-space
+browser starting around +/-1 m. Wider +/-2/3 m views remain probes until those
+checks pass.
 
 The reconstruction-model decision is recorded in
 `docs/drivable_reconstruction_model_strategy.md`: SplatAD remains the primary
@@ -395,6 +419,8 @@ The success criteria are deliberately separate from generic image metrics:
   operator only drives and that dynamic correctness is deferred, not waived;
 - `experiments/stage_h3_logged_renderer_mvp.md` records the Level-7 run and its
   acceptance boundary.
+- `experiments/stage_h3_world_pose_probe.md` records the Level-8 world-pose run,
+  visual findings, and remaining corridor boundary.
 
 See also `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 

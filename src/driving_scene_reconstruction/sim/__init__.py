@@ -10,6 +10,10 @@ from .logged_offset_controller import (
 from .renderer_interface import CameraRig, CameraSpec, RenderedObservation, Renderer
 from .scene_coordinates import NearbyPoseLimits, SceneReferenceFrame
 from .splatad_logged_renderer import SplatADLoggedRenderer
+from .splatad_world_renderer import (
+    H3_WORLD_POSE_PROBE_LIMITS,
+    SplatADWorldRenderer,
+)
 from .state import EgoState
 from .trial_acceptance import (
     AcceptanceGate,
@@ -27,6 +31,7 @@ __all__ = [
     "CameraSpec",
     "EgoState",
     "HumanControl",
+    "H3_WORLD_POSE_PROBE_LIMITS",
     "LoggedEgoOffsetController",
     "LoggedMovementProfile",
     "NearbyPoseLimits",
@@ -36,6 +41,7 @@ __all__ = [
     "SceneReferenceFrame",
     "SimpleVehicleModel",
     "SplatADLoggedRenderer",
+    "SplatADWorldRenderer",
     "TrialAcceptanceConfig",
     "evaluate_trial_report",
     "logged_movement_profile",

@@ -16,6 +16,7 @@ from driving_scene_reconstruction.sim import (  # noqa: E402
     CameraSpec,
     EgoState,
     HumanControl,
+    H3_WORLD_POSE_PROBE_LIMITS,
     LoggedEgoOffsetController,
     LoggedMovementProfile,
     NearbyPoseLimits,
@@ -24,6 +25,7 @@ from driving_scene_reconstruction.sim import (  # noqa: E402
     SceneReferenceFrame,
     SimpleVehicleModel,
     SplatADLoggedRenderer,
+    SplatADWorldRenderer,
     logged_movement_profile,
 )
 
@@ -225,6 +227,30 @@ class SplatADLoggedRendererConfigurationTest(unittest.TestCase):
         self.assertEqual(SplatADLoggedRenderer._nearest_index(times, 0.04), 0)
         self.assertEqual(SplatADLoggedRenderer._nearest_index(times, 0.06), 1)
         self.assertEqual(SplatADLoggedRenderer._nearest_index(times, 0.15), 1)
+
+
+class SplatADWorldRendererConfigurationTest(unittest.TestCase):
+    def test_lazy_construction_does_not_import_heavy_dependencies(self) -> None:
+        with tempfile.NamedTemporaryFile(suffix=".yml") as config:
+            renderer = SplatADWorldRenderer(config.name)
+
+        self.assertFalse(renderer.is_loaded)
+        self.assertAlmostEqual(renderer.anchor_log_time, 4.0)
+
+    def test_invalid_anchor_time_is_rejected_before_loading(self) -> None:
+        with tempfile.NamedTemporaryFile(suffix=".yml") as config:
+            with self.assertRaises(ValueError):
+                SplatADWorldRenderer(config.name, anchor_log_time=-0.1)
+
+    def test_probe_limits_include_requested_lateral_offsets(self) -> None:
+        H3_WORLD_POSE_PROBE_LIMITS.validate(
+            EgoState(y=-3.0, yaw=math.pi, time=20.0)
+        )
+        H3_WORLD_POSE_PROBE_LIMITS.validate(
+            EgoState(y=3.0, yaw=-math.pi, time=20.0)
+        )
+        with self.assertRaises(ValueError):
+            H3_WORLD_POSE_PROBE_LIMITS.validate(EgoState(y=3.01))
 
 
 class LoggedEgoOffsetControllerTest(unittest.TestCase):

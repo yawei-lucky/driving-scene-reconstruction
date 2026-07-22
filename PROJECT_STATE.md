@@ -379,6 +379,32 @@ Completed on 2026-07-21 without retraining:
 This is a pre-operator service rehearsal. It validates the HTTP and recording
 plumbing before a human trial, but it still cannot judge road/lane quality.
 
+### Stage H3 Level 8 — World-pose free-driving probe
+
+Completed on 2026-07-22 without retraining:
+
+- added `SplatADWorldRenderer` alongside the unchanged logged renderer;
+- separated simulation time from a frozen source-scene anchor at logical frame
+  40 / 3.999463 seconds;
+- made `SimpleVehicleModel` own future metric x/y/yaw/speed for the probe;
+- interpolated all six source camera trajectories to the same anchor time,
+  then moved the resulting fixed rig with one rigid transform;
+- zeroed source-log linear/angular motion and rolling-shutter metadata instead
+  of reusing it for the simulated vehicle;
+- rendered lateral offsets -3/-2/-1/0/+1/+2/+3 m and yaw -10/-5/0/+5/+10
+  degrees;
+- rendered a 3.0-second continuous left turn ending at x=5.654 m, y=1.098 m,
+  and yaw=21.978 degrees;
+- passed all world-pose plumbing gates over 45 six-camera observations with
+  exact reset and 68.46 ms p95 Renderer latency at 0.5 output scale.
+
+Visual review found the main road remains recognizable over +/-3 m with no
+large black hole, but close poles, tree edges, curbs, and sidewalks deform as
+the pose moves away from the source path. The backend milestone passes; the
+full corridor does not. +/-1 m is the current first candidate for a restricted
+interactive prototype. Exact evidence is in
+`experiments/stage_h3_world_pose_probe.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -394,6 +420,21 @@ HumanControl
 → browser trial acceptance checker
 → scripted browser trial rehearsal
 ```
+
+The separate Level-8 backend path now supports:
+
+```text
+HumanControl
+→ SimpleVehicleModel owns simulated x/y/yaw/speed/time
+→ SplatADWorldRenderer at one frozen static scene time
+→ time-synchronized fixed six-camera rig
+→ six RGB views from the simulated future world pose
+→ lateral/yaw and continuous-turn probe artifacts plus JSON evidence
+```
+
+This path proves that steering changes the future simulated trajectory. It is
+not yet wired into the browser and it does not certify the full +/-3 m probe as
+a safe driving corridor.
 
 This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint. The default browser loop now
@@ -428,6 +469,10 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 - There is no collision, road-boundary, traffic-agent, or map constraint.
 - H3 uses the logged rig-center trajectory tangent as its offset basis; the
   complete envelope still needs systematic visual certification.
+- The world-pose probe freezes one static scene time and disables source
+  rolling-shutter motion. Simulated-vehicle rolling shutter is not implemented.
+- The world-pose backend renders +/-3 m and a 21.98-degree turn, but only the
+  plumbing passes; +/-1 m is provisional and no corridor is certified.
 - H3 Renderer latency passes 100 ms at 0.5 scale, but this excludes physical
   input, mosaic/JPEG encoding, browser transport, and display refresh.
 - Browser trial recording measures browser request-to-image and input-to-image
@@ -488,30 +533,33 @@ limitation, and borrow UniSim's compositional closed-loop concepts without
 treating generated completion as observed ground truth. NeuRAD, MTGS, and
 UniSim are not currently integrated.
 
+The first backend milestone is complete: the world-pose Renderer, synchronized
+rig, vehicle-model path, +/-1/2/3 m probes, and continuous left turn passed GPU
+plumbing tests. The main line now moves to corridor certification and a
+restricted interactive world-space browser, not another reconstruction run.
+
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
 
-1. keep static 8k fixed and separate simulation time, source-log time,
-   absolute world ego pose, and six-camera rig extrinsics;
-2. let the vehicle model own absolute position, yaw, and speed;
-3. render all six cameras from that one world pose and correct any motion
-   metadata that currently comes from the source trajectory;
-4. probe lateral offsets at 0, +/−1 m, +/−2 m, and +/−3 m, then extend yaw only
-   while the preceding pose ring remains valid;
-5. test continuous lane-change, braking, and left/right turn trajectories, not
-   only isolated camera offsets;
-6. distinguish render completion, human-usable coverage, and
+1. keep static 8k fixed and retain the completed world-pose probe as a
+   regression gate;
+2. add symmetric left/right turns, a lane change, straight motion, and braking
+   to a fixed world position;
+3. compare rendered road-region geometry against static LiDAR where visibility
+   permits;
+4. start a separate world-space browser around a provisional +/-1 m envelope;
+5. distinguish render completion, human-usable coverage, and
    geometry-trustworthy closed-loop coverage;
-7. run the existing preflight and browser trial tools as regressions after the
+6. run the existing preflight and logged browser tools as regressions after the
    renderer/control change, not as substitutes for the new free-driving gates;
-8. if known observed surfaces fail, compare SplatAD with NeuRAD under matched
+7. if known observed surfaces fail, compare SplatAD with NeuRAD under matched
    conditions before replacing the main renderer;
-9. if the requested views expose unobserved surfaces, expand to multi-lane,
+8. if the requested views expose unobserved surfaces, expand to multi-lane,
    multi-pass, or multi-branch data and an MTGS-style shared reconstruction
    rather than increasing training steps blindly;
-10. return dynamic actors to the main line when they obscure the road, create a
+9. return dynamic actors to the main line when they obscure the road, create a
     false obstacle, or responsive traffic/closed-loop agent evaluation begins;
-11. never ask the operator to inspect or compensate for reconstruction defects
+10. never ask the operator to inspect or compensate for reconstruction defects
     while driving.
 
 In this plan, camera images remain the source of visual appearance. LiDAR
