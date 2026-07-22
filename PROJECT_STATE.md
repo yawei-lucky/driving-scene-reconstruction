@@ -600,6 +600,45 @@ combined model supports counterfactual driving. Exact commands, artifacts,
 failure evidence, and acceptance boundary are in
 `experiments/stage_h3_tbv_splatad_pilot.md`.
 
+### Stage H3 Level 9E — TbV world-pose corridor probe
+
+Completed on 2026-07-22 in the accepted H3 environment:
+
+- added an experiment-local renderer that keeps one joint checkpoint loaded,
+  synchronizes the seven-camera rigs, preserves traversal-specific sensor and
+  appearance IDs, freezes scene time, and accepts metre-scale branch-local
+  poses;
+- selected a shared anchor with 0.8388 m cross-route distance, 13.173 degrees
+  heading difference, 42 matches, and 31.629 m shared-route span;
+- rendered the same 36 observations and 252 camera views at 2k and 8k over the
+  common -20/-10/-2 m entrance, straight +5/+20/+40 m, right +5/+15/+30 m,
+  and -1/0/+1 m offsets;
+- found that 2k passed spatial/plumbing gates but failed the visual driving
+  gate because road floaters, granular side/rear views, and vehicle ghosts
+  remained;
+- exact-resumed model, optimizer, scheduler, and global step from 1,999 to
+  7,999, reaching the 5,000,000-Gaussian cap and a 1,650,493,750-byte
+  checkpoint; RNG/dataloader state is not present in the checkpoint and is not
+  claimed bitwise exact;
+- recovered from one execution-channel SIGTERM by discarding its unsaved
+  iterations and using a verified 1,000-step checkpoint chain from the
+  original step 1,999; this was not a CUDA or out-of-memory failure;
+- rendered the same 140 held-out views at 22.69 views/s and measured PSNR
+  23.2130, SSIM 0.7734, and LPIPS 0.3805, improving by +2.9509, +0.0980, and
+  -0.1389 respectively over 2k;
+- passed all 8k automated gates with 252/252 finite camera renders and measured
+  58.48/67.70 ms p50/p95 per seven-camera observation at 0.5 output scale;
+- visually retained the shared entrance, both branches, and all three lateral
+  offsets while substantially removing the 2k road floaters.
+
+The 8k result is accepted as a restricted front-corridor candidate for a
+continuous human-driving trial. It is not certified 360-degree or autonomous
+driving: close vegetation and parked vehicles still deform, vehicles remain
+baked into static geometry, no lateral ground truth exists, and no continuous
+keyboard-to-display run has been completed. Do not add more static iterations
+before that trial. Exact evidence is in
+`experiments/stage_h3_tbv_world_pose_corridor_probe.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -633,6 +672,21 @@ now wired into a restricted browser. The sampled +/-1 m logged-centreline tube
 is accepted for a first human-driving prototype, but it is not certified for
 closed-loop autonomous-driving evaluation; the full +/-3 m probe remains a
 coverage diagnostic.
+
+The separate Level-9E experiment path now supports:
+
+```text
+Branch-local world pose plus traversal route role
+→ experiment-local TbVWorldRenderer at one frozen static scene time
+→ one synchronized seven-camera rig with traversal-specific appearance IDs
+→ common entrance, straight route, or right-turn route at +/-1 m
+→ seven finite RGB arrays in 58.48 ms p50 at 0.5 output scale
+→ contact sheets, seven-camera mosaics, route plot, and JSON evidence
+```
+
+This is not yet connected to the manual browser or common `Renderer` protocol.
+It establishes the visual/geometry candidate boundary needed for that small
+adapter without changing the accepted PandaSet simulator backend.
 
 This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint. The logged browser loop now
@@ -732,12 +786,14 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
   providing a three-way action set.
 - A route branch is not required for the first expanded driving pilot. Longer
   straight or gently curving observed roads remain valid targets.
-- The TbV 2,000-step checkpoint is an observed-pose visual candidate only.
-  Counterfactual lateral/yaw poses, the complete union corridor, seven-camera
-  synchronized rendering, and driving latency have not been tested.
-- TbV held-out quality differs materially by traversal (PSNR 21.28 versus
-  19.24). The present static model visibly softens foliage and parked vehicles;
-  no-annotation vehicle ghosts remain a driving rejection condition.
+- The TbV 8,000-step checkpoint has passed a sparse seven-camera world-pose
+  probe over two branches and +/-1 m, but not a continuous browser drive,
+  physical input/display latency, wider departure, or lateral ground-truth
+  test. Its 58.48 ms p50 is backend render time only.
+- TbV 8k held-out quality still differs by traversal (PSNR 24.32 versus 22.11).
+  Close foliage and parked vehicles deform, and no-annotation vehicle ghosts
+  remain a rejection condition if they block the lane or create a false
+  obstacle during the continuous trial.
 - The selected MTGS block is trajectory- and checkpoint-qualified but has not
   been visually reviewed or loaded on this host. Official training guidance
   asks for at least 40 GB VRAM, versus the available 24 GB.
@@ -751,13 +807,15 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 
 ## 5. Current Next Action — Stage H3
 
-Stage H3 now prioritizes a minimal world-pose/corridor probe for the completed
-TbV Miami `OCa... + QMn...` 2,000-step checkpoint. The accepted scene-040
-static-8k checkpoint and its world-coordinate browser remain fixed regression
-evidence. The released MTGS Singapore checkpoint remains an isolated fallback,
-while PandaSet `003+057` remains a same-direction parser/alignment control.
+Stage H3 now prioritizes a minimal route-constrained driving adapter for the
+completed TbV Miami `OCa... + QMn...` 8,000-step checkpoint. The accepted
+scene-040 static-8k checkpoint and its world-coordinate browser remain fixed
+regression evidence. The released MTGS Singapore checkpoint remains an
+isolated fallback, while PandaSet `003+057` remains a same-direction
+parser/alignment control.
 
-Static 8k remains the accepted visual and geometry checkpoint. The agreed
+Both PandaSet scene-040 static-8k and the new TbV static-8k candidate remain
+fixed; they have different data and acceptance boundaries. The agreed
 technical direction is recorded in
 `docs/drivable_reconstruction_model_strategy.md`: retain SplatAD as the primary
 interactive renderer, use NeuRAD only for a matched quality comparison, use
@@ -766,14 +824,13 @@ limitation, and borrow UniSim's compositional closed-loop concepts without
 treating generated completion as observed ground truth. NeuRAD, MTGS, and
 UniSim are not currently integrated.
 
-The next implementation is deliberately narrow: generalize or wrap the
-existing world-pose renderer for TbV's seven ring cameras and two traversal
-namespaces; load the saved 2,000-step checkpoint; freeze a source time; select
-the appropriate traversal-specific appearance IDs; and render a small sweep
-over the common approach, straight branch, right-turn branch, and bounded
-lateral offsets. Reuse the measured city-frame registration rather than adding
-another optimizer first. Stop if parked-car ghosts obscure the road or if
-permanent geometry doubles. Do not train longer before this gate.
+The next implementation is deliberately narrow: wrap the completed
+experiment-local TbV renderer with the existing lightweight vehicle/browser
+interfaces; spawn at common progress -20 m; clamp the first trial to +/-1 m;
+choose straight or right-turn routing at the shared anchor; and record
+continuous backend plus physical keyboard-to-display latency. Stop the trial
+if baked vehicles obscure the road or permanent geometry becomes unstable. Do
+not train beyond 8k before this gate.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -788,12 +845,12 @@ plan. The short version is:
    scene-040/multi-direction findings;
 5. retain PandaSet 003+057 only as a low-risk same-direction parser/alignment
    control;
-6. retain the completed TbV download, registration, checkpoint, and held-out
-   render as the new multi-traversal regression gate;
-7. run a seven-camera TbV world-pose sweep over both branches and bounded
-   lateral offsets before any longer training;
-8. keep the released MTGS checkpoint as a separate-environment fallback only
-   if the TbV counterfactual corridor fails for a model-specific reason;
+6. retain the completed TbV download, registration, 8k checkpoint, held-out
+   render, and 36-pose sweep as the multi-traversal regression gate;
+7. implement one minimal route-constrained TbV browser adapter and run a
+   continuous +/-1 m straight/right-turn operator trial before more training;
+8. keep the released MTGS checkpoint as a separate-environment fallback if the
+   TbV continuous trial exposes a model/data limitation rather than plumbing;
 9. keep the implemented provisional scene-040 world browser and operator trial
    as regression/acceptance work rather than coupling them to this new scene;
 10. return dynamic actors to the main line when they obscure the road, create a

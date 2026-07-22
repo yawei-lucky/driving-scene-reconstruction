@@ -4,6 +4,25 @@ Date: 2026-07-19
 
 Last strategy update: 2026-07-22
 
+## TbV Corridor Result Update — 2026-07-22
+
+This result supersedes the immediate-next-gate wording in the TbV update
+below. The experiment-local seven-camera renderer completed identical
+36-observation world-pose sweeps at 2k and 8k over the shared entrance,
+straight branch, right turn, and -1/0/+1 m. The 2k checkpoint proved spatial
+coverage but failed visual driving quality; exact resume to step 7,999 raised
+held-out quality to PSNR 23.2130, SSIM 0.7734, and LPIPS 0.3805 and removed most
+road floaters in the same counterfactual views.
+
+Keep TbV 8k fixed. It is accepted only as a restricted front-corridor
+candidate. The immediate next gate is a minimal route-constrained adapter and
+continuous human trial, starting at common progress -20 m, clamped to +/-1 m,
+with straight/right routing at the shared anchor. Do not add more static
+iterations before that run. Baked vehicles, close-object deformation,
+physical keyboard-to-display latency, and the absence of lateral ground truth
+remain explicit boundaries. Exact evidence is in
+`../experiments/stage_h3_tbv_world_pose_corridor_probe.md`.
+
 ## TbV Execution Update — 2026-07-22
 
 The user selected the lower-setup-cost TbV/SplatAD route before creating a

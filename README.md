@@ -201,6 +201,15 @@ Stage H3 Level 9D
 → 100-step save/reload smoke and all 140 held-out renders passed
 → 2,000-step result reached PSNR 20.2621, SSIM 0.6753, LPIPS 0.5193
 → both observed routes are recognizable; counterfactual driving remains untested
+
+Stage H3 Level 9E
+→ added an experiment-local seven-camera world-pose renderer in one branch frame
+→ sampled 36 poses / 252 views over the shared entrance, straight, right turn,
+  and -1/0/+1 m offsets
+→ the 2,000-step model passed spatial coverage but failed the visual driving gate
+→ exact-resumed to step 7,999; held-out quality reached 23.2130 / 0.7734 / 0.3805
+→ the identical 8k probe removed most road floaters and retained both branches
+→ accepted as a restricted front-corridor candidate; continuous driving is pending
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -238,11 +247,14 @@ records its subsequent SplatAD pilot. It is not an MTGS integration.
 
 A follow-up audit removed the unnecessary branch requirement and identified a
 published MTGS gentle-curve block, but the user selected the lower-setup-cost
-TbV route first. The two bounded TbV windows now pass a real shared-static
-LiDAR gate, SplatAD save/reload, and a 2,000-step visual pilot. Roads and major
-static structure are recognizable on both traversals, while vehicle detail is
-blurred and counterfactual poses have not yet been tested. MTGS remains a later
-fallback rather than the current environment task.
+TbV route first. The two bounded TbV windows now pass shared-static LiDAR,
+save/reload, held-out, and common-world counterfactual gates. Exact resume from
+2k to 8k raised held-out quality from 20.2621/0.6753/0.5193 to
+23.2130/0.7734/0.3805, and the same 36-pose sweep kept the shared entrance,
+straight branch, right turn, and -1/0/+1 m front views readable. This is a
+restricted route-constrained driving candidate, not a dynamic or certified
+360-degree simulator. MTGS remains a later fallback rather than the current
+environment task.
 
 ## Run
 
@@ -488,14 +500,13 @@ manual drivability gates as `pass`.
 
 ## Current Next Step
 
-Static 8k remains the fixed accepted scene-040 checkpoint. The current
-engineering next step is a minimal seven-camera world-pose/corridor probe for
-the completed TbV `OCa... + QMn...` 2,000-step checkpoint. Freeze scene time,
-retain traversal-specific appearance IDs, and sample the shared approach, the
-straight branch, the right-turn branch, and bounded lateral offsets. Reject it
-if parked-car ghosts block the usable road or if permanent curb/building
-geometry doubles. Do not train longer until this observed-plus-counterfactual
-gate passes. The published MTGS checkpoint remains a separate-environment
+The PandaSet and TbV static-8k checkpoints now remain fixed. The current
+engineering next step is a minimal route-constrained TbV driving adapter using
+the completed seven-camera world-pose renderer: spawn at the -20 m common
+station, clamp the first trial to +/-1 m, offer straight versus right-turn
+routing at the shared anchor, and record continuous backend plus physical
+keyboard-to-display latency. Do not add more static TbV iterations before this
+operator trial. The published MTGS checkpoint remains a separate-environment
 fallback; PandaSet `003+057` remains the same-direction parser/alignment
 control.
 
@@ -535,6 +546,8 @@ The success criteria are deliberately separate from generic image metrics:
   evidence, environment conflict, and checkpoint-only gate.
 - `experiments/stage_h3_tbv_splatad_pilot.md` records the bounded TbV download,
   multi-traversal parser, LiDAR alignment, and 100/2,000-step reload renders.
+- `experiments/stage_h3_tbv_world_pose_corridor_probe.md` records the 2k/8k
+  world-pose sweeps, exact-resume recovery, visual decision, and next gate.
 
 See also `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 
@@ -548,6 +561,10 @@ scripts/run_stage_h3_pandaset_040.sh paths
 scripts/run_stage_h3_tbv_pilot.sh data-gate
 scripts/run_stage_h3_tbv_pilot.sh pilot
 scripts/run_stage_h3_tbv_pilot.sh render-pilot
+scripts/run_stage_h3_tbv_pilot.sh world-pose-probe
+scripts/run_stage_h3_tbv_pilot.sh static-8k
+scripts/run_stage_h3_tbv_pilot.sh render-static-8k
+scripts/run_stage_h3_tbv_pilot.sh world-pose-probe-8k
 scripts/run_stage_h3_tbv_pilot.sh paths
 ```
 

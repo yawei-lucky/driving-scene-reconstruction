@@ -2,9 +2,14 @@
 
 Date: 2026-07-22
 
-Status: the bounded two-traversal data, parser, registration, 100-step smoke,
-and 2,000-step visual pilot passed. The model has not yet been connected to a
-world-pose driving probe, so this is not a drivable-corridor acceptance.
+Historical status at completion: the bounded two-traversal data, parser,
+registration, 100-step smoke, and 2,000-step visual pilot passed. The model had
+not yet been connected to a world-pose driving probe, so this record did not
+claim a drivable-corridor acceptance.
+
+Follow-up: the later world-pose probe and exact resume to 8,000 steps are
+recorded separately in `stage_h3_tbv_world_pose_corridor_probe.md`. They do not
+change the 2,000-step observations below.
 
 ## Outcome
 
