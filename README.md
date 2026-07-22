@@ -367,18 +367,25 @@ manual drivability gates as `pass`.
 
 ## Current Next Step
 
-Static 8k remains the fixed accepted checkpoint. The next main-line step is an
-operator acceptance run of the browser loop over the complete real
-7.899-second trajectory. Preserve `/trial.json` after the run; it now contains
-browser-side frame-update latency, reset events, and the operator's manual
-drivability verdicts. Then run `trial-check` and preserve its JSON result. Do
-not start another dynamic training run before this driving run reveals an
-artifact that affects the road or obstacle decision.
+Static 8k remains the fixed accepted checkpoint. The next main-line step is a
+world-coordinate free-driving probe without retraining. Simulation time,
+source-log time, absolute ego pose, and six-camera rig extrinsics must be
+separated; the vehicle model must own position, yaw, and speed so steering
+changes the future path rather than only the rendered view.
 
-An automated preflight now exists before that operator run. It should be green
-before a human trial is treated as meaningful, but it deliberately leaves
-road/lane continuity, steering direction by eye, nearby-artifact impact,
-physical display latency, and dynamic-traffic decision impact as review items.
+The existing logged-time browser, preflight, trial rehearsal, and trial checker
+remain useful regression tools, but they are not acceptance evidence for
+genuine free driving. After the world-pose connection, measure isolated
+lateral/yaw poses and continuous lane-change, braking, and turn paths. Use the
+result to decide whether scene 040 supports the required road corridor or
+whether multi-lane, multi-pass, or multi-branch data is required.
+
+The reconstruction-model decision is recorded in
+`docs/drivable_reconstruction_model_strategy.md`: SplatAD remains the primary
+interactive renderer; NeuRAD is a matched quality comparison; MTGS provides
+the multi-traversal spatial-coverage direction; and UniSim is a closed-loop
+architecture reference. The latter three roles do not imply completed
+integrations.
 
 The success criteria are deliberately separate from generic image metrics:
 
@@ -414,6 +421,7 @@ default. Detailed results and rejected actor ablations are in
 ├── docs/
 │   ├── human_drivable_simulator_project.md
 │   ├── codex_next_task_stage_h0.md
+│   ├── drivable_reconstruction_model_strategy.md
 │   ├── stage_h3_stable_drivable_reconstruction_plan.md
 │   ├── stage_h2_reconstruction_renderer.md
 │   ├── problem_statement.md

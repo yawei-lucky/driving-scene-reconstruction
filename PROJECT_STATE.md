@@ -1,6 +1,6 @@
 # Project State — Driving Scene Reconstruction
 
-Last updated: 2026-07-21
+Last updated: 2026-07-22
 
 ## 1. Product Goal
 
@@ -473,38 +473,46 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 
 ## 5. Current Next Action — Stage H3
 
-Stage H3 now prioritizes completing one stable human-driving loop around the
-accepted static-8k backend. Environment, acquisition, calibration, the static
-baseline, rejected actor ablations, logged-time Renderer, automated preflight,
-browser-side trial recording, browser-trial acceptance checking, and scripted
-browser-service rehearsal are complete. Static 8k remains the accepted
-checkpoint; no further dynamic training starts until driving evidence makes it
-necessary.
+Stage H3 now prioritizes genuine world-coordinate free driving around the
+accepted static-8k backend. The logged-time Renderer, browser trial tooling,
+and scripted rehearsal remain valid regression evidence, but the logged
+trajectory still supplies the main road motion. They must not be reported as
+acceptance of a vehicle whose steering determines its future world path.
+
+Static 8k remains the accepted visual and geometry checkpoint. The agreed
+technical direction is recorded in
+`docs/drivable_reconstruction_model_strategy.md`: retain SplatAD as the primary
+interactive renderer, use NeuRAD only for a matched quality comparison, use
+MTGS-style multi-traversal reconstruction when spatial coverage is the
+limitation, and borrow UniSim's compositional closed-loop concepts without
+treating generated completion as observed ground truth. NeuRAD, MTGS, and
+UniSim are not currently integrated.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
 
-1. keep static 8k as the fixed visual and geometry checkpoint;
-2. run `drivability-preflight` after renderer/control changes and preserve its
-   JSON plus review images;
-3. run `trial-rehearsal` against the live browser service to catch plumbing
-   problems before asking for a human trial;
-4. run the Level-7 10 Hz browser loop through the full segment with a human;
-5. start with the visible movement profile when inspecting whether motion is
-   perceptible, then repeat the acceptance run with `safe` if strict envelope
-   evidence is needed;
-6. accept only steering, throttle, brake, and reset during driving—never ask
-   the operator to inspect or compensate for reconstruction defects;
-7. preserve `/trial.json`, including browser-reported control-event-to-screen
-   p95 latency, reset events, and the five manual drivability gate verdicts;
-8. run `trial-check` and preserve the resulting acceptance-check JSON;
-9. execute the six separate gates in
-   `docs/drivability_acceptance_criteria.md` on this low-interference segment;
-10. return dynamic traffic to the main line immediately if it obscures the
-   road, creates a false obstacle, or closed-loop autonomous-driving testing
-   begins;
-11. then fix the offending dynamic object/window with the existing actor bounds
-   and timing evidence rather than restarting broad, ungated training.
+1. keep static 8k fixed and separate simulation time, source-log time,
+   absolute world ego pose, and six-camera rig extrinsics;
+2. let the vehicle model own absolute position, yaw, and speed;
+3. render all six cameras from that one world pose and correct any motion
+   metadata that currently comes from the source trajectory;
+4. probe lateral offsets at 0, +/−1 m, +/−2 m, and +/−3 m, then extend yaw only
+   while the preceding pose ring remains valid;
+5. test continuous lane-change, braking, and left/right turn trajectories, not
+   only isolated camera offsets;
+6. distinguish render completion, human-usable coverage, and
+   geometry-trustworthy closed-loop coverage;
+7. run the existing preflight and browser trial tools as regressions after the
+   renderer/control change, not as substitutes for the new free-driving gates;
+8. if known observed surfaces fail, compare SplatAD with NeuRAD under matched
+   conditions before replacing the main renderer;
+9. if the requested views expose unobserved surfaces, expand to multi-lane,
+   multi-pass, or multi-branch data and an MTGS-style shared reconstruction
+   rather than increasing training steps blindly;
+10. return dynamic actors to the main line when they obscure the road, create a
+    false obstacle, or responsive traffic/closed-loop agent evaluation begins;
+11. never ask the operator to inspect or compensate for reconstruction defects
+    while driving.
 
 In this plan, camera images remain the source of visual appearance. LiDAR
 anchors depth, metric scale, and ground geometry; fused ego pose/IMU anchors

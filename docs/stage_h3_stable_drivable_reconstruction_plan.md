@@ -2,6 +2,40 @@
 
 Date: 2026-07-19
 
+Last strategy update: 2026-07-22
+
+## Free-Driving Architecture Update — 2026-07-22
+
+This decision supersedes older next-action wording later in this document.
+The logged-time bounded-offset browser remains useful regression evidence, but
+it is not acceptance of genuine free driving: the recorded trajectory still
+supplies the main road motion.
+
+The next main-line task is a world-coordinate free-driving probe using the
+accepted scene-040 static-8k checkpoint without retraining:
+
+1. separate simulation time, source-log time, absolute world ego pose, and the
+   fixed six-camera rig extrinsics;
+2. let the vehicle model own absolute position, yaw, and speed so steering
+   changes the future path rather than only the rendered view;
+3. render all six cameras from that one requested world pose;
+4. measure isolated offsets and continuous vehicle paths before claiming a
+   drivable envelope;
+5. expand to multi-lane, multi-pass, or multi-branch data when the requested
+   road area was not observed by the single scene-040 traversal;
+6. return dynamic actors to the critical path when they hide the road, create
+   false obstacles, or responsive traffic/closed-loop agent evaluation begins.
+
+SplatAD remains the primary interactive renderer. NeuRAD is a matched
+quality-oriented comparison, MTGS supplies the multi-traversal spatial-coverage
+direction, and UniSim supplies a closed-loop compositional architecture
+reference. None of those comparison/reference roles imply a completed
+integration.
+
+The complete decision, method boundaries, execution order, promotion gates,
+and primary references are recorded in
+`drivable_reconstruction_model_strategy.md`.
+
 ## Product-Priority Update — 2026-07-21
 
 This decision supersedes older next-action wording later in this document.
