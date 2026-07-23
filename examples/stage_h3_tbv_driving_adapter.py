@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
+from dataclasses import dataclass
 import hashlib
 import io
 import json
@@ -27,6 +29,7 @@ from driving_scene_reconstruction.sim import (  # noqa: E402
     LoggedCenterlineCorridor,
     LoggedCenterlineSample,
     RouteDrivingEvidenceRecorder,
+    SimpleVehicleModel,
     SupportedRoute,
 )
 from stage_h3_tbv_world_pose_probe import (  # noqa: E402
@@ -56,6 +59,19 @@ RIGHT_END_METERS = 30.0
 CORRIDOR_HALF_WIDTH_METERS = 1.0
 CORRIDOR_HEADING_LIMIT_DEGREES = 30.0
 SELECTION_WINDOW_METERS = 0.5
+FRONT_CAMERAS = (
+    "ring_front_left",
+    "ring_front_center",
+    "ring_front_right",
+)
+COCKPIT_WIDTH = 1600
+COCKPIT_VIEW_HEIGHT = 620
+COCKPIT_STATUS_HEIGHT = 48
+COCKPIT_HORIZONTAL_FOV_DEGREES = 150.0
+COCKPIT_TOP_ANGLE_DEGREES = 18.0
+COCKPIT_BOTTOM_ANGLE_DEGREES = -24.0
+BEV_SIZE = 284
+DEFAULT_MAX_SPEED_MPS = 4.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -67,6 +83,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=8768)
     parser.add_argument("--evidence-output", type=Path, default=DEFAULT_EVIDENCE)
     parser.add_argument("--expected-checkpoint-step", type=int, default=7999)
+    parser.add_argument("--max-speed-mps", type=float, default=DEFAULT_MAX_SPEED_MPS)
     return parser.parse_args()
 
 
@@ -134,7 +151,13 @@ def supported_route(
     )
 
 
-def make_adapter(renderer: TbVWorldRenderer) -> BranchedRouteDrivingAdapter:
+def make_adapter(
+    renderer: TbVWorldRenderer,
+    *,
+    max_speed_mps: float = DEFAULT_MAX_SPEED_MPS,
+) -> BranchedRouteDrivingAdapter:
+    if not math.isfinite(max_speed_mps) or max_speed_mps <= 0.0:
+        raise ValueError("maximum speed must be finite and positive")
     right_route = renderer.routes[RIGHT_TRAVERSAL]
     straight_route = renderer.routes[STRAIGHT_TRAVERSAL]
     common = supported_route(
@@ -164,6 +187,12 @@ def make_adapter(renderer: TbVWorldRenderer) -> BranchedRouteDrivingAdapter:
         branches={"straight": straight, "right": right},
         spawn_state=EgoState(x=spawn.x, y=spawn.y, yaw=spawn.yaw),
         selection_window_meters=SELECTION_WINDOW_METERS,
+        vehicle_model=SimpleVehicleModel(
+            max_steer_angle=math.radians(15.0),
+            max_acceleration=2.0,
+            max_braking=5.0,
+            max_speed=max_speed_mps,
+        ),
     )
 
 
@@ -177,7 +206,413 @@ def route_height(
     return pose_at_progress(route, progress).z
 
 
-def make_mosaic(
+@dataclass(frozen=True)
+class CameraProjection:
+    """One calibrated pinhole camera expressed in the rig-local frame."""
+
+    name: str
+    width: int
+    height: int
+    fx: float
+    fy: float
+    cx: float
+    cy: float
+    local_to_camera: tuple[tuple[float, float, float], ...]
+
+
+def _tensor_scalar(value: Any) -> float:
+    if hasattr(value, "reshape"):
+        value = value.reshape(-1)[0]
+    if hasattr(value, "item"):
+        value = value.item()
+    return float(value)
+
+
+def front_camera_projections(
+    renderer: TbVWorldRenderer,
+) -> dict[str, tuple[CameraProjection, ...]]:
+    """Extract scaled front-camera calibration without changing the renderer."""
+
+    import numpy as np
+
+    if not renderer.is_loaded:
+        raise RuntimeError("renderer must be loaded before extracting calibration")
+    profiles: dict[str, tuple[CameraProjection, ...]] = {}
+    for traversal in (RIGHT_TRAVERSAL, STRAIGHT_TRAVERSAL):
+        front_pose = renderer.source_poses[traversal]["ring_front_center"]
+        forward_xy = renderer._horizontal_forward(front_pose)
+        local_to_world = np.asarray(
+            (
+                (forward_xy[0], -forward_xy[1], 0.0),
+                (forward_xy[1], forward_xy[0], 0.0),
+                (0.0, 0.0, 1.0),
+            ),
+            dtype=np.float64,
+        )
+        projections = []
+        for camera_name in FRONT_CAMERAS:
+            camera = deepcopy(renderer.source_cameras[traversal][camera_name])
+            if renderer.output_scale != 1.0:
+                camera.rescale_output_resolution(renderer.output_scale)
+            camera_to_world = (
+                renderer.source_poses[traversal][camera_name]
+                .detach()
+                .cpu()
+                .numpy()
+            )
+            local_to_camera = camera_to_world[:, :3].T @ local_to_world
+            projections.append(
+                CameraProjection(
+                    name=camera_name,
+                    width=int(round(_tensor_scalar(camera.width))),
+                    height=int(round(_tensor_scalar(camera.height))),
+                    fx=_tensor_scalar(camera.fx),
+                    fy=_tensor_scalar(camera.fy),
+                    cx=_tensor_scalar(camera.cx),
+                    cy=_tensor_scalar(camera.cy),
+                    local_to_camera=tuple(
+                        tuple(float(value) for value in row)
+                        for row in local_to_camera
+                    ),
+                )
+            )
+        profiles[traversal] = tuple(projections)
+    return profiles
+
+
+class CylindricalCockpitComposer:
+    """Calibrated three-camera cylindrical projection for the driving view."""
+
+    def __init__(
+        self,
+        profiles: dict[str, tuple[CameraProjection, ...]],
+        *,
+        width: int = COCKPIT_WIDTH,
+        height: int = COCKPIT_VIEW_HEIGHT,
+        horizontal_fov_degrees: float = COCKPIT_HORIZONTAL_FOV_DEGREES,
+        top_angle_degrees: float = COCKPIT_TOP_ANGLE_DEGREES,
+        bottom_angle_degrees: float = COCKPIT_BOTTOM_ANGLE_DEGREES,
+    ) -> None:
+        import cv2
+        import numpy as np
+
+        if width <= 0 or height <= 0:
+            raise ValueError("cockpit dimensions must be positive")
+        if not 0.0 < horizontal_fov_degrees < 180.0:
+            raise ValueError("horizontal field of view must be in (0, 180)")
+        if not -89.0 < bottom_angle_degrees < top_angle_degrees < 89.0:
+            raise ValueError("invalid cockpit vertical angle range")
+        self.cv2 = cv2
+        self.np = np
+        self.width = width
+        self.height = height
+        self.horizontal_fov_degrees = horizontal_fov_degrees
+        self.top_angle_degrees = top_angle_degrees
+        self.bottom_angle_degrees = bottom_angle_degrees
+        self.profiles = profiles
+        self.maps: dict[
+            str, dict[str, tuple[int, int, Any, Any, Any]]
+        ] = {}
+        self.coverage_fraction: dict[str, float] = {}
+        for profile, projections in profiles.items():
+            maps, coverage = self._build_maps(projections)
+            if coverage < 0.90:
+                raise RuntimeError(
+                    f"front cylindrical coverage is only {coverage:.1%} for {profile}"
+                )
+            self.maps[profile] = maps
+            self.coverage_fraction[profile] = coverage
+
+    @classmethod
+    def from_renderer(
+        cls, renderer: TbVWorldRenderer
+    ) -> "CylindricalCockpitComposer":
+        return cls(front_camera_projections(renderer))
+
+    def _build_maps(
+        self, projections: tuple[CameraProjection, ...]
+    ) -> tuple[dict[str, tuple[int, int, Any, Any, Any]], float]:
+        np = self.np
+        half_fov = math.radians(self.horizontal_fov_degrees) / 2.0
+        theta = np.linspace(
+            half_fov, -half_fov, self.width, dtype=np.float32
+        )[None, :]
+        vertical = np.linspace(
+            math.radians(self.top_angle_degrees),
+            math.radians(self.bottom_angle_degrees),
+            self.height,
+            dtype=np.float32,
+        )[:, None]
+        horizontal_x = np.broadcast_to(np.cos(theta), (self.height, self.width))
+        horizontal_y = np.broadcast_to(np.sin(theta), (self.height, self.width))
+        vertical_z = np.broadcast_to(np.tan(vertical), (self.height, self.width))
+        directions = np.stack(
+            (horizontal_x, horizontal_y, vertical_z), axis=0
+        ).reshape(3, -1)
+        direction_norm = np.linalg.norm(directions, axis=0)
+
+        maps: dict[str, tuple[int, int, Any, Any, Any]] = {}
+        total_weight = np.zeros((self.height, self.width), dtype=np.float32)
+        for projection in projections:
+            local_to_camera = np.asarray(
+                projection.local_to_camera, dtype=np.float32
+            )
+            camera_rays = local_to_camera @ directions
+            depth = -camera_rays[2]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                map_x = (
+                    projection.fx * camera_rays[0] / depth + projection.cx
+                ).reshape(self.height, self.width)
+                map_y = (
+                    projection.cy - projection.fy * camera_rays[1] / depth
+                ).reshape(self.height, self.width)
+            valid = (
+                (depth.reshape(self.height, self.width) > 1e-6)
+                & (map_x >= 0.0)
+                & (map_x <= projection.width - 1.0)
+                & (map_y >= 0.0)
+                & (map_y <= projection.height - 1.0)
+            )
+            edge_distance = np.minimum.reduce(
+                (
+                    map_x,
+                    projection.width - 1.0 - map_x,
+                    map_y,
+                    projection.height - 1.0 - map_y,
+                )
+            )
+            feather_pixels = max(
+                8.0, min(projection.width, projection.height) * 0.08
+            )
+            feather = np.clip(
+                edge_distance / feather_pixels, 0.0, 1.0
+            ).astype(np.float32)
+            incidence = np.clip(
+                depth / direction_norm, 0.0, 1.0
+            ).reshape(self.height, self.width)
+            weight = (
+                np.power(incidence, 8.0).astype(np.float32)
+                * feather
+                * valid.astype(np.float32)
+            )
+            map_x = np.where(valid, map_x, -1.0).astype(np.float32)
+            map_y = np.where(valid, map_y, -1.0).astype(np.float32)
+            covered_columns = np.flatnonzero(np.any(weight > 1e-6, axis=0))
+            if not len(covered_columns):
+                raise RuntimeError(
+                    f"{projection.name} contributes no cylindrical pixels"
+                )
+            left = int(covered_columns[0])
+            right = int(covered_columns[-1]) + 1
+            maps[projection.name] = (
+                left,
+                right,
+                map_x[:, left:right].copy(),
+                map_y[:, left:right].copy(),
+                weight[:, left:right].copy(),
+            )
+            total_weight += weight
+        coverage = float((total_weight > 1e-6).mean())
+        return maps, coverage
+
+    def compose(self, profile: str, frames: dict[str, Any]) -> Any:
+        if profile not in self.maps:
+            raise KeyError(f"no cylindrical calibration for profile {profile!r}")
+        np = self.np
+        accumulator = np.zeros(
+            (self.height, self.width, 3), dtype=np.float32
+        )
+        total_weight = np.zeros((self.height, self.width), dtype=np.float32)
+        projections = {item.name: item for item in self.profiles[profile]}
+        for camera_name in FRONT_CAMERAS:
+            frame = frames[camera_name]
+            projection = projections[camera_name]
+            if tuple(frame.shape[:2]) != (projection.height, projection.width):
+                raise RuntimeError(
+                    f"{camera_name} rendered {tuple(frame.shape[:2])}, expected "
+                    f"{(projection.height, projection.width)}"
+                )
+            left, right, map_x, map_y, weight = self.maps[profile][camera_name]
+            warped = self.cv2.remap(
+                frame,
+                map_x,
+                map_y,
+                interpolation=self.cv2.INTER_LINEAR,
+                borderMode=self.cv2.BORDER_CONSTANT,
+            )
+            accumulator[:, left:right] += (
+                warped.astype(np.float32) * weight[:, :, None]
+            )
+            total_weight[:, left:right] += weight
+        panorama = np.zeros_like(accumulator, dtype=np.uint8)
+        covered = total_weight > 1e-6
+        panorama[covered] = np.clip(
+            accumulator[covered] / total_weight[covered, None],
+            0.0,
+            255.0,
+        ).astype(np.uint8)
+        return panorama
+
+
+def make_trajectory_bev(
+    image_module: Any,
+    draw_module: Any,
+    adapter: BranchedRouteDrivingAdapter,
+    state: EgoState,
+    support: dict[str, object],
+    *,
+    size: int = BEV_SIZE,
+) -> Any:
+    """Draw trajectory support, not a synthetic overhead RGB camera."""
+
+    scale = 5.5
+    ego_x = size // 2
+    ego_y = size - 48
+    canvas = image_module.new("RGB", (size, size), (12, 18, 24))
+    draw = draw_module.Draw(canvas)
+    for delta_meters in (10.0, 20.0, 30.0, 40.0):
+        y = int(round(ego_y - delta_meters * scale))
+        if 0 <= y < size:
+            draw.line((0, y, size, y), fill=(29, 39, 48), width=1)
+    draw.line((ego_x, 28, ego_x, size), fill=(29, 39, 48), width=1)
+
+    cosine, sine = math.cos(state.yaw), math.sin(state.yaw)
+
+    def screen(x: float, y: float) -> tuple[int, int]:
+        dx, dy = x - state.x, y - state.y
+        forward = dx * cosine + dy * sine
+        left = -dx * sine + dy * cosine
+        return (
+            int(round(ego_x - left * scale)),
+            int(round(ego_y - forward * scale)),
+        )
+
+    def points(route: SupportedRoute) -> list[tuple[int, int]]:
+        return [screen(sample.x, sample.y) for sample in route.corridor.samples]
+
+    selected = adapter.selected_branch
+    branch_colours = {
+        "straight": (74, 171, 255),
+        "right": (255, 142, 73),
+    }
+    for name, route in adapter.branches.items():
+        colour = branch_colours.get(name, (135, 150, 160))
+        if selected is not None and name != selected:
+            colour = tuple(channel // 3 for channel in colour)
+        route_points = points(route)
+        if len(route_points) >= 2:
+            draw.line(route_points, fill=(38, 51, 61), width=13, joint="curve")
+            draw.line(route_points, fill=colour, width=3, joint="curve")
+            endpoint = route_points[-1]
+            draw.ellipse(
+                (
+                    endpoint[0] - 8,
+                    endpoint[1] - 8,
+                    endpoint[0] + 8,
+                    endpoint[1] + 8,
+                ),
+                fill=colour,
+            )
+            draw.text(
+                (endpoint[0] - 3, endpoint[1] - 6),
+                "1" if name == "straight" else "2",
+                fill=(8, 12, 16),
+            )
+
+    active_points = points(adapter.active_route)
+    if len(active_points) >= 2:
+        support_width = max(
+            5,
+            int(
+                round(
+                    2.0
+                    * adapter.active_route.corridor.half_width
+                    * scale
+                )
+            ),
+        )
+        draw.line(
+            active_points,
+            fill=(77, 91, 99),
+            width=support_width,
+            joint="curve",
+        )
+        draw.line(active_points, fill=(238, 238, 224), width=2, joint="curve")
+
+    margin = float(support["distance_margin_meters"])
+    ego_colour = (255, 78, 69) if margin < 0.2 else (100, 240, 150)
+    draw.polygon(
+        (
+            (ego_x, ego_y - 12),
+            (ego_x - 8, ego_y + 9),
+            (ego_x, ego_y + 5),
+            (ego_x + 8, ego_y + 9),
+        ),
+        fill=ego_colour,
+        outline=(245, 245, 245),
+    )
+    draw.rectangle((0, 0, size - 1, size - 1), outline=(112, 126, 136), width=2)
+    draw.rectangle((1, 1, size - 2, 44), fill=(8, 12, 16))
+    draw.text((10, 8), "TRAJECTORY SUPPORT  +/-1 m", fill=(240, 240, 225))
+    draw.text((10, 25), "not overhead RGB", fill=(151, 170, 181))
+    draw.rectangle((1, size - 30, size - 2, size - 2), fill=(8, 12, 16))
+    draw.text(
+        (10, size - 23),
+        (
+            f"offset {float(support['lateral_offset_meters']):+.2f} m  "
+            f"margin {margin:.2f} m"
+        ),
+        fill=ego_colour,
+    )
+    return canvas
+
+
+def make_cockpit_frame(
+    image_module: Any,
+    draw_module: Any,
+    composer: CylindricalCockpitComposer,
+    frames: dict[str, Any],
+    adapter: BranchedRouteDrivingAdapter,
+    state: EgoState,
+    support: dict[str, object],
+) -> Any:
+    profile = str(support["renderer_profile"])
+    panorama = image_module.fromarray(composer.compose(profile, frames)).convert("RGB")
+    canvas = image_module.new(
+        "RGB",
+        (composer.width, composer.height + COCKPIT_STATUS_HEIGHT),
+        (4, 6, 8),
+    )
+    canvas.paste(panorama, (0, 0))
+    inset = make_trajectory_bev(
+        image_module, draw_module, adapter, state, support
+    )
+    inset_x, inset_y = composer.width - inset.width - 14, 14
+    canvas.paste(inset, (inset_x, inset_y))
+    draw = draw_module.Draw(canvas)
+    draw.rectangle((8, 8, 344, 37), fill=(5, 9, 12))
+    draw.text(
+        (18, 16),
+        (
+            f"CALIBRATED FRONT CYLINDER  "
+            f"{composer.horizontal_fov_degrees:.0f} DEG"
+        ),
+        fill=(220, 235, 240),
+    )
+    status = (
+        f"TbV evidence-only | {support['phase']} | "
+        f"branch={support['selected_branch'] or '-'} | "
+        f"progress={float(support['progress_from_anchor_meters']):+.1f}m | "
+        f"offset={float(support['lateral_offset_meters']):+.2f}m | "
+        f"speed={state.speed:.2f}m/s"
+    )
+    draw.text(
+        (12, composer.height + 15), status, fill=(255, 216, 77)
+    )
+    return canvas
+
+
+def make_diagnostic_mosaic(
     image_module: Any,
     draw_module: Any,
     frames: dict[str, Any],
@@ -220,7 +655,7 @@ def make_mosaic(
             (x + (width - tile.width) // 2, y + (height - tile.height) // 2),
         )
     status = (
-        f"TbV evidence-only | {support['phase']} | "
+        f"DIAGNOSTIC ONLY | {support['phase']} | "
         f"branch={support['selected_branch'] or '-'} | "
         f"progress={float(support['progress_from_anchor_meters']):+.1f}m | "
         f"offset={float(support['lateral_offset_meters']):+.2f}m | "
@@ -237,7 +672,7 @@ WEB_PAGE = """<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TbV 路线约束驾驶 v0</title>
+  <title>TbV 宽视场驾驶舱</title>
   <style>
     body { margin:0; background:#0d0d0d; color:#eee; font:15px sans-serif; text-align:center; }
     h1 { font-size:18px; margin:5px; }
@@ -250,14 +685,18 @@ WEB_PAGE = """<!doctype html>
   </style>
 </head>
 <body>
-  <h1>TbV shared entrance -20m · ±1m evidence-only pilot</h1>
-  <img id="view" src="/frame.jpg" alt="seven reconstructed driving cameras">
+  <h1>TbV 前向宽视场驾驶舱 · 约 150° · 轨迹支持 ±1m</h1>
+  <img id="view" src="/frame.jpg" alt="three calibrated front cameras projected into one cylindrical driving view">
   <div id="status">W 油门 · S 刹车 · A/D 转向 · 到锚点后选择分支 · R 重置</div>
   <div id="branches" hidden>
     已到共享锚点：<button data-branch="straight">1 / 直行</button>
     <button data-branch="right">2 / 右转</button>
   </div>
-  <div><button id="reset">R 重置</button> <a href="/evidence.json" target="_blank">可信证据 JSON</a></div>
+  <div>
+    <button id="reset">R 重置</button>
+    <a href="/diagnostic" target="_blank">七相机诊断</a> ·
+    <a href="/evidence.json" target="_blank">可信证据 JSON</a>
+  </div>
   <script>
     const view = document.getElementById("view");
     const status = document.getElementById("status");
@@ -363,6 +802,44 @@ WEB_PAGE = """<!doctype html>
 """
 
 
+DIAGNOSTIC_PAGE = """<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TbV 七相机诊断</title>
+  <style>
+    body { margin:0; background:#0d0d0d; color:#eee; font:15px sans-serif; text-align:center; }
+    h1 { font-size:18px; margin:7px 4px 2px; }
+    p { color:#b9c3c9; margin:3px 4px 7px; }
+    #view { display:block; width:calc(100vw - 8px); max-height:calc(100vh - 75px); object-fit:contain; margin:auto; border:1px solid #444; }
+    a { color:#8ed8ff; }
+  </style>
+</head>
+<body>
+  <h1>七相机重建诊断</h1>
+  <p>仅用于检查覆盖、变形和重影，不作为真人驾驶视图。<a href="/">返回驾驶舱</a></p>
+  <img id="view" src="/diagnostic.jpg" alt="seven reconstructed camera diagnostics">
+  <script>
+    const view=document.getElementById("view");
+    let sequence=null;
+    async function refresh() {
+      try {
+        const response=await fetch("/state.json",{cache:"no-store"});
+        const state=await response.json();
+        if (state.sequence!==sequence) {
+          sequence=state.sequence;
+          view.src="/diagnostic.jpg?n="+sequence;
+        }
+      } catch (_) {}
+    }
+    setInterval(refresh,300);
+  </script>
+</body>
+</html>
+"""
+
+
 def render_web_page(dt: float) -> str:
     return WEB_PAGE.replace("__TICK_PERIOD_MS__", f"{dt * 1000.0:.6f}")
 
@@ -383,14 +860,18 @@ def main() -> None:
         raise ValueError("--dt must be finite and positive")
     if not 0.0 < args.output_scale <= 1.0:
         raise ValueError("--output-scale must be in (0, 1]")
+    if not math.isfinite(args.max_speed_mps) or args.max_speed_mps <= 0.0:
+        raise ValueError("--max-speed-mps must be finite and positive")
     if not 1 <= args.port <= 65535:
         raise ValueError("--port must be between 1 and 65535")
 
     renderer = TbVWorldRenderer(args.config, args.output_scale)
     adapter: BranchedRouteDrivingAdapter
+    composer: CylindricalCockpitComposer
     evidence: RouteDrivingEvidenceRecorder
     runtime: dict[str, Any] = {
-        "state": EgoState(), "jpeg": b"", "render": {}, "sequence": -1,
+        "state": EgoState(), "jpeg": b"", "frames": {}, "render": {},
+        "diagnostic_jpeg": b"", "sequence": -1,
         "boundary_hit": False, "boundary_reason": None, "selection_required": False,
     }
 
@@ -405,6 +886,7 @@ def main() -> None:
             "y_meters": state.y,
             "yaw_degrees": math.degrees(state.yaw),
             "speed_mps": state.speed,
+            "maximum_speed_mps": args.max_speed_mps,
             "selected_branch": adapter.selected_branch,
             "selection_required": runtime["selection_required"],
             "boundary_hit": runtime["boundary_hit"],
@@ -420,7 +902,20 @@ def main() -> None:
             ),
             "renderer_profile": support.renderer_profile,
             "renderer_ms": float(runtime["render"].get("render_seconds", 0.0)) * 1000.0,
+            "presentation_ms": (
+                float(runtime["render"].get("presentation_seconds", 0.0))
+                * 1000.0
+            ),
             "frozen_scene_time_seconds": renderer.model_scene_time,
+            "display_mode": "calibrated_three_camera_cylindrical_front",
+            "front_horizontal_fov_degrees": (
+                composer.horizontal_fov_degrees
+            ),
+            "front_projection_coverage_fraction": float(
+                runtime["render"].get("front_projection_coverage_fraction", 0.0)
+            ),
+            "bev_source": "logged_trajectory_support_corridor",
+            "diagnostic_url": "/diagnostic",
             "evidence_url": "/evidence.json",
             "certified_drivable_corridor": False,
         }
@@ -428,7 +923,9 @@ def main() -> None:
             value.update(extra)
         return value
 
-    def render_state(state: EgoState) -> tuple[bytes, dict[str, object]]:
+    def render_state(
+        state: EgoState,
+    ) -> tuple[bytes, dict[str, Any], dict[str, object]]:
         from PIL import Image, ImageDraw
 
         support = adapter.support(state)
@@ -440,19 +937,34 @@ def main() -> None:
             LocalWorldPose(state.x, state.y, z, state.yaw),
         )
         frames = dict(observation["frames"])
-        mosaic = make_mosaic(Image, ImageDraw, frames, state, support.as_dict())
+        presentation_started = time.perf_counter()
+        cockpit = make_cockpit_frame(
+            Image,
+            ImageDraw,
+            composer,
+            frames,
+            adapter,
+            state,
+            support.as_dict(),
+        )
         buffer = io.BytesIO()
-        mosaic.save(buffer, format="JPEG", quality=88)
-        return buffer.getvalue(), {
+        cockpit.save(buffer, format="JPEG", quality=88)
+        presentation_seconds = time.perf_counter() - presentation_started
+        return buffer.getvalue(), frames, {
             "render_seconds": float(observation["render_seconds"]),
+            "presentation_seconds": presentation_seconds,
             "scene_time_seconds": float(observation["scene_time_seconds"]),
             "renderer_profile": support.renderer_profile,
             "camera_count": len(frames),
+            "front_projection_coverage_fraction": (
+                composer.coverage_fraction[support.renderer_profile]
+            ),
         }
 
     def commit(
         state: EgoState,
         jpeg: bytes,
+        frames: dict[str, Any],
         render: dict[str, object],
         *,
         boundary_hit: bool = False,
@@ -462,11 +974,29 @@ def main() -> None:
         runtime.update(
             state=state,
             jpeg=jpeg,
+            frames=frames,
             render=render,
+            diagnostic_jpeg=b"",
             boundary_hit=boundary_hit,
             boundary_reason=boundary_reason,
             selection_required=selection_required,
         )
+
+    def diagnostic_jpeg() -> bytes:
+        cached = runtime["diagnostic_jpeg"]
+        if cached:
+            return cached
+        from PIL import Image, ImageDraw
+
+        state: EgoState = runtime["state"]
+        support = adapter.support(state).as_dict()
+        mosaic = make_diagnostic_mosaic(
+            Image, ImageDraw, runtime["frames"], state, support
+        )
+        buffer = io.BytesIO()
+        mosaic.save(buffer, format="JPEG", quality=88)
+        runtime["diagnostic_jpeg"] = buffer.getvalue()
+        return runtime["diagnostic_jpeg"]
 
     class Handler(BaseHTTPRequestHandler):
         def send_bytes(self, status: int, content_type: str, data: bytes) -> None:
@@ -484,8 +1014,16 @@ def main() -> None:
             path = urlparse(self.path).path
             if path == "/":
                 self.send_bytes(200, "text/html; charset=utf-8", render_web_page(args.dt).encode())
+            elif path == "/diagnostic":
+                self.send_bytes(
+                    200,
+                    "text/html; charset=utf-8",
+                    DIAGNOSTIC_PAGE.encode(),
+                )
             elif path == "/frame.jpg":
                 self.send_bytes(200, "image/jpeg", runtime["jpeg"])
+            elif path == "/diagnostic.jpg":
+                self.send_bytes(200, "image/jpeg", diagnostic_jpeg())
             elif path == "/state.json":
                 self.send_json(200, payload())
             elif path == "/evidence.json":
@@ -507,11 +1045,12 @@ def main() -> None:
                         raise ValueError("keys must contain only W/S/A/D")
                     state: EgoState = runtime["state"]
                     update = adapter.step(state, control_for_keys(keys), args.dt)
-                    jpeg, render = render_state(update.state)
+                    jpeg, frames, render = render_state(update.state)
                     runtime["sequence"] += 1
                     commit(
                         update.state,
                         jpeg,
+                        frames,
                         render,
                         boundary_hit=update.boundary_hit,
                         boundary_reason=update.boundary_reason,
@@ -564,9 +1103,9 @@ def main() -> None:
                     before_hash = hashlib.sha256(runtime["jpeg"]).hexdigest()
                     before_profile = adapter.support(state).renderer_profile
                     support = adapter.select_branch(branch, state)
-                    jpeg, render = render_state(state)
+                    jpeg, frames, render = render_state(state)
                     elapsed_ms = (time.perf_counter() - started) * 1000.0
-                    commit(state, jpeg, render)
+                    commit(state, jpeg, frames, render)
                     event = evidence.record_route_event(
                         "branch_selected",
                         {
@@ -592,8 +1131,8 @@ def main() -> None:
                     return
                 if parsed.path == "/reset":
                     state = adapter.reset()
-                    jpeg, render = render_state(state)
-                    commit(state, jpeg, render)
+                    jpeg, frames, render = render_state(state)
+                    commit(state, jpeg, frames, render)
                     elapsed_ms = (time.perf_counter() - started) * 1000.0
                     evidence.record_reset(
                         {
@@ -643,7 +1182,8 @@ def main() -> None:
                 f"expected checkpoint step {args.expected_checkpoint_step}, "
                 f"got {renderer.checkpoint_step}"
             )
-        adapter = make_adapter(renderer)
+        adapter = make_adapter(renderer, max_speed_mps=args.max_speed_mps)
+        composer = CylindricalCockpitComposer.from_renderer(renderer)
         assert renderer.checkpoint_path is not None
         evidence = RouteDrivingEvidenceRecorder(
             scene="tbv_miami_shared_entrance_straight_right",
@@ -661,20 +1201,36 @@ def main() -> None:
                 "corridor_half_width_meters": CORRIDOR_HALF_WIDTH_METERS,
                 "maximum_heading_error_degrees": CORRIDOR_HEADING_LIMIT_DEGREES,
                 "selection_window_meters": SELECTION_WINDOW_METERS,
+                "maximum_speed_mps": args.max_speed_mps,
                 "boundary_policy": "fail_closed_keep_last_valid_pose_and_stop",
+                "driving_display": {
+                    "mode": "calibrated_three_camera_cylindrical_front",
+                    "camera_names": list(FRONT_CAMERAS),
+                    "horizontal_fov_degrees": (
+                        composer.horizontal_fov_degrees
+                    ),
+                    "top_angle_degrees": composer.top_angle_degrees,
+                    "bottom_angle_degrees": composer.bottom_angle_degrees,
+                    "bev_source": "logged_trajectory_support_corridor",
+                    "seven_camera_diagnostic_url": "/diagnostic",
+                },
             },
             limitations=(
                 "Evidence-only static route-following pilot; not a certified simulator.",
                 "No ground truth exists for counterfactual lateral poses.",
                 "Vehicles are baked into static geometry and cannot respond.",
                 "Branch selection may switch traversal-specific appearance/sensor profiles.",
+                "The driving panorama is a calibrated three-camera projection; overlap "
+                "parallax and seams are presentation artifacts, not geometry evidence.",
+                "The inset is logged-trajectory support, not an overhead RGB camera or "
+                "a LiDAR-derived free-space certification.",
                 "Browser timing excludes monitor scan-out.",
             ),
             output_path=args.evidence_output,
         )
         initial = adapter.reset()
-        jpeg, render = render_state(initial)
-        commit(initial, jpeg, render)
+        jpeg, frames, render = render_state(initial)
+        commit(initial, jpeg, frames, render)
         evidence.record_reset(
             {
                 "simulation_time_seconds": initial.time,
@@ -685,6 +1241,7 @@ def main() -> None:
             }
         )
         print(f"TbV route adapter: http://{args.host}:{args.port}")
+        print(f"seven-camera diagnostics: http://{args.host}:{args.port}/diagnostic")
         print(f"evidence: {args.evidence_output.expanduser().resolve()}")
         print("controls: W/S/A/D, R reset, select 1=straight or 2=right at anchor")
         print("scope: static evidence-only route following; +/-1m fail-closed support")

@@ -6,6 +6,7 @@ import importlib.util
 import math
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -44,6 +45,24 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
             math.degrees(supported.corridor.max_heading_error), 30.0
         )
 
+    def test_adapter_uses_faster_bounded_driving_speed(self) -> None:
+        route = tuple(
+            MODULE.RouteSample(float(i), float(i), float(i), 0.0, 0.0, 0.0)
+            for i in range(-30, 51)
+        )
+        renderer = SimpleNamespace(
+            routes={
+                MODULE.RIGHT_TRAVERSAL: route,
+                MODULE.STRAIGHT_TRAVERSAL: route,
+            }
+        )
+
+        adapter = MODULE.make_adapter(renderer, max_speed_mps=4.0)
+
+        self.assertAlmostEqual(adapter.vehicle_model.max_speed, 4.0)
+        self.assertAlmostEqual(adapter.vehicle_model.max_acceleration, 2.0)
+        self.assertAlmostEqual(adapter.vehicle_model.max_braking, 5.0)
+
     def test_page_exposes_branch_choice_and_evidence(self) -> None:
         page = MODULE.render_web_page(0.1)
 
@@ -52,9 +71,16 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
         self.assertIn("/evidence.json", page)
         self.assertIn("/evidence-sample", page)
         self.assertIn("/evidence-route-timing", page)
+        self.assertIn('href="/diagnostic"', page)
+        self.assertIn("cylindrical driving view", page)
         self.assertIn("100.000000", page)
 
-    def test_mosaic_preserves_heterogeneous_camera_aspect_ratios(self) -> None:
+    def test_diagnostic_page_is_separate_from_driving_cockpit(self) -> None:
+        self.assertIn("/diagnostic.jpg", MODULE.DIAGNOSTIC_PAGE)
+        self.assertIn("不作为真人驾驶视图", MODULE.DIAGNOSTIC_PAGE)
+        self.assertIn('href="/"', MODULE.DIAGNOSTIC_PAGE)
+
+    def test_diagnostic_mosaic_preserves_camera_aspect_ratios(self) -> None:
         image_module = mock.Mock()
         image_module.new.return_value = mock.Mock()
         image_module.fromarray.side_effect = lambda frame: frame
@@ -74,7 +100,7 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
             "lateral_offset_meters": 0.0,
         }
 
-        MODULE.make_mosaic(
+        MODULE.make_diagnostic_mosaic(
             image_module, draw_module, frames, MODULE.EgoState(), support
         )
 
@@ -83,6 +109,44 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
         frames["ring_front_center"].thumbnail.assert_called_once_with(
             (520, 520), image_module.Resampling.LANCZOS
         )
+
+    def test_bev_uses_route_geometry_and_marks_it_non_rgb(self) -> None:
+        image_module = mock.Mock()
+        image_module.new.return_value = mock.Mock()
+        draw = mock.Mock()
+        draw_module = mock.Mock()
+        draw_module.Draw.return_value = draw
+        samples = (
+            SimpleNamespace(x=-1.0, y=0.0),
+            SimpleNamespace(x=0.0, y=0.0),
+            SimpleNamespace(x=10.0, y=0.0),
+        )
+        corridor = SimpleNamespace(samples=samples, half_width=1.0)
+        straight = SimpleNamespace(corridor=corridor)
+        right = SimpleNamespace(corridor=corridor)
+        adapter = SimpleNamespace(
+            selected_branch=None,
+            branches={"straight": straight, "right": right},
+            active_route=straight,
+        )
+        support = {
+            "distance_margin_meters": 0.7,
+            "lateral_offset_meters": 0.3,
+        }
+
+        MODULE.make_trajectory_bev(
+            image_module,
+            draw_module,
+            adapter,
+            MODULE.EgoState(),
+            support,
+            size=240,
+        )
+
+        self.assertTrue(draw.line.called)
+        self.assertTrue(draw.polygon.called)
+        labels = [call.args[1] for call in draw.text.call_args_list]
+        self.assertIn("not overhead RGB", labels)
 
 
 if __name__ == "__main__":

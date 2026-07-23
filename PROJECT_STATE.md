@@ -1,6 +1,6 @@
 # Project State — Driving Scene Reconstruction
 
-Last updated: 2026-07-22
+Last updated: 2026-07-23
 
 ## 1. Product Goal
 
@@ -675,6 +675,39 @@ keyboard-to-display test. Artifacts remain outside Git under
 `/home/yawei/stage3_external/artifacts/tbv_branch_pair_driving_adapter/`.
 Exact evidence is in `experiments/stage_h3_tbv_driving_adapter.md`.
 
+### Stage H3 Level 9G — TbV cockpit presentation
+
+Completed on 2026-07-23 without retraining:
+
+- replaced the default seven-camera driving mosaic with a calibrated
+  cylindrical projection of `ring_front_left`, `ring_front_center`, and
+  `ring_front_right`;
+- retained the cameras' trained intrinsics and rig rotations, requested a 150
+  degree horizontal field of view, and feathered only their calibrated overlap;
+- measured 99.9816% projection coverage for the right-turn traversal profile
+  and 99.9802% for the straight profile;
+- added an ego-up trajectory-support inset showing the logged route tube,
+  straight/right paths, current pose, lateral offset, and remaining +/-1 m
+  margin; it is explicitly not presented as overhead RGB or certified free
+  space;
+- moved the aspect-ratio-preserving seven-camera mosaic to `/diagnostic`, where
+  it remains available for reconstruction coverage, deformation, and ghost
+  inspection without occupying the driving view;
+- raised the configurable route-adapter speed cap from 2.0 to 4.0 m/s;
+- ran 25 consecutive host control samples to 4.0 m/s with seven finite camera
+  frames, zero support violations, and a 0.9296 m minimum remaining corridor
+  margin;
+- measured renderer latency at 57.35/60.33 ms p50/p95 and complete server
+  control-to-cockpit-JPEG latency at 97.40/100.34 ms p50/p95;
+- directly inspected the common-approach, straight-profile, and diagnostic
+  outputs. Road topology and the route inset remained legible, but camera
+  overlap seams, sensor-profile colour changes, reconstructed blur, and baked
+  vehicles remain visible.
+
+This completes the requested presentation split and a machine smoke, not the
+physical human trial. Exact evidence and artifact paths are in
+`experiments/stage_h3_tbv_cockpit_presentation.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -709,7 +742,7 @@ is accepted for a first human-driving prototype, but it is not certified for
 closed-loop autonomous-driving evaluation; the full +/-3 m probe remains a
 coverage diagnostic.
 
-The Level-9F TbV path now supports:
+The Level-9G TbV path now supports:
 
 ```text
 Branch-local world pose plus traversal route role
@@ -718,14 +751,16 @@ Branch-local world pose plus traversal route role
 → common entrance, straight route, or right-turn route at +/-1 m
 → SimpleVehicleModel continuous control from common progress -20 m
 → an explicit anchor stop followed by straight or right branch selection
-→ seven finite RGB arrays plus an aspect-ratio-preserving driving mosaic
+→ seven finite RGB arrays plus a calibrated three-front-camera cylindrical view
+→ an ego-up logged-trajectory support inset and separate seven-camera diagnostic
 → fail-closed route support and per-control machine-readable JSON evidence
 ```
 
 This is connected to a dedicated manual browser but not the common `Renderer`
 protocol. A GPU/HTTP machine rehearsal has exercised both branch transitions
-and the route boundary. A real operator keyboard-to-display trial remains
-required before any human-drivability claim.
+and the route boundary. A separate 4.0 m/s cockpit smoke passed at approximately
+10 Hz server-side. A real operator keyboard-to-display trial remains required
+before any human-drivability claim.
 
 This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint. The logged browser loop now
@@ -863,12 +898,14 @@ limitation, and borrow UniSim's compositional closed-loop concepts without
 treating generated completion as observed ground truth. NeuRAD, MTGS, and
 UniSim are not currently integrated.
 
-The adapter implementation is complete. The next action is deliberately
-narrow: run straight and right as separate human reset trials, capture browser
-request-to-image and physical input-to-image timing, inspect the transition
-when the renderer changes traversal profile, and reject any segment where
-baked vehicles, permanent geometry, or temporal artifacts alter the driving
-decision. Do not train beyond 8k before this gate.
+The adapter and cockpit presentation are complete. The next action is
+deliberately narrow: use the cylindrical front cockpit to run straight and
+right as separate human reset trials, capture browser request-to-image and
+physical input-to-image timing, inspect the transition when the renderer
+changes traversal profile, and reject any segment where panorama seams, baked
+vehicles, permanent geometry, or temporal artifacts alter the driving
+decision. Keep `/diagnostic` open only for post-drive inspection. Do not train
+beyond 8k before this gate.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:

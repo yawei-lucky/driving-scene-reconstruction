@@ -191,6 +191,7 @@ case "$MODE" in
       --output-scale "${H3_TBV_DRIVING_SCALE:-0.5}" \
       --host "${H3_TBV_DRIVING_HOST:-127.0.0.1}" \
       --port "${H3_TBV_DRIVING_PORT:-8768}" \
+      --max-speed-mps "${H3_TBV_MAX_SPEED_MPS:-4.0}" \
       --evidence-output "$DRIVING_EVIDENCE_ROOT/tbv_driving_evidence.json" \
       --expected-checkpoint-step 7999
     ;;

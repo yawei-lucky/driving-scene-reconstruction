@@ -221,6 +221,17 @@ Stage H3 Level 9F
   render time, server-to-JPEG time, and optional browser timing per control
 → a 241-sample GPU/HTTP machine rehearsal exercised both branches and one
   intentional boundary hit; physical keyboard-to-display review remains open
+
+Stage H3 Level 9G
+→ replaced the default seven-camera mosaic with a calibrated 150° cylindrical
+  front-left/front-centre/front-right driving view
+→ added an ego-up logged-trajectory support inset that shows the +/-1 m tube,
+  branch paths, vehicle pose, lateral offset, and remaining margin
+→ moved the complete aspect-ratio-preserving seven-camera view to `/diagnostic`
+→ raised the adapter's configurable default speed cap from 2.0 to 4.0 m/s
+→ both traversal calibrations cover 99.98% of the requested panorama
+→ a 25-sample 4.0 m/s host smoke retained seven finite cameras and route support;
+  server control-to-driving-JPEG measured 97.40/100.34 ms p50/p95
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -341,10 +352,17 @@ scripts/run_stage_h3_tbv_pilot.sh driving-adapter
 
 Open `http://localhost:8768` through the existing SSH/VS Code port-forwarding
 path. Drive with W/S/A/D, reset with R, and choose `1` for straight or `2` for
-right when the vehicle stops at the shared anchor. The live evidence report is
-available at `/evidence.json` and is also written outside Git under
-`/home/yawei/stage3_external/artifacts/tbv_branch_pair_driving_adapter/`.
-The report is evidence-only; it does not certify the rendered scene.
+right when the vehicle stops at the shared anchor. The default view is a
+calibrated approximately 150-degree cylindrical projection of the three front
+cameras with a logged-trajectory support inset. The full seven-camera mosaic
+is available separately at `/diagnostic`; it is a reconstruction diagnostic,
+not the driving view. The default speed cap is 4.0 m/s and can be changed with
+`H3_TBV_MAX_SPEED_MPS`.
+
+The live evidence report is available at `/evidence.json` and is also written
+outside Git under
+`/home/yawei/stage3_external/artifacts/tbv_branch_pair_driving_adapter/`. The
+report is evidence-only; it does not certify the rendered scene.
 
 For the true world-pose backend and current corridor probe, without retraining:
 
@@ -577,6 +595,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_tbv_driving_adapter.md` records the route adapter,
   evidence schema, GPU/HTTP rehearsal, display correction, and remaining human
   gate.
+- `experiments/stage_h3_tbv_cockpit_presentation.md` records the calibrated
+  front panorama, trajectory-support inset, diagnostic split, host latency,
+  and remaining seam/human-driving gate.
 
 See also `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 
