@@ -19,7 +19,7 @@ from pathlib import Path
 import statistics
 import sys
 import time
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -242,6 +242,35 @@ def validated_camera_names(camera_names: Iterable[str]) -> tuple[str, ...]:
             f"unknown cameras {unknown}; choose from {', '.join(CAMERAS)}"
         )
     return requested
+
+
+def validated_camera_output_scales(
+    camera_names: Iterable[str],
+    default_output_scale: float,
+    camera_output_scales: Mapping[str, float] | None,
+) -> dict[str, float]:
+    """Resolve one finite output scale for every requested camera."""
+
+    requested = validated_camera_names(camera_names)
+    if (
+        not math.isfinite(default_output_scale)
+        or not 0.0 < default_output_scale <= 1.0
+    ):
+        raise ValueError("default output scale must be in (0, 1]")
+    overrides = dict(camera_output_scales or {})
+    unknown = tuple(name for name in overrides if name not in requested)
+    if unknown:
+        raise ValueError(f"output scales provided for unrequested cameras {unknown}")
+    resolved = {
+        name: float(overrides.get(name, default_output_scale))
+        for name in requested
+    }
+    if not all(
+        math.isfinite(scale) and 0.0 < scale <= 1.0
+        for scale in resolved.values()
+    ):
+        raise ValueError("camera output scales must be finite and in (0, 1]")
+    return resolved
 
 
 class TbVWorldRenderer:
@@ -579,6 +608,7 @@ class TbVWorldRenderer:
         traversal: str,
         pose: LocalWorldPose,
         camera_names: Iterable[str] = CAMERAS,
+        camera_output_scales: Mapping[str, float] | None = None,
     ) -> dict[str, Any]:
         if not self.is_loaded:
             self.load()
@@ -587,6 +617,11 @@ class TbVWorldRenderer:
         if not all(math.isfinite(value) for value in (pose.x, pose.y, pose.z, pose.yaw)):
             raise ValueError("world pose must be finite")
         requested_camera_names = validated_camera_names(camera_names)
+        output_scales = validated_camera_output_scales(
+            requested_camera_names,
+            self.output_scale,
+            camera_output_scales,
+        )
         assert self.pipeline is not None
         assert self.torch is not None
         assert self.model_scene_time is not None
@@ -603,8 +638,9 @@ class TbVWorldRenderer:
                 )[None, ...]
                 camera.times = torch.full_like(camera.times, self.model_scene_time)
                 self._zero_source_motion_metadata(camera)
-                if self.output_scale != 1.0:
-                    camera.rescale_output_resolution(self.output_scale)
+                output_scale = output_scales[camera_name]
+                if output_scale != 1.0:
+                    camera.rescale_output_resolution(output_scale)
                 outputs = self.pipeline.model.get_outputs_for_camera(camera)
                 if "rgb" not in outputs:
                     raise RuntimeError(f"SplatAD returned no RGB for {camera_name}")
@@ -629,6 +665,7 @@ class TbVWorldRenderer:
             "scene_time_seconds": self.model_scene_time,
             "pose": pose,
             "camera_names": requested_camera_names,
+            "camera_output_scales": output_scales,
         }
 
 

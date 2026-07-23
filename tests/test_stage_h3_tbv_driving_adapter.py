@@ -72,6 +72,8 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
         self.assertIn("/evidence-sample", page)
         self.assertIn("/evidence-route-timing", page)
         self.assertIn('href="/diagnostic"', page)
+        self.assertIn("前向环视", page)
+        self.assertIn("原相机图", page)
         self.assertIn("cylindrical driving view", page)
         self.assertIn("100.000000", page)
 
@@ -80,6 +82,7 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
         self.assertIn("不作为真人驾驶视图", MODULE.DIAGNOSTIC_PAGE)
         self.assertIn('id="refresh"', MODULE.DIAGNOSTIC_PAGE)
         self.assertNotIn("setInterval", MODULE.DIAGNOSTIC_PAGE)
+        self.assertIn("<h1>原相机图</h1>", MODULE.DIAGNOSTIC_PAGE)
         self.assertIn('href="/"', MODULE.DIAGNOSTIC_PAGE)
 
     def test_diagnostic_mosaic_preserves_camera_aspect_ratios(self) -> None:
@@ -149,6 +152,61 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
         self.assertTrue(draw.polygon.called)
         labels = [call.args[1] for call in draw.text.call_args_list]
         self.assertIn("not overhead RGB", labels)
+
+    def test_overhead_assist_is_visual_only_and_masks_vehicle(self) -> None:
+        image_module = mock.Mock()
+        canvas = mock.Mock()
+        canvas.convert.return_value = canvas
+        image_module.fromarray.return_value = canvas
+        draw = mock.Mock()
+        draw_module = mock.Mock()
+        draw_module.Draw.return_value = draw
+        samples = (
+            SimpleNamespace(x=0.0, y=0.0),
+            SimpleNamespace(x=10.0, y=0.0),
+        )
+        corridor = SimpleNamespace(samples=samples, half_width=1.0)
+        route = SimpleNamespace(corridor=corridor)
+        adapter = SimpleNamespace(
+            selected_branch=None,
+            branches={"straight": route, "right": route},
+            active_route=route,
+        )
+        support = {
+            "distance_margin_meters": 0.8,
+            "lateral_offset_meters": 0.2,
+        }
+        composer = SimpleNamespace(
+            size=240,
+            forward_meters=12.0,
+            rear_meters=4.0,
+            side_meters=8.0,
+            screen=lambda forward, left: (
+                int(round(120 - 10 * left)),
+                int(round(180 - 10 * forward)),
+            ),
+        )
+
+        MODULE.make_trajectory_bev(
+            image_module,
+            draw_module,
+            adapter,
+            MODULE.EgoState(),
+            support,
+            size=240,
+            overhead=object(),
+            overhead_composer=composer,
+        )
+
+        labels = [call.args[1] for call in draw.text.call_args_list]
+        self.assertIn("OVERHEAD  ·  VISUAL ONLY", labels)
+        self.assertIn("black = no camera coverage", labels)
+        self.assertTrue(
+            any(
+                call.kwargs.get("fill") == (24, 29, 34)
+                for call in draw.polygon.call_args_list
+            )
+        )
 
 
 if __name__ == "__main__":

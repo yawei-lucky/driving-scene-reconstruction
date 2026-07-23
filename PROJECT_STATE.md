@@ -737,6 +737,38 @@ camera-overlap seams, floaters, baked traffic, or unsupported-pose uncertainty.
 The scripted comparison has zero browser timing coverage. Exact evidence and
 artifact paths are in `experiments/stage_h3_tbv_cockpit_resolution_ab.md`.
 
+### Stage H3 Level 9I — visual-only bowl overhead
+
+Completed on 2026-07-23 without retraining:
+
+- retained the 0.75-scale calibrated three-camera forward surround as the
+  primary driving view and renamed the three display roles to forward
+  surround, overhead, and original camera views;
+- added a classic AVM-style 284x284 projection onto one fixed vehicle-local
+  virtual bowl using the existing undistorted camera intrinsics and
+  camera-to-rig transforms; no LiDAR map, depth model, or 3D environment is
+  constructed;
+- leaves every uncovered bowl pixel black, places an opaque vehicle mask over
+  the central blind zone, and draws the logged route, +/-1 m support tube,
+  lateral offset, and remaining margin above the visual-only camera texture;
+- renders the four side/rear cameras at 0.375 scale on a background worker
+  while the forward JPEG is composed, then applies ground-plane SE(2) motion
+  compensation to the previous overhead snapshot;
+- measured bowl coverage of 0.880889 for the right-turn traversal profile and
+  0.879290 for the straight profile; both profiles rendered without a
+  background error;
+- ran a clean 25-sample acceleration smoke to 4.0 m/s with no skipped overhead
+  update, support violation, or boundary hit;
+- measured front-renderer latency at 43.72/45.40 ms p50/p95 and complete server
+  control-to-forward-JPEG latency at 88.84/92.97 ms p50/p95, versus
+  84.51/88.61 ms before the overhead.
+
+The overhead is accepted only as a comfort aid. Vertical objects stretch on
+the virtual bowl, camera seams and static ghosts remain, and the camera texture
+does not certify free space, collision geometry, or route support. The logged
+route overlay retains those evidence semantics. Exact evidence and artifacts
+are in `experiments/stage_h3_tbv_overhead_bowl.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -771,7 +803,7 @@ is accepted for a first human-driving prototype, but it is not certified for
 closed-loop autonomous-driving evaluation; the full +/-3 m probe remains a
 coverage diagnostic.
 
-The Level-9H TbV path now supports:
+The Level-9I TbV path now supports:
 
 ```text
 Branch-local world pose plus traversal route role
@@ -781,16 +813,18 @@ Branch-local world pose plus traversal route role
 → SimpleVehicleModel continuous control from common progress -20 m
 → an explicit anchor stop followed by straight or right branch selection
 → three finite front RGB arrays plus a calibrated cylindrical driving view
-→ an ego-up logged-trajectory support inset
-→ a separate manual/on-demand seven-camera reconstruction diagnostic
+→ a visual-only seven-camera virtual-bowl overhead with black unknown pixels
+→ an opaque vehicle mask plus the evidence-bearing logged-trajectory overlay
+→ a separate manual/on-demand original-camera-view diagnostic
 → fail-closed route support and per-control machine-readable JSON evidence
 ```
 
 This is connected to a dedicated manual browser but not the common `Renderer`
 protocol. A GPU/HTTP machine rehearsal has exercised both branch transitions
-and the route boundary. The selected 0.75-scale front-only path passed a
-separate 4.0 m/s cockpit smoke at 88.61 ms server p95. A real operator
-keyboard-to-display trial remains required before any human-drivability claim.
+and the route boundary. The selected 0.75-scale forward surround plus
+background-updated overhead passed a separate 4.0 m/s cockpit smoke at
+92.97 ms server p95. A real operator keyboard-to-display trial remains
+required before any human-drivability claim.
 
 This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint. The logged browser loop now
@@ -888,6 +922,9 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 - The selected TbV location has straight and right-turn traversals but no
   observed left-turn traversal. It expands the driving topology without yet
   providing a three-way action set.
+- The TbV overhead is a visual-only virtual-bowl projection. Its black unknown
+  pixels are intentional, while stretched vertical objects and seams cannot be
+  interpreted as free-space or collision evidence.
 - A route branch is not required for the first expanded driving pilot. Longer
   straight or gently curving observed roads remain valid targets.
 - The TbV 8,000-step checkpoint has passed a sparse seven-camera world-pose
@@ -928,14 +965,15 @@ limitation, and borrow UniSim's compositional closed-loop concepts without
 treating generated completion as observed ground truth. NeuRAD, MTGS, and
 UniSim are not currently integrated.
 
-The adapter, cockpit presentation, and 0.75-scale selection are complete. The
-next action is deliberately narrow: use the cylindrical front cockpit to run
-straight and right as separate human reset trials, capture browser
-request-to-image and physical input-to-image timing, inspect the transition
-when the renderer changes traversal profile, and reject any segment where
-panorama seams, baked vehicles, permanent geometry, or temporal artifacts alter
-the driving decision. Use `/diagnostic` only for paused/post-drive inspection.
-Do not train beyond 8k before this gate.
+The adapter, forward surround, visual-only overhead, and 0.75-scale selection
+are complete. The next action is deliberately narrow: use the forward
+surround to run straight and right as separate human reset trials, capture
+browser request-to-image and physical input-to-image timing, inspect the
+transition when the renderer changes traversal profile, and reject any segment
+where panorama seams, baked vehicles, permanent geometry, or temporal artifacts
+alter the driving decision. Treat the overhead only as a position aid and use
+the original camera views only for paused/post-drive inspection. Do not train
+beyond 8k before this gate.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:

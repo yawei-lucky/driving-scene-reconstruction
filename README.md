@@ -244,6 +244,19 @@ Stage H3 Level 9H
   finite front cameras, no support violation, and 88.61 ms server p95
 → no new training was performed; physical keyboard-to-display timing and
   driving-relevant visual acceptance remain the next gate
+
+Stage H3 Level 9I
+→ kept the 0.75-scale 150° forward surround as the primary driving view
+→ added a 284x284 visual-only overhead using calibrated seven-camera projection
+  onto a fixed virtual bowl; no LiDAR map or 3D environment is constructed
+→ leaves uncovered pixels black, masks the central vehicle blind zone, and
+  overlays the existing logged trajectory and +/-1 m support boundary
+→ renders four 0.375-scale side/rear cameras in the background and compensates
+  the cached ground image into the current ego pose
+→ right/straight bowl coverage measured 88.09%/87.93%; a 25-sample 4.0 m/s
+  smoke measured 88.84/92.97 ms server control-to-forward-JPEG p50/p95
+→ the overhead is comfort-only; vertical-object distortion and physical
+  keyboard-to-display acceptance remain open
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -364,14 +377,19 @@ scripts/run_stage_h3_tbv_pilot.sh driving-adapter
 
 Open `http://localhost:8768` through the existing SSH/VS Code port-forwarding
 path. Drive with W/S/A/D, reset with R, and choose `1` for straight or `2` for
-right when the vehicle stops at the shared anchor. The default view is a
-calibrated approximately 150-degree cylindrical projection of the three front
-cameras with a logged-trajectory support inset. The full seven-camera mosaic
-is available separately at `/diagnostic`; it is a reconstruction diagnostic,
-not the driving view, and it renders only when opened or manually refreshed.
-Normal driving renders only the three front cameras. The selected default
-output scale is 0.75; override it with `H3_TBV_DRIVING_SCALE` if needed. The
-default speed cap is 4.0 m/s and can be changed with `H3_TBV_MAX_SPEED_MPS`.
+right when the vehicle stops at the shared anchor. The primary **forward
+surround** is a calibrated approximately 150-degree cylindrical projection of
+the three 0.75-scale front cameras. Its right-side **overhead** is a
+visual-only seven-camera virtual-bowl projection with an opaque vehicle mask,
+black uncovered pixels, and the logged-trajectory +/-1 m support overlay. The
+four side/rear cameras update at 0.375 scale in the background. The separate
+**original camera views** are available at `/diagnostic` and render only when
+opened or manually refreshed.
+
+Override the primary scale with `H3_TBV_DRIVING_SCALE`, the overhead side/rear
+scale with `H3_TBV_OVERHEAD_EXTRA_SCALE`, or its update interval with
+`H3_TBV_OVERHEAD_UPDATE_EVERY`. The default speed cap is 4.0 m/s and can be
+changed with `H3_TBV_MAX_SPEED_MPS`.
 
 The live evidence report is available at `/evidence.json` and is also written
 outside Git under
@@ -615,6 +633,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_tbv_cockpit_resolution_ab.md` records the fixed-8k
   0.5/0.75/1.0 scale comparison, front-only driving render, selected 0.75
   default, and its motion-smoke boundary.
+- `experiments/stage_h3_tbv_overhead_bowl.md` records the calibrated
+  visual-only bowl projection, black unknown pixels, central vehicle mask,
+  background side/rear update, two-profile coverage, and latency result.
 
 See also `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 

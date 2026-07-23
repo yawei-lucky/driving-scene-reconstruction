@@ -37,6 +37,31 @@ class TbVWorldPoseProbeTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     MODULE.validated_camera_names(invalid)
 
+    def test_camera_output_scales_are_per_requested_camera(self) -> None:
+        requested = ("ring_front_center", "ring_side_left")
+
+        self.assertEqual(
+            MODULE.validated_camera_output_scales(
+                requested,
+                0.75,
+                {"ring_side_left": 0.375},
+            ),
+            {
+                "ring_front_center": 0.75,
+                "ring_side_left": 0.375,
+            },
+        )
+        for overrides in (
+            {"ring_rear_left": 0.5},
+            {"ring_side_left": 0.0},
+            {"ring_side_left": float("nan")},
+        ):
+            with self.subTest(overrides=overrides):
+                with self.assertRaises(ValueError):
+                    MODULE.validated_camera_output_scales(
+                        requested, 0.75, overrides
+                    )
+
     def test_left_offset_uses_pose_heading(self) -> None:
         forward = MODULE.offset_pose(
             MODULE.LocalWorldPose(10.0, 2.0, 0.5, 0.0), 1.0
