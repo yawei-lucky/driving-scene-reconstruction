@@ -73,9 +73,24 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
         self.assertIn("/evidence-route-timing", page)
         self.assertIn('href="/diagnostic"', page)
         self.assertIn("前向环视", page)
+        self.assertIn("360° 3D 环视辅助", page)
         self.assertIn("原相机图", page)
+        self.assertNotIn("/surround-view", page)
+        self.assertNotIn("data-surround-view", page)
         self.assertIn("cylindrical driving view", page)
         self.assertIn("100.000000", page)
+
+    def test_3d_surround_fixed_view_has_real_height_parallax(self) -> None:
+        camera = MODULE.surround_virtual_camera()
+        ground = MODULE.project_surround_point(
+            camera, 0.0, 0.0, MODULE.SURROUND_GROUND_Z_METERS
+        )
+        roof = MODULE.project_surround_point(camera, 0.0, 0.0, 0.08)
+
+        self.assertEqual(camera.name, MODULE.SURROUND_VIEW_NAME)
+        self.assertTrue(all(math.isfinite(value) for value in ground))
+        self.assertTrue(all(math.isfinite(value) for value in roof))
+        self.assertGreater(abs(roof[1] - ground[1]), 10.0)
 
     def test_diagnostic_page_is_separate_from_driving_cockpit(self) -> None:
         self.assertIn("/diagnostic.jpg", MODULE.DIAGNOSTIC_PAGE)
@@ -153,7 +168,7 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
         labels = [call.args[1] for call in draw.text.call_args_list]
         self.assertIn("not overhead RGB", labels)
 
-    def test_overhead_assist_is_visual_only_and_masks_vehicle(self) -> None:
+    def test_3d_surround_assist_is_visual_only_and_masks_vehicle(self) -> None:
         image_module = mock.Mock()
         canvas = mock.Mock()
         canvas.convert.return_value = canvas
@@ -181,9 +196,10 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
             forward_meters=12.0,
             rear_meters=4.0,
             side_meters=8.0,
-            screen=lambda forward, left: (
+            ground_z_meters=-1.43,
+            screen=lambda forward, left, up=None: (
                 int(round(120 - 10 * left)),
-                int(round(180 - 10 * forward)),
+                int(round(180 - 10 * forward - (0 if up is None else 4 * up))),
             ),
         )
 
@@ -194,16 +210,16 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
             MODULE.EgoState(),
             support,
             size=240,
-            overhead=object(),
-            overhead_composer=composer,
+            surround=object(),
+            surround_composer=composer,
         )
 
         labels = [call.args[1] for call in draw.text.call_args_list]
-        self.assertIn("OVERHEAD  ·  VISUAL ONLY", labels)
-        self.assertIn("black = no camera coverage", labels)
+        self.assertIn("3D SURROUND  ·  LEFT REAR", labels)
+        self.assertIn("fixed bowl · no scene depth", labels)
         self.assertTrue(
             any(
-                call.kwargs.get("fill") == (24, 29, 34)
+                call.kwargs.get("fill") == (40, 47, 54)
                 for call in draw.polygon.call_args_list
             )
         )

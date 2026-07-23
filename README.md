@@ -257,6 +257,20 @@ Stage H3 Level 9I
   smoke measured 88.84/92.97 ms server control-to-forward-JPEG p50/p95
 → the overhead is comfort-only; vertical-object distortion and physical
   keyboard-to-display acceptance remain open
+
+Stage H3 Level 9J
+→ replaced the orthographic overhead presentation with a minimal fixed-bathtub
+  360° 3D surround view while retaining the forward surround as primary
+→ uses the latest completed same-profile seven-camera RGB pose snapshot,
+  precomputed projection LUTs, and one fixed rear-left three-quarter view
+→ the display mesh spans 8 m front, 6 m rear, and 7 m to each side, rising at
+  most 4 m; no depth, LiDAR, or environment mesh is used
+→ rear-left coverage is 80.28% for right/common and 79.85% for straight; the
+  near-vehicle blind region stays black
+→ a 25-step 4.0 m/s host run measured 88.93/91.48/91.79 ms server
+  control-to-JPEG p50/p95/max with zero boundary hits or background skips
+→ this improves presentation only and does not recover real object geometry,
+  occlusion, or drivable free space
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -379,17 +393,21 @@ Open `http://localhost:8768` through the existing SSH/VS Code port-forwarding
 path. Drive with W/S/A/D, reset with R, and choose `1` for straight or `2` for
 right when the vehicle stops at the shared anchor. The primary **forward
 surround** is a calibrated approximately 150-degree cylindrical projection of
-the three 0.75-scale front cameras. Its right-side **overhead** is a
-visual-only seven-camera virtual-bowl projection with an opaque vehicle mask,
-black uncovered pixels, and the logged-trajectory +/-1 m support overlay. The
-four side/rear cameras update at 0.375 scale in the background. The separate
+the three 0.75-scale front cameras. Its right-side **360° 3D surround** maps
+the latest completed same-profile seven-camera RGB pose snapshot onto a fixed
+bathtub display mesh and shows one fixed rear-left three-quarter virtual view.
+It uses no depth, LiDAR, or environment mesh; near-vehicle and uncovered
+regions remain black.
+The four side/rear cameras update at 0.375 scale in the background. The
+separate
 **original camera views** are available at `/diagnostic` and render only when
 opened or manually refreshed.
 
-Override the primary scale with `H3_TBV_DRIVING_SCALE`, the overhead side/rear
-scale with `H3_TBV_OVERHEAD_EXTRA_SCALE`, or its update interval with
-`H3_TBV_OVERHEAD_UPDATE_EVERY`. The default speed cap is 4.0 m/s and can be
-changed with `H3_TBV_MAX_SPEED_MPS`.
+Override the primary scale with `H3_TBV_DRIVING_SCALE`, the 3D-surround
+side/rear scale with `H3_TBV_SURROUND_EXTRA_SCALE`, or its update interval
+with `H3_TBV_SURROUND_UPDATE_EVERY`. The previous `OVERHEAD` names remain
+compatibility aliases. The default speed cap is 4.0 m/s and can be changed
+with `H3_TBV_MAX_SPEED_MPS`.
 
 The live evidence report is available at `/evidence.json` and is also written
 outside Git under
@@ -576,15 +594,16 @@ manual drivability gates as `pass`.
 ## Current Next Step
 
 The PandaSet and TbV static-8k checkpoints now remain fixed. The minimal
-route-constrained TbV adapter and evidence outlet are implemented and have
-passed a GPU/HTTP machine rehearsal. The next gate is the real operator run:
-drive the common approach, select straight and right in separate reset runs,
-capture physical keyboard-to-image timing through the browser evidence path,
-and record whether road continuity, branch choice, traversal-profile switching,
-and baked traffic remain decision-safe. Do not add more static TbV iterations
-before this operator gate. The published MTGS checkpoint remains a
-separate-environment fallback; PandaSet `003+057` remains the same-direction
-parser/alignment control.
+route-constrained TbV adapter, evidence outlet, forward surround, and
+fixed-bathtub 360° 3D visual aid are implemented. The next gate is the real
+operator visual run: drive the common approach, select straight and right in
+separate reset runs, capture physical keyboard-to-image timing, and record
+whether road continuity, branch choice, traversal-profile switching, seams,
+and baked traffic remain decision-safe. The 3D surround is only a comfort aid;
+do not infer real pole/vehicle geometry, occlusion, or free space from it. Do
+not add more static TbV training or a broad audit before this operator gate.
+The published MTGS checkpoint remains a separate-environment fallback;
+PandaSet `003+057` remains the same-direction parser/alignment control.
 
 Do not join another scene to 040: the nearest available track is about 165.3 m
 away. Do not claim intersection branching from the current archive: the scan
@@ -636,6 +655,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_tbv_overhead_bowl.md` records the calibrated
   visual-only bowl projection, black unknown pixels, central vehicle mask,
   background side/rear update, two-profile coverage, and latency result.
+- `experiments/stage_h3_tbv_surround_3d.md` records the minimal fixed-bathtub
+  360° 3D presentation, fixed rear-left three-quarter viewpoint, coverage,
+  measured component cost, and its non-geometric limits.
 
 See also `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 

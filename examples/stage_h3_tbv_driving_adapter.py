@@ -66,7 +66,7 @@ FRONT_CAMERAS = (
     "ring_front_center",
     "ring_front_right",
 )
-OVERHEAD_EXTRA_CAMERAS = tuple(
+SURROUND_EXTRA_CAMERAS = tuple(
     name for name in CAMERAS if name not in FRONT_CAMERAS
 )
 COCKPIT_WIDTH = 1600
@@ -78,15 +78,19 @@ COCKPIT_BOTTOM_ANGLE_DEGREES = -24.0
 BEV_SIZE = 284
 DEFAULT_MAX_SPEED_MPS = 4.0
 DEFAULT_OUTPUT_SCALE = 0.75
-DEFAULT_OVERHEAD_EXTRA_SCALE = 0.375
-DEFAULT_OVERHEAD_UPDATE_EVERY = 1
-OVERHEAD_FORWARD_METERS = 16.0
-OVERHEAD_REAR_METERS = 5.0
-OVERHEAD_SIDE_METERS = 10.5
-OVERHEAD_GROUND_Z_METERS = -1.43
-OVERHEAD_BOWL_FLAT_RADIUS_METERS = 4.0
-OVERHEAD_BOWL_RISE_PER_METER_SQUARED = 0.015
-OVERHEAD_BOWL_MAX_RISE_METERS = 1.10
+DEFAULT_SURROUND_EXTRA_SCALE = 0.375
+DEFAULT_SURROUND_UPDATE_EVERY = 1
+SURROUND_FORWARD_METERS = 8.0
+SURROUND_REAR_METERS = 6.0
+SURROUND_SIDE_METERS = 7.0
+SURROUND_GROUND_Z_METERS = -1.43
+SURROUND_FLAT_FORWARD_METERS = 3.5
+SURROUND_FLAT_REAR_METERS = 3.5
+SURROUND_FLAT_SIDE_METERS = 3.0
+SURROUND_BOWL_MAX_RISE_METERS = 4.0
+SURROUND_VIRTUAL_FOV_DEGREES = 68.0
+SURROUND_VIEW_NAME = "rear_left"
+SURROUND_VIEW_LABEL = "LEFT REAR"
 
 
 def parse_args() -> argparse.Namespace:
@@ -102,14 +106,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-checkpoint-step", type=int, default=7999)
     parser.add_argument("--max-speed-mps", type=float, default=DEFAULT_MAX_SPEED_MPS)
     parser.add_argument(
+        "--surround-extra-scale",
         "--overhead-extra-scale",
+        dest="surround_extra_scale",
         type=float,
-        default=DEFAULT_OVERHEAD_EXTRA_SCALE,
+        default=DEFAULT_SURROUND_EXTRA_SCALE,
     )
     parser.add_argument(
+        "--surround-update-every",
         "--overhead-update-every",
+        dest="surround_update_every",
         type=int,
-        default=DEFAULT_OVERHEAD_UPDATE_EVERY,
+        default=DEFAULT_SURROUND_UPDATE_EVERY,
     )
     return parser.parse_args()
 
@@ -521,23 +529,101 @@ class CylindricalCockpitComposer:
         return panorama
 
 
-class BowlOverheadComposer:
-    """Classic AVM-style calibrated projection onto one fixed virtual bowl."""
+@dataclass(frozen=True)
+class SurroundVirtualCamera:
+    name: str
+    eye: tuple[float, float, float]
+    look: tuple[float, float, float]
+    right: tuple[float, float, float]
+    up: tuple[float, float, float]
+    focal_pixels: float
+    centre_pixels: float
+    size: int
+
+
+def surround_virtual_camera(
+    *,
+    size: int = BEV_SIZE,
+    field_of_view_degrees: float = SURROUND_VIRTUAL_FOV_DEGREES,
+) -> SurroundVirtualCamera:
+    """Return the fixed normal oblique camera for the 3D surround inset."""
+
+    if size <= 0 or not 20.0 < field_of_view_degrees < 140.0:
+        raise ValueError("invalid 3D surround virtual-camera geometry")
+    azimuth = math.radians(135.0)
+    target = (0.5, 0.0, -0.75)
+    eye = (
+        target[0] + 8.5 * math.cos(azimuth),
+        target[1] + 8.5 * math.sin(azimuth),
+        8.0,
+    )
+    look_unscaled = tuple(target[index] - eye[index] for index in range(3))
+    look_norm = math.sqrt(sum(value * value for value in look_unscaled))
+    look = tuple(value / look_norm for value in look_unscaled)
+    right_unscaled = (look[1], -look[0], 0.0)
+    right_norm = math.hypot(right_unscaled[0], right_unscaled[1])
+    right = tuple(value / right_norm for value in right_unscaled)
+    up_unscaled = (
+        right[1] * look[2] - right[2] * look[1],
+        right[2] * look[0] - right[0] * look[2],
+        right[0] * look[1] - right[1] * look[0],
+    )
+    up_norm = math.sqrt(sum(value * value for value in up_unscaled))
+    up = tuple(value / up_norm for value in up_unscaled)
+    focal = (size / 2.0) / math.tan(math.radians(field_of_view_degrees) / 2.0)
+    return SurroundVirtualCamera(
+        name=SURROUND_VIEW_NAME,
+        eye=eye,
+        look=look,
+        right=right,
+        up=up,
+        focal_pixels=focal,
+        centre_pixels=(size - 1) / 2.0,
+        size=size,
+    )
+
+
+def project_surround_point(
+    camera: SurroundVirtualCamera,
+    forward: float,
+    left: float,
+    up: float,
+) -> tuple[float, float, float]:
+    """Project one vehicle-local point into a virtual surround camera."""
+
+    delta = (
+        forward - camera.eye[0],
+        left - camera.eye[1],
+        up - camera.eye[2],
+    )
+    depth = sum(delta[index] * camera.look[index] for index in range(3))
+    if depth <= 1e-6:
+        return float("nan"), float("nan"), depth
+    horizontal = sum(delta[index] * camera.right[index] for index in range(3))
+    vertical = sum(delta[index] * camera.up[index] for index in range(3))
+    return (
+        camera.centre_pixels + camera.focal_pixels * horizontal / depth,
+        camera.centre_pixels - camera.focal_pixels * vertical / depth,
+        depth,
+    )
+
+
+class FixedBowlSurroundComposer:
+    """Render real-time camera textures through a fixed 3D bathtub surface."""
 
     def __init__(
         self,
         profiles: dict[str, tuple[CameraProjection, ...]],
         *,
         size: int = BEV_SIZE,
-        forward_meters: float = OVERHEAD_FORWARD_METERS,
-        rear_meters: float = OVERHEAD_REAR_METERS,
-        side_meters: float = OVERHEAD_SIDE_METERS,
-        ground_z_meters: float = OVERHEAD_GROUND_Z_METERS,
-        flat_radius_meters: float = OVERHEAD_BOWL_FLAT_RADIUS_METERS,
-        rise_per_meter_squared: float = (
-            OVERHEAD_BOWL_RISE_PER_METER_SQUARED
-        ),
-        maximum_rise_meters: float = OVERHEAD_BOWL_MAX_RISE_METERS,
+        forward_meters: float = SURROUND_FORWARD_METERS,
+        rear_meters: float = SURROUND_REAR_METERS,
+        side_meters: float = SURROUND_SIDE_METERS,
+        ground_z_meters: float = SURROUND_GROUND_Z_METERS,
+        flat_forward_meters: float = SURROUND_FLAT_FORWARD_METERS,
+        flat_rear_meters: float = SURROUND_FLAT_REAR_METERS,
+        flat_side_meters: float = SURROUND_FLAT_SIDE_METERS,
+        maximum_rise_meters: float = SURROUND_BOWL_MAX_RISE_METERS,
     ) -> None:
         import cv2
         import numpy as np
@@ -546,16 +632,23 @@ class BowlOverheadComposer:
             forward_meters,
             rear_meters,
             side_meters,
-            flat_radius_meters,
-            rise_per_meter_squared,
+            flat_forward_meters,
+            flat_rear_meters,
+            flat_side_meters,
             maximum_rise_meters,
         )
         if size <= 0 or not all(
             math.isfinite(value) and value > 0.0 for value in dimensions
         ):
-            raise ValueError("overhead dimensions must be finite and positive")
+            raise ValueError("3D surround dimensions must be finite and positive")
+        if not (
+            flat_forward_meters < forward_meters
+            and flat_rear_meters < rear_meters
+            and flat_side_meters < side_meters
+        ):
+            raise ValueError("3D surround flat floor must fit inside the bowl")
         if not math.isfinite(ground_z_meters) or ground_z_meters >= 0.0:
-            raise ValueError("overhead ground height must be finite and negative")
+            raise ValueError("3D surround ground height must be finite and negative")
         self.cv2 = cv2
         self.np = np
         self.size = size
@@ -563,50 +656,127 @@ class BowlOverheadComposer:
         self.rear_meters = rear_meters
         self.side_meters = side_meters
         self.ground_z_meters = ground_z_meters
-        self.flat_radius_meters = flat_radius_meters
-        self.rise_per_meter_squared = rise_per_meter_squared
+        self.flat_forward_meters = flat_forward_meters
+        self.flat_rear_meters = flat_rear_meters
+        self.flat_side_meters = flat_side_meters
         self.maximum_rise_meters = maximum_rise_meters
         self.profiles = profiles
-        self.forward_grid, self.left_grid, points = self._surface_points()
+        self.virtual_camera = surround_virtual_camera(size=size)
+        self.surface_points, self.surface_mask = self._surface_intersections()
         self.maps: dict[str, dict[str, tuple[Any, Any, Any]]] = {}
         self.coverage_fraction: dict[str, float] = {}
         for profile, projections in profiles.items():
-            maps, coverage = self._build_maps(projections, points)
+            maps, coverage = self._build_maps(
+                projections,
+                self.surface_points,
+                self.surface_mask,
+            )
             self.maps[profile] = maps
             self.coverage_fraction[profile] = coverage
 
-    def _surface_points(self) -> tuple[Any, Any, Any]:
+    def _surface_height_values(self, forward: Any, left: Any) -> Any:
         np = self.np
-        forward = np.linspace(
-            self.forward_meters,
-            -self.rear_meters,
-            self.size,
-            dtype=np.float32,
-        )[:, None]
-        left = np.linspace(
-            self.side_meters,
-            -self.side_meters,
-            self.size,
-            dtype=np.float32,
-        )[None, :]
-        forward_grid = np.broadcast_to(forward, (self.size, self.size))
-        left_grid = np.broadcast_to(left, (self.size, self.size))
-        radius = np.hypot(forward_grid, left_grid)
-        outside = np.maximum(radius - self.flat_radius_meters, 0.0)
-        rise = np.minimum(
-            self.maximum_rise_meters,
-            self.rise_per_meter_squared * outside * outside,
+        forward_ratio = np.where(
+            forward >= 0.0,
+            np.maximum(
+                forward - self.flat_forward_meters, 0.0
+            )
+            / (self.forward_meters - self.flat_forward_meters),
+            np.maximum(
+                -forward - self.flat_rear_meters, 0.0
+            )
+            / (self.rear_meters - self.flat_rear_meters),
         )
-        height = self.ground_z_meters + rise
-        points = np.stack(
-            (forward_grid, left_grid, height), axis=0
-        ).reshape(3, -1)
-        return forward_grid, left_grid, points
+        side_ratio = (
+            np.maximum(np.abs(left) - self.flat_side_meters, 0.0)
+            / (self.side_meters - self.flat_side_meters)
+        )
+        ratio = np.clip(np.maximum(forward_ratio, side_ratio), 0.0, 1.0)
+        smooth = ratio * ratio * (3.0 - 2.0 * ratio)
+        return self.ground_z_meters + self.maximum_rise_meters * smooth
+
+    def surface_height(self, forward: float, left: float) -> float:
+        forward_ratio = (
+            max(forward - self.flat_forward_meters, 0.0)
+            / (self.forward_meters - self.flat_forward_meters)
+            if forward >= 0.0
+            else max(-forward - self.flat_rear_meters, 0.0)
+            / (self.rear_meters - self.flat_rear_meters)
+        )
+        side_ratio = max(abs(left) - self.flat_side_meters, 0.0) / (
+            self.side_meters - self.flat_side_meters
+        )
+        ratio = min(1.0, max(forward_ratio, side_ratio))
+        smooth = ratio * ratio * (3.0 - 2.0 * ratio)
+        return self.ground_z_meters + self.maximum_rise_meters * smooth
+
+    def _surface_intersections(self) -> tuple[Any, Any]:
+        np = self.np
+        camera = self.virtual_camera
+        columns = np.arange(self.size, dtype=np.float32)
+        rows = np.arange(self.size, dtype=np.float32)
+        horizontal = (
+            columns[None, :] - camera.centre_pixels
+        ) / camera.focal_pixels
+        vertical = -(
+            rows[:, None] - camera.centre_pixels
+        ) / camera.focal_pixels
+        look = np.asarray(camera.look, dtype=np.float32)[:, None, None]
+        right = np.asarray(camera.right, dtype=np.float32)[:, None, None]
+        up = np.asarray(camera.up, dtype=np.float32)[:, None, None]
+        directions = (
+            look
+            + right * horizontal[None, :, :]
+            + up * vertical[None, :, :]
+        )
+        directions /= np.linalg.norm(directions, axis=0, keepdims=True)
+        directions = directions.reshape(3, -1)
+        origin = np.asarray(camera.eye, dtype=np.float32)[:, None]
+        count = directions.shape[1]
+        hit_t = np.full(count, np.nan, dtype=np.float32)
+        previous_t = np.zeros(count, dtype=np.float32)
+        previous_delta = np.zeros(count, dtype=np.float32)
+        previous_valid = np.zeros(count, dtype=bool)
+        for distance in np.linspace(0.0, 36.0, 193, dtype=np.float32):
+            points = origin + directions * distance
+            inside = (
+                (points[0] <= self.forward_meters)
+                & (points[0] >= -self.rear_meters)
+                & (np.abs(points[1]) <= self.side_meters)
+            )
+            height = self._surface_height_values(points[0], points[1])
+            delta = points[2] - height
+            unresolved = ~np.isfinite(hit_t)
+            crossing = unresolved & inside & previous_valid & (delta <= 0.0)
+            if np.any(crossing):
+                denominator = previous_delta[crossing] - delta[crossing]
+                fraction = np.divide(
+                    previous_delta[crossing],
+                    denominator,
+                    out=np.ones_like(denominator),
+                    where=np.abs(denominator) > 1e-6,
+                )
+                hit_t[crossing] = previous_t[crossing] + fraction * (
+                    distance - previous_t[crossing]
+                )
+            entered_below = (
+                unresolved & inside & ~previous_valid & (delta <= 0.0)
+            )
+            hit_t[entered_below] = distance
+            above = unresolved & inside & (delta > 0.0)
+            previous_t[above] = distance
+            previous_delta[above] = delta[above]
+            previous_valid[above] = True
+        mask = np.isfinite(hit_t).reshape(self.size, self.size)
+        safe_t = np.where(np.isfinite(hit_t), hit_t, 0.0)
+        points = origin + directions * safe_t[None, :]
+        return points.astype(np.float32), mask
 
     def _build_maps(
         self,
         projections: tuple[CameraProjection, ...],
         points: Any,
+        surface_mask: Any,
     ) -> tuple[dict[str, tuple[Any, Any, Any]], float]:
         np = self.np
         maps: dict[str, tuple[Any, Any, Any]] = {}
@@ -629,7 +799,8 @@ class BowlOverheadComposer:
                     projection.cy - projection.fy * camera_points[1] / depth
                 ).reshape(self.size, self.size)
             valid = (
-                (depth.reshape(self.size, self.size) > 1e-6)
+                surface_mask
+                & (depth.reshape(self.size, self.size) > 1e-6)
                 & (map_x >= 0.0)
                 & (map_x <= projection.width - 1.0)
                 & (map_y >= 0.0)
@@ -663,20 +834,32 @@ class BowlOverheadComposer:
                 weight,
             )
             total_weight += weight
-        return maps, float((total_weight > 1e-6).mean())
+        visible_count = int(surface_mask.sum())
+        coverage = (
+            float(((total_weight > 1e-6) & surface_mask).sum()) / visible_count
+            if visible_count
+            else 0.0
+        )
+        return maps, coverage
 
-    def compose(self, profile: str, frames: Mapping[str, Any]) -> Any:
+    def compose(
+        self,
+        profile: str,
+        frames: Mapping[str, Any],
+    ) -> Any:
         if profile not in self.maps:
-            raise KeyError(f"no overhead calibration for profile {profile!r}")
+            raise KeyError(f"no 3D surround calibration for profile {profile!r}")
         np = self.np
         accumulator = np.zeros(
             (self.size, self.size, 3), dtype=np.float32
         )
         total_weight = np.zeros((self.size, self.size), dtype=np.float32)
         projections = {item.name: item for item in self.profiles[profile]}
-        for camera_name, (map_x, map_y, weight) in self.maps[profile].items():
+        for camera_name, (map_x, map_y, weight) in (
+            self.maps[profile].items()
+        ):
             if camera_name not in frames:
-                raise KeyError(f"overhead frame missing {camera_name}")
+                raise KeyError(f"3D surround frame missing {camera_name}")
             frame = frames[camera_name]
             projection = projections[camera_name]
             if tuple(frame.shape[:2]) != (projection.height, projection.width):
@@ -693,86 +876,33 @@ class BowlOverheadComposer:
             )
             accumulator += warped.astype(np.float32) * weight[:, :, None]
             total_weight += weight
-        overhead = np.zeros_like(accumulator, dtype=np.uint8)
+        surround = np.zeros_like(accumulator, dtype=np.uint8)
         covered = total_weight > 1e-6
-        overhead[covered] = np.clip(
+        surround[covered] = np.clip(
             accumulator[covered] / total_weight[covered, None],
             0.0,
             255.0,
         ).astype(np.uint8)
-        return overhead
+        return surround
 
-    def reproject(
+    def screen(
         self,
-        image: Any,
-        source_state: EgoState,
-        target_state: EgoState,
-    ) -> Any:
-        """Motion-compensate the last ground projection into the current pose."""
-
-        if tuple(image.shape[:2]) != (self.size, self.size):
-            raise ValueError("overhead image has the wrong dimensions")
-        np = self.np
-        target_cosine, target_sine = (
-            math.cos(target_state.yaw),
-            math.sin(target_state.yaw),
+        forward: float,
+        left: float,
+        up: float | None = None,
+    ) -> tuple[int, int]:
+        if up is None:
+            up = self.surface_height(forward, left)
+        x, y, _ = project_surround_point(
+            self.virtual_camera, forward, left, up
         )
-        world_x = (
-            target_state.x
-            + target_cosine * self.forward_grid
-            - target_sine * self.left_grid
-        )
-        world_y = (
-            target_state.y
-            + target_sine * self.forward_grid
-            + target_cosine * self.left_grid
-        )
-        dx, dy = world_x - source_state.x, world_y - source_state.y
-        source_cosine, source_sine = (
-            math.cos(source_state.yaw),
-            math.sin(source_state.yaw),
-        )
-        source_forward = source_cosine * dx + source_sine * dy
-        source_left = -source_sine * dx + source_cosine * dy
-        map_x = (
-            (self.side_meters - source_left)
-            / (2.0 * self.side_meters)
-            * (self.size - 1)
-        ).astype(np.float32)
-        map_y = (
-            (self.forward_meters - source_forward)
-            / (self.forward_meters + self.rear_meters)
-            * (self.size - 1)
-        ).astype(np.float32)
-        return self.cv2.remap(
-            image,
-            map_x,
-            map_y,
-            interpolation=self.cv2.INTER_LINEAR,
-            borderMode=self.cv2.BORDER_CONSTANT,
-        )
-
-    def screen(self, forward: float, left: float) -> tuple[int, int]:
-        return (
-            int(
-                round(
-                    (self.side_meters - left)
-                    / (2.0 * self.side_meters)
-                    * (self.size - 1)
-                )
-            ),
-            int(
-                round(
-                    (self.forward_meters - forward)
-                    / (self.forward_meters + self.rear_meters)
-                    * (self.size - 1)
-                )
-            ),
-        )
+        if not math.isfinite(x) or not math.isfinite(y):
+            return -10_000, -10_000
+        return int(round(x)), int(round(y))
 
 
 @dataclass(frozen=True)
-class OverheadSnapshot:
+class SurroundSnapshot:
     image: Any
     state: EgoState
     profile: str
@@ -790,43 +920,47 @@ def make_trajectory_bev(
     support: dict[str, object],
     *,
     size: int = BEV_SIZE,
-    overhead: Any | None = None,
-    overhead_composer: BowlOverheadComposer | None = None,
+    surround: Any | None = None,
+    surround_composer: FixedBowlSurroundComposer | None = None,
 ) -> Any:
-    """Draw trusted route support over an optional visual-only AVM projection."""
+    """Draw trusted route support over an optional visual-only 3D surround."""
 
-    if (overhead is None) != (overhead_composer is None):
-        raise ValueError("overhead image and composer must be provided together")
-    if overhead_composer is not None and size != overhead_composer.size:
-        raise ValueError("overhead composer size does not match inset size")
-    if overhead is None:
+    if (surround is None) != (surround_composer is None):
+        raise ValueError("3D surround image and composer must be provided together")
+    if surround_composer is not None and size != surround_composer.size:
+        raise ValueError("3D surround composer size does not match inset size")
+    if surround is None:
         canvas = image_module.new("RGB", (size, size), (12, 18, 24))
         scale = 5.5
         ego_x, ego_y = size // 2, size - 48
     else:
-        canvas = image_module.fromarray(overhead).convert("RGB")
-        assert overhead_composer is not None
-        scale = min(
-            (size - 1)
-            / (overhead_composer.forward_meters + overhead_composer.rear_meters),
-            (size - 1) / (2.0 * overhead_composer.side_meters),
+        canvas = image_module.fromarray(surround).convert("RGB")
+        assert surround_composer is not None
+        ego_x, ego_y = surround_composer.screen(0.0, 0.0)
+        forward_unit = surround_composer.screen(1.0, 0.0)
+        left_unit = surround_composer.screen(0.0, 1.0)
+        scale = max(
+            1.0,
+            (
+                math.hypot(
+                    forward_unit[0] - ego_x, forward_unit[1] - ego_y
+                )
+                + math.hypot(left_unit[0] - ego_x, left_unit[1] - ego_y)
+            )
+            / 2.0,
         )
-        ego_x, ego_y = overhead_composer.screen(0.0, 0.0)
     draw = draw_module.Draw(canvas)
     grid_distances = (
-        (5.0, 10.0, 15.0)
-        if overhead is not None
+        ()
+        if surround is not None
         else (10.0, 20.0, 30.0, 40.0)
     )
     for delta_meters in grid_distances:
-        _, grid_y = (
-            overhead_composer.screen(delta_meters, 0.0)
-            if overhead_composer is not None
-            else (ego_x, int(round(ego_y - delta_meters * scale)))
-        )
+        grid_y = int(round(ego_y - delta_meters * scale))
         if 0 <= grid_y < size:
             draw.line((0, grid_y, size, grid_y), fill=(38, 48, 54), width=1)
-    draw.line((ego_x, 28, ego_x, size), fill=(29, 39, 48), width=1)
+    if surround is None:
+        draw.line((ego_x, 28, ego_x, size), fill=(29, 39, 48), width=1)
 
     cosine, sine = math.cos(state.yaw), math.sin(state.yaw)
 
@@ -834,15 +968,23 @@ def make_trajectory_bev(
         dx, dy = x - state.x, y - state.y
         forward = dx * cosine + dy * sine
         left = -dx * sine + dy * cosine
-        if overhead_composer is not None:
-            return overhead_composer.screen(forward, left)
+        if surround_composer is not None:
+            return surround_composer.screen(forward, left)
         return (
             int(round(ego_x - left * scale)),
             int(round(ego_y - forward * scale)),
         )
 
     def points(route: SupportedRoute) -> list[tuple[int, int]]:
-        return [screen(sample.x, sample.y) for sample in route.corridor.samples]
+        projected = [
+            screen(sample.x, sample.y) for sample in route.corridor.samples
+        ]
+        return [
+            point
+            for point in projected
+            if -size <= point[0] <= 2 * size
+            and -size <= point[1] <= 2 * size
+        ]
 
     selected = adapter.selected_branch
     branch_colours = {
@@ -895,7 +1037,7 @@ def make_trajectory_bev(
 
     margin = float(support["distance_margin_meters"])
     ego_colour = (255, 78, 69) if margin < 0.2 else (100, 240, 150)
-    if overhead_composer is None:
+    if surround_composer is None:
         draw.polygon(
             (
                 (ego_x, ego_y - 12),
@@ -907,38 +1049,69 @@ def make_trajectory_bev(
             outline=(245, 245, 245),
         )
     else:
-        vehicle = tuple(
-            overhead_composer.screen(forward, left)
+        bottom_z = surround_composer.ground_z_meters + 0.08
+        roof_z = 0.08
+        bottom = tuple(
+            surround_composer.screen(forward, left, bottom_z)
             for forward, left in (
-                (2.4, 0.80),
-                (2.4, -0.80),
-                (1.7, -1.05),
+                (2.4, 1.05),
+                (2.4, -1.05),
                 (-2.4, -1.05),
                 (-2.4, 1.05),
-                (1.7, 1.05),
             )
         )
+        roof = tuple(
+            surround_composer.screen(forward, left, roof_z)
+            for forward, left in (
+                (2.15, 0.90),
+                (2.15, -0.90),
+                (-2.15, -0.90),
+                (-2.15, 0.90),
+            )
+        )
+        side_colours = (
+            (20, 25, 31),
+            (26, 32, 38),
+            (31, 37, 43),
+            (23, 28, 34),
+        )
+        for index, colour in enumerate(side_colours):
+            next_index = (index + 1) % 4
+            draw.polygon(
+                (
+                    bottom[index],
+                    bottom[next_index],
+                    roof[next_index],
+                    roof[index],
+                ),
+                fill=colour,
+                outline=(170, 182, 189),
+            )
         draw.polygon(
-            vehicle,
-            fill=(24, 29, 34),
+            roof,
+            fill=(40, 47, 54),
             outline=(224, 232, 235),
         )
         draw.line(
             (
-                overhead_composer.screen(0.0, 0.0),
-                overhead_composer.screen(1.7, 0.0),
+                surround_composer.screen(
+                    0.0, 0.0, roof_z + 0.02
+                ),
+                surround_composer.screen(
+                    1.7, 0.0, roof_z + 0.02
+                ),
             ),
             fill=ego_colour,
             width=3,
         )
     draw.rectangle((0, 0, size - 1, size - 1), outline=(112, 126, 136), width=2)
     draw.rectangle((1, 1, size - 2, 44), fill=(8, 12, 16))
-    if overhead is None:
+    if surround is None:
         title = "TRAJECTORY SUPPORT  +/-1 m"
         subtitle = "not overhead RGB"
     else:
-        title = "OVERHEAD  ·  VISUAL ONLY"
-        subtitle = "black = no camera coverage"
+        title = f"3D SURROUND  ·  {SURROUND_VIEW_LABEL}"
+        subtitle = "fixed bowl · no scene depth"
     draw.text((10, 8), title, fill=(240, 240, 225))
     draw.text((10, 25), subtitle, fill=(151, 170, 181))
     draw.rectangle((1, size - 30, size - 2, size - 2), fill=(8, 12, 16))
@@ -962,8 +1135,8 @@ def make_cockpit_frame(
     state: EgoState,
     support: dict[str, object],
     *,
-    overhead: Any | None = None,
-    overhead_composer: BowlOverheadComposer | None = None,
+    surround: Any | None = None,
+    surround_composer: FixedBowlSurroundComposer | None = None,
 ) -> Any:
     profile = str(support["renderer_profile"])
     panorama = image_module.fromarray(composer.compose(profile, frames)).convert("RGB")
@@ -979,8 +1152,8 @@ def make_cockpit_frame(
         adapter,
         state,
         support,
-        overhead=overhead,
-        overhead_composer=overhead_composer,
+        surround=surround,
+        surround_composer=surround_composer,
     )
     inset_x, inset_y = composer.width - inset.width - 14, 14
     canvas.paste(inset, (inset_x, inset_y))
@@ -1080,7 +1253,7 @@ WEB_PAGE = """<!doctype html>
   </style>
 </head>
 <body>
-  <h1>TbV 前向环视 · 约 150° · 俯视辅助 · 轨迹支持 ±1m</h1>
+  <h1>TbV 前向环视 · 约 150° · 360° 3D 环视辅助 · 轨迹支持 ±1m</h1>
   <img id="view" src="/frame.jpg" alt="three calibrated front cameras projected into one cylindrical driving view">
   <div id="status">W 油门 · S 刹车 · A/D 转向 · 到锚点后选择分支 · R 重置</div>
   <div id="branches" hidden>
@@ -1255,126 +1428,126 @@ def main() -> None:
     if not math.isfinite(args.max_speed_mps) or args.max_speed_mps <= 0.0:
         raise ValueError("--max-speed-mps must be finite and positive")
     if (
-        not math.isfinite(args.overhead_extra_scale)
-        or not 0.0 < args.overhead_extra_scale <= 1.0
+        not math.isfinite(args.surround_extra_scale)
+        or not 0.0 < args.surround_extra_scale <= 1.0
     ):
-        raise ValueError("--overhead-extra-scale must be in (0, 1]")
-    if args.overhead_update_every < 1:
-        raise ValueError("--overhead-update-every must be positive")
+        raise ValueError("--surround-extra-scale must be in (0, 1]")
+    if args.surround_update_every < 1:
+        raise ValueError("--surround-update-every must be positive")
     if not 1 <= args.port <= 65535:
         raise ValueError("--port must be between 1 and 65535")
 
     renderer = TbVWorldRenderer(args.config, args.output_scale)
     adapter: BranchedRouteDrivingAdapter
     composer: CylindricalCockpitComposer
-    overhead_composer: BowlOverheadComposer
+    surround_composer: FixedBowlSurroundComposer
     evidence: RouteDrivingEvidenceRecorder
     renderer_lock = threading.Lock()
-    overhead_lock = threading.Lock()
-    overhead_executor = ThreadPoolExecutor(
-        max_workers=1, thread_name_prefix="tbv-overhead"
+    surround_lock = threading.Lock()
+    surround_executor = ThreadPoolExecutor(
+        max_workers=1, thread_name_prefix="tbv-surround"
     )
-    overhead_output_scales = {
-        name: args.overhead_extra_scale for name in OVERHEAD_EXTRA_CAMERAS
+    surround_output_scales = {
+        name: args.surround_extra_scale for name in SURROUND_EXTRA_CAMERAS
     }
     runtime: dict[str, Any] = {
         "state": EgoState(), "jpeg": b"", "render": {},
         "diagnostic_jpeg": b"", "sequence": -1,
-        "overhead_snapshot": None,
-        "overhead_future": None,
-        "overhead_error": None,
-        "overhead_skipped_updates": 0,
+        "surround_snapshot": None,
+        "surround_future": None,
+        "surround_error": None,
+        "surround_skipped_updates": 0,
         "boundary_hit": False, "boundary_reason": None, "selection_required": False,
     }
 
-    def current_overhead_snapshot() -> OverheadSnapshot | None:
-        with overhead_lock:
-            return runtime["overhead_snapshot"]
+    def current_surround_snapshot() -> SurroundSnapshot | None:
+        with surround_lock:
+            return runtime["surround_snapshot"]
 
-    def build_overhead_snapshot(
+    def build_surround_snapshot(
         state: EgoState,
         profile: str,
         pose: LocalWorldPose,
         front_frames: Mapping[str, Any],
         sequence: int,
-    ) -> OverheadSnapshot:
+    ) -> SurroundSnapshot:
         with renderer_lock:
             observation = renderer.render(
                 profile,
                 pose,
-                OVERHEAD_EXTRA_CAMERAS,
-                overhead_output_scales,
+                SURROUND_EXTRA_CAMERAS,
+                surround_output_scales,
             )
         frames = {**front_frames, **dict(observation["frames"])}
         compose_started = time.perf_counter()
-        image = overhead_composer.compose(profile, frames)
+        image = surround_composer.compose(profile, frames)
         compose_seconds = time.perf_counter() - compose_started
-        return OverheadSnapshot(
+        return SurroundSnapshot(
             image=image,
             state=state,
             profile=profile,
             sequence=sequence,
             source_render_seconds=float(observation["render_seconds"]),
             compose_seconds=compose_seconds,
-            coverage_fraction=overhead_composer.coverage_fraction[profile],
+            coverage_fraction=surround_composer.coverage_fraction[profile],
         )
 
-    def publish_overhead_snapshot(snapshot: OverheadSnapshot) -> None:
-        with overhead_lock:
-            current = runtime["overhead_snapshot"]
+    def publish_surround_snapshot(snapshot: SurroundSnapshot) -> None:
+        with surround_lock:
+            current = runtime["surround_snapshot"]
             if current is None or snapshot.sequence >= current.sequence:
-                runtime["overhead_snapshot"] = snapshot
-            runtime["overhead_error"] = None
+                runtime["surround_snapshot"] = snapshot
+            runtime["surround_error"] = None
 
-    def refresh_overhead_sync(
+    def refresh_surround_sync(
         state: EgoState,
         profile: str,
         pose: LocalWorldPose,
         front_frames: Mapping[str, Any],
         sequence: int,
     ) -> None:
-        publish_overhead_snapshot(
-            build_overhead_snapshot(
+        publish_surround_snapshot(
+            build_surround_snapshot(
                 state, profile, pose, front_frames, sequence
             )
         )
 
-    def schedule_overhead_update(
+    def schedule_surround_update(
         state: EgoState,
         profile: str,
         pose: LocalWorldPose,
         front_frames: Mapping[str, Any],
         sequence: int,
     ) -> None:
-        if sequence % args.overhead_update_every:
+        if sequence % args.surround_update_every:
             return
-        with overhead_lock:
-            future: Future[Any] | None = runtime["overhead_future"]
+        with surround_lock:
+            future: Future[Any] | None = runtime["surround_future"]
             if future is not None and not future.done():
-                runtime["overhead_skipped_updates"] += 1
+                runtime["surround_skipped_updates"] += 1
                 return
 
             def update() -> None:
                 try:
-                    snapshot = build_overhead_snapshot(
+                    snapshot = build_surround_snapshot(
                         state, profile, pose, front_frames, sequence
                     )
-                    publish_overhead_snapshot(snapshot)
+                    publish_surround_snapshot(snapshot)
                 except Exception as error:
-                    with overhead_lock:
-                        runtime["overhead_error"] = str(error)
+                    with surround_lock:
+                        runtime["surround_error"] = str(error)
 
-            runtime["overhead_future"] = overhead_executor.submit(update)
+            runtime["surround_future"] = surround_executor.submit(update)
 
-    def overhead_for_state(
+    def surround_for_state(
         state: EgoState,
         profile: str,
     ) -> tuple[Any | None, dict[str, object]]:
-        snapshot = current_overhead_snapshot()
+        snapshot = current_surround_snapshot()
         if snapshot is None or snapshot.profile != profile:
             return None, {
-                "overhead_available": False,
-                "overhead_profile_match": False,
+                "surround_3d_available": False,
+                "surround_3d_profile_match": False,
             }
         distance = math.hypot(
             state.x - snapshot.state.x,
@@ -1388,36 +1561,26 @@ def main() -> None:
                 )
             )
         )
-        image = overhead_composer.reproject(
-            snapshot.image, snapshot.state, state
-        )
-        return image, {
-            "overhead_available": True,
-            "overhead_profile_match": True,
-            "overhead_source_sequence": snapshot.sequence,
-            "overhead_motion_compensation_distance_meters": distance,
-            "overhead_motion_compensation_yaw_degrees": yaw_difference,
-            "overhead_source_render_seconds": snapshot.source_render_seconds,
-            "overhead_compose_seconds": snapshot.compose_seconds,
-            "overhead_coverage_fraction": snapshot.coverage_fraction,
+        return snapshot.image, {
+            "surround_3d_available": True,
+            "surround_3d_profile_match": True,
+            "surround_3d_viewpoint": SURROUND_VIEW_NAME,
+            "surround_3d_source_sequence": snapshot.sequence,
+            "surround_3d_source_lag_distance_meters": distance,
+            "surround_3d_source_lag_yaw_degrees": yaw_difference,
+            "surround_3d_source_render_seconds": snapshot.source_render_seconds,
+            "surround_3d_compose_seconds": snapshot.compose_seconds,
+            "surround_3d_coverage_fraction": snapshot.coverage_fraction,
         }
 
     def payload(extra: dict[str, object] | None = None) -> dict[str, object]:
         state: EgoState = runtime["state"]
         support = adapter.support(state)
-        overhead_snapshot = current_overhead_snapshot()
-        overhead_matches = (
-            overhead_snapshot is not None
-            and overhead_snapshot.profile == support.renderer_profile
+        render = runtime["render"]
+        surround_available = bool(
+            render.get("surround_3d_available", False)
+            and render.get("surround_3d_profile_match", False)
         )
-        if overhead_matches:
-            assert overhead_snapshot is not None
-            overhead_distance = math.hypot(
-                state.x - overhead_snapshot.state.x,
-                state.y - overhead_snapshot.state.y,
-            )
-        else:
-            overhead_distance = None
         value: dict[str, object] = {
             "backend": "tbv_route_driving_adapter_v0",
             "sequence": runtime["sequence"],
@@ -1447,10 +1610,10 @@ def main() -> None:
                 * 1000.0
             ),
             "frozen_scene_time_seconds": renderer.model_scene_time,
-            "display_mode": "forward_surround_with_visual_overhead",
+            "display_mode": "forward_surround_with_visual_3d_surround",
             "display_names": {
                 "primary": "forward_surround",
-                "auxiliary": "overhead",
+                "auxiliary": "surround_3d",
                 "diagnostic": "original_camera_views",
             },
             "driving_camera_count": len(FRONT_CAMERAS),
@@ -1461,36 +1624,48 @@ def main() -> None:
             "front_projection_coverage_fraction": float(
                 runtime["render"].get("front_projection_coverage_fraction", 0.0)
             ),
-            "overhead_mode": "calibrated_virtual_bowl_visual_only",
-            "overhead_extra_camera_names": list(OVERHEAD_EXTRA_CAMERAS),
-            "overhead_extra_output_scale": args.overhead_extra_scale,
-            "overhead_update_every": args.overhead_update_every,
-            "overhead_available": overhead_matches,
-            "overhead_coverage_fraction": (
-                overhead_snapshot.coverage_fraction
-                if overhead_matches
+            "surround_3d_mode": "fixed_bowl_3d_visual_only",
+            "surround_3d_viewpoint": SURROUND_VIEW_NAME,
+            "surround_3d_extra_camera_names": list(SURROUND_EXTRA_CAMERAS),
+            "surround_3d_extra_output_scale": args.surround_extra_scale,
+            "surround_3d_update_every": args.surround_update_every,
+            "surround_3d_available": surround_available,
+            "surround_3d_coverage_fraction": (
+                surround_composer.coverage_fraction[support.renderer_profile]
+                if surround_available
                 else None
             ),
-            "overhead_source_sequence": (
-                overhead_snapshot.sequence if overhead_matches else None
-            ),
-            "overhead_source_render_ms": (
-                overhead_snapshot.source_render_seconds * 1000.0
-                if overhead_matches
+            "surround_3d_source_sequence": (
+                render.get("surround_3d_source_sequence")
+                if surround_available
                 else None
             ),
-            "overhead_compose_ms": (
-                overhead_snapshot.compose_seconds * 1000.0
-                if overhead_matches
+            "surround_3d_source_render_ms": (
+                float(render["surround_3d_source_render_seconds"]) * 1000.0
+                if surround_available
                 else None
             ),
-            "overhead_motion_compensation_distance_meters": overhead_distance,
-            "overhead_background_error": runtime["overhead_error"],
-            "overhead_skipped_updates": runtime["overhead_skipped_updates"],
-            "overhead_url": "/overhead.jpg",
-            "bev_source": (
-                "visual_only_camera_bowl_with_logged_trajectory_support"
+            "surround_3d_compose_ms": (
+                float(render["surround_3d_compose_seconds"]) * 1000.0
+                if surround_available
+                else None
             ),
+            "surround_3d_source_lag_distance_meters": (
+                render.get("surround_3d_source_lag_distance_meters")
+                if surround_available
+                else None
+            ),
+            "surround_3d_source_lag_yaw_degrees": (
+                render.get("surround_3d_source_lag_yaw_degrees")
+                if surround_available
+                else None
+            ),
+            "surround_3d_background_error": runtime["surround_error"],
+            "surround_3d_skipped_updates": runtime["surround_skipped_updates"],
+            "surround_3d_url": "/surround.jpg",
+            "scene_depth_used_for_surround": False,
+            "environment_mesh_used_for_surround": False,
+            "bev_source": "visual_only_fixed_bowl_3d_with_route_support",
             "diagnostic_url": "/diagnostic",
             "evidence_url": "/evidence.json",
             "certified_drivable_corridor": False,
@@ -1517,7 +1692,7 @@ def main() -> None:
             )
         frames = dict(observation["frames"])
         sequence = runtime["sequence"] + 1
-        snapshot = current_overhead_snapshot()
+        snapshot = current_surround_snapshot()
         requires_sync = (
             snapshot is None
             or snapshot.profile != support.renderer_profile
@@ -1537,7 +1712,7 @@ def main() -> None:
             > 20.0
         )
         if requires_sync:
-            refresh_overhead_sync(
+            refresh_surround_sync(
                 state,
                 support.renderer_profile,
                 pose,
@@ -1545,14 +1720,14 @@ def main() -> None:
                 sequence,
             )
         else:
-            schedule_overhead_update(
+            schedule_surround_update(
                 state,
                 support.renderer_profile,
                 pose,
                 frames,
                 sequence,
             )
-        overhead, overhead_metadata = overhead_for_state(
+        surround, surround_metadata = surround_for_state(
             state, support.renderer_profile
         )
         presentation_started = time.perf_counter()
@@ -1564,9 +1739,9 @@ def main() -> None:
             adapter,
             state,
             support.as_dict(),
-            overhead=overhead,
-            overhead_composer=(
-                overhead_composer if overhead is not None else None
+            surround=surround,
+            surround_composer=(
+                surround_composer if surround is not None else None
             ),
         )
         buffer = io.BytesIO()
@@ -1581,7 +1756,7 @@ def main() -> None:
             "front_projection_coverage_fraction": (
                 composer.coverage_fraction[support.renderer_profile]
             ),
-            **overhead_metadata,
+            **surround_metadata,
         }
 
     def commit(
@@ -1630,25 +1805,28 @@ def main() -> None:
         runtime["diagnostic_jpeg"] = buffer.getvalue()
         return runtime["diagnostic_jpeg"]
 
-    def overhead_jpeg() -> bytes:
+    def surround_inset() -> Any:
         from PIL import Image, ImageDraw
 
         state: EgoState = runtime["state"]
         support = adapter.support(state).as_dict()
-        overhead, _ = overhead_for_state(
+        surround, _ = surround_for_state(
             state, str(support["renderer_profile"])
         )
-        inset = make_trajectory_bev(
+        return make_trajectory_bev(
             Image,
             ImageDraw,
             adapter,
             state,
             support,
-            overhead=overhead,
-            overhead_composer=(
-                overhead_composer if overhead is not None else None
+            surround=surround,
+            surround_composer=(
+                surround_composer if surround is not None else None
             ),
         )
+
+    def surround_jpeg() -> bytes:
+        inset = surround_inset()
         buffer = io.BytesIO()
         inset.save(buffer, format="JPEG", quality=92)
         return buffer.getvalue()
@@ -1679,8 +1857,8 @@ def main() -> None:
                 self.send_bytes(200, "image/jpeg", runtime["jpeg"])
             elif path == "/diagnostic.jpg":
                 self.send_bytes(200, "image/jpeg", diagnostic_jpeg())
-            elif path == "/overhead.jpg":
-                self.send_bytes(200, "image/jpeg", overhead_jpeg())
+            elif path in {"/surround.jpg", "/overhead.jpg"}:
+                self.send_bytes(200, "image/jpeg", surround_jpeg())
             elif path == "/state.json":
                 self.send_json(200, payload())
             elif path == "/evidence.json":
@@ -1840,11 +2018,11 @@ def main() -> None:
             )
         adapter = make_adapter(renderer, max_speed_mps=args.max_speed_mps)
         composer = CylindricalCockpitComposer.from_renderer(renderer)
-        overhead_composer = BowlOverheadComposer(
+        surround_composer = FixedBowlSurroundComposer(
             camera_projections(
                 renderer,
                 CAMERAS,
-                overhead_output_scales,
+                surround_output_scales,
             )
         )
         assert renderer.checkpoint_path is not None
@@ -1875,27 +2053,40 @@ def main() -> None:
                     ),
                     "top_angle_degrees": composer.top_angle_degrees,
                     "bottom_angle_degrees": composer.bottom_angle_degrees,
-                    "auxiliary_name": "overhead",
-                    "overhead": {
-                        "mode": "calibrated_virtual_bowl_visual_only",
+                    "auxiliary_name": "surround_3d",
+                    "surround_3d": {
+                        "mode": "fixed_bowl_3d_visual_only",
                         "camera_names": list(CAMERAS),
-                        "extra_camera_names": list(OVERHEAD_EXTRA_CAMERAS),
-                        "extra_camera_output_scale": args.overhead_extra_scale,
-                        "background_update_every": args.overhead_update_every,
-                        "size_pixels": overhead_composer.size,
-                        "forward_meters": overhead_composer.forward_meters,
-                        "rear_meters": overhead_composer.rear_meters,
-                        "side_meters": overhead_composer.side_meters,
-                        "ground_z_meters": overhead_composer.ground_z_meters,
-                        "flat_radius_meters": (
-                            overhead_composer.flat_radius_meters
+                        "extra_camera_names": list(SURROUND_EXTRA_CAMERAS),
+                        "extra_camera_output_scale": args.surround_extra_scale,
+                        "background_update_every": args.surround_update_every,
+                        "size_pixels": surround_composer.size,
+                        "viewpoint": SURROUND_VIEW_NAME,
+                        "viewpoint_policy": "fixed_normal_three_quarter_view",
+                        "forward_meters": surround_composer.forward_meters,
+                        "rear_meters": surround_composer.rear_meters,
+                        "side_meters": surround_composer.side_meters,
+                        "ground_z_meters": surround_composer.ground_z_meters,
+                        "flat_forward_meters": (
+                            surround_composer.flat_forward_meters
+                        ),
+                        "flat_rear_meters": (
+                            surround_composer.flat_rear_meters
+                        ),
+                        "flat_side_meters": (
+                            surround_composer.flat_side_meters
                         ),
                         "maximum_rise_meters": (
-                            overhead_composer.maximum_rise_meters
+                            surround_composer.maximum_rise_meters
                         ),
+                        "display_mesh": "fixed_vehicle_local_bathtub",
+                        "scene_depth_used": False,
+                        "environment_mesh_used": False,
                         "unknown_pixel_policy": "black_no_completion",
-                        "vehicle_blind_zone_policy": "opaque_vehicle_mask",
-                        "motion_compensation": "ground_plane_se2",
+                        "vehicle_blind_zone_policy": "opaque_3d_vehicle_box",
+                        "stale_frame_policy": (
+                            "cached_snapshot_no_invalid_planar_warp"
+                        ),
                         "route_overlay": "logged_trajectory_support_corridor",
                         "free_space_claim": False,
                     },
@@ -1912,11 +2103,13 @@ def main() -> None:
                 "Branch selection may switch traversal-specific appearance/sensor profiles.",
                 "The driving panorama is a calibrated three-camera projection; overlap "
                 "parallax and seams are presentation artifacts, not geometry evidence.",
-                "The overhead inset is a virtual-bowl camera projection for visual "
-                "comfort only; it is not free-space, collision, or geometry evidence.",
-                "Black overhead pixels are intentionally uncovered and never completed.",
+                "The 3D surround inset textures a fixed display bowl without scene "
+                "depth; it is not environment reconstruction or geometry evidence.",
+                "Vertical objects can still bend or duplicate because the display bowl "
+                "does not recover their true geometry or occlusion.",
+                "Black surround pixels are intentionally uncovered and never completed.",
                 "The latency-critical forward path renders three front cameras; four "
-                "reduced-scale side/rear cameras update the overhead in the background.",
+                "reduced-scale side/rear cameras update 3D surround in the background.",
                 "The original seven-camera views remain a separate manual diagnostic.",
                 "Browser timing excludes monitor scan-out.",
             ),
@@ -1944,7 +2137,7 @@ def main() -> None:
     except KeyboardInterrupt:
         print("stopping TbV route driving adapter")
     finally:
-        overhead_executor.shutdown(wait=True, cancel_futures=True)
+        surround_executor.shutdown(wait=True, cancel_futures=True)
         server.server_close()
 
 

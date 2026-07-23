@@ -192,8 +192,8 @@ case "$MODE" in
       --host "${H3_TBV_DRIVING_HOST:-127.0.0.1}" \
       --port "${H3_TBV_DRIVING_PORT:-8768}" \
       --max-speed-mps "${H3_TBV_MAX_SPEED_MPS:-4.0}" \
-      --overhead-extra-scale "${H3_TBV_OVERHEAD_EXTRA_SCALE:-0.375}" \
-      --overhead-update-every "${H3_TBV_OVERHEAD_UPDATE_EVERY:-1}" \
+      --surround-extra-scale "${H3_TBV_SURROUND_EXTRA_SCALE:-${H3_TBV_OVERHEAD_EXTRA_SCALE:-0.375}}" \
+      --surround-update-every "${H3_TBV_SURROUND_UPDATE_EVERY:-${H3_TBV_OVERHEAD_UPDATE_EVERY:-1}}" \
       --evidence-output "$DRIVING_EVIDENCE_ROOT/tbv_driving_evidence.json" \
       --expected-checkpoint-step 7999
     ;;

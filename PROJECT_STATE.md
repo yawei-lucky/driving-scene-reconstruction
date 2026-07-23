@@ -769,6 +769,38 @@ does not certify free space, collision geometry, or route support. The logged
 route overlay retains those evidence semantics. Exact evidence and artifacts
 are in `experiments/stage_h3_tbv_overhead_bowl.md`.
 
+### Stage H3 Level 9J — fixed-bathtub 360° 3D surround
+
+Completed on 2026-07-23 without retraining:
+
+- retained the 0.75-scale forward surround as the primary driving view and
+  replaced only the auxiliary orthographic overhead presentation;
+- maps the latest completed same-profile seven-camera RGB pose snapshot onto
+  one fixed vehicle-local bathtub display mesh using precomputed projection
+  LUTs;
+- uses one fixed `rear_left` three-quarter virtual viewpoint;
+- uses an 8 m front, 6 m rear, and 7 m left/right display extent with a 4 m
+  maximum outer rise;
+- measured rear-left projection coverage of 0.8028 for the right/common
+  profile and 0.7985 for the straight profile;
+- measured 26.56/27.70 ms p50/p95 to render the four reduced-scale side/rear
+  source cameras and 9.91/17.01 ms p50/p95 to compose the fixed virtual
+  viewpoint;
+- ran a clean 25-step acceleration smoke to 4.0 m/s with no boundary hit,
+  background skip, or background error; renderer, server control-to-JPEG, and
+  presentation p50/p95/max were 43.56/44.50/45.65 ms,
+  88.93/91.48/91.79 ms, and 45.65/47.13/47.24 ms respectively;
+- the last measured background source was one driving frame, or 0.4 m, behind
+  the current forward state;
+- deliberately leaves the near-vehicle blind region black and introduces no
+  depth, LiDAR, environment mesh, or generated completion.
+
+This is a display experiment, not a 3D reconstruction claim. The fixed bathtub
+can make the surrounding imagery easier to inspect, but it cannot recover the
+true geometry or occlusion of poles, trees, walls, or vehicles and cannot
+certify drivable free space. Exact scope, evidence, and artifact paths are in
+`experiments/stage_h3_tbv_surround_3d.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -803,7 +835,7 @@ is accepted for a first human-driving prototype, but it is not certified for
 closed-loop autonomous-driving evaluation; the full +/-3 m probe remains a
 coverage diagnostic.
 
-The Level-9I TbV path now supports:
+The Level-9J TbV path now supports:
 
 ```text
 Branch-local world pose plus traversal route role
@@ -813,18 +845,22 @@ Branch-local world pose plus traversal route role
 → SimpleVehicleModel continuous control from common progress -20 m
 → an explicit anchor stop followed by straight or right branch selection
 → three finite front RGB arrays plus a calibrated cylindrical driving view
-→ a visual-only seven-camera virtual-bowl overhead with black unknown pixels
-→ an opaque vehicle mask plus the evidence-bearing logged-trajectory overlay
+→ latest completed same-profile seven-camera RGB pose snapshot mapped onto a
+  fixed bathtub display mesh
+→ one fixed rear-left three-quarter 360° 3D view with black unknown pixels
+→ a simple vehicle mask plus the evidence-bearing logged-trajectory overlay
 → a separate manual/on-demand original-camera-view diagnostic
 → fail-closed route support and per-control machine-readable JSON evidence
 ```
 
 This is connected to a dedicated manual browser but not the common `Renderer`
 protocol. A GPU/HTTP machine rehearsal has exercised both branch transitions
-and the route boundary. The selected 0.75-scale forward surround plus
-background-updated overhead passed a separate 4.0 m/s cockpit smoke at
-92.97 ms server p95. A real operator keyboard-to-display trial remains
-required before any human-drivability claim.
+and the route boundary. The selected 0.75-scale forward surround remains the
+primary visual evidence. The fixed-bathtub 3D surround adds one fixed
+rear-left three-quarter auxiliary view without depth or environment geometry;
+the post-change 25-sample host latency smoke passed the existing 100 ms server
+p95 gate. A real operator keyboard-to-display trial remains required before
+any human-drivability claim.
 
 This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint. The logged browser loop now
@@ -922,9 +958,11 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 - The selected TbV location has straight and right-turn traversals but no
   observed left-turn traversal. It expands the driving topology without yet
   providing a three-way action set.
-- The TbV overhead is a visual-only virtual-bowl projection. Its black unknown
-  pixels are intentional, while stretched vertical objects and seams cannot be
-  interpreted as free-space or collision evidence.
+- The Level-9I TbV overhead and Level-9J 3D surround are visual-only fixed-mesh
+  projections. Their black unknown pixels are intentional. The 3D virtual
+  camera does not recover real pole, vehicle, wall, or tree geometry and its
+  imagery cannot be interpreted as free-space, occlusion, or collision
+  evidence.
 - A route branch is not required for the first expanded driving pilot. Longer
   straight or gently curving observed roads remain valid targets.
 - The TbV 8,000-step checkpoint has passed a sparse seven-camera world-pose
@@ -965,15 +1003,15 @@ limitation, and borrow UniSim's compositional closed-loop concepts without
 treating generated completion as observed ground truth. NeuRAD, MTGS, and
 UniSim are not currently integrated.
 
-The adapter, forward surround, visual-only overhead, and 0.75-scale selection
-are complete. The next action is deliberately narrow: use the forward
-surround to run straight and right as separate human reset trials, capture
-browser request-to-image and physical input-to-image timing, inspect the
-transition when the renderer changes traversal profile, and reject any segment
-where panorama seams, baked vehicles, permanent geometry, or temporal artifacts
-alter the driving decision. Treat the overhead only as a position aid and use
-the original camera views only for paused/post-drive inspection. Do not train
-beyond 8k before this gate.
+The adapter, forward surround, fixed-bathtub 360° 3D visual aid, and 0.75-scale
+selection are complete. The next action is deliberately narrow: use the
+forward surround to run straight and right as separate human reset trials,
+capture browser request-to-image and physical input-to-image timing, inspect
+the transition when the renderer changes traversal profile, and reject any
+segment where panorama seams, baked vehicles, permanent geometry, or temporal
+artifacts alter the driving decision. Use the 3D surround only as an auxiliary
+orientation view and the original camera views only for paused/post-drive
+inspection. Do not train beyond 8k or restart a broad audit before this gate.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
