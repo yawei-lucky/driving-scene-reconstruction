@@ -228,6 +228,22 @@ def near_black_fraction(frame: Any) -> float:
     return float(np.all(frame < 5, axis=2).mean())
 
 
+def validated_camera_names(camera_names: Iterable[str]) -> tuple[str, ...]:
+    """Return one non-empty, unique subset in the caller's requested order."""
+
+    requested = tuple(camera_names)
+    if not requested:
+        raise ValueError("at least one camera must be requested")
+    if len(set(requested)) != len(requested):
+        raise ValueError("camera names must be unique")
+    unknown = tuple(name for name in requested if name not in CAMERAS)
+    if unknown:
+        raise ValueError(
+            f"unknown cameras {unknown}; choose from {', '.join(CAMERAS)}"
+        )
+    return requested
+
+
 class TbVWorldRenderer:
     """Small shared-world renderer for the two fixed TbV traversals."""
 
@@ -558,13 +574,19 @@ class TbVWorldRenderer:
         centre = desired + rotation_z @ relative
         return self.torch.cat((rotation, centre[:, None]), dim=1)
 
-    def render(self, traversal: str, pose: LocalWorldPose) -> dict[str, Any]:
+    def render(
+        self,
+        traversal: str,
+        pose: LocalWorldPose,
+        camera_names: Iterable[str] = CAMERAS,
+    ) -> dict[str, Any]:
         if not self.is_loaded:
             self.load()
         if traversal not in (RIGHT_TRAVERSAL, STRAIGHT_TRAVERSAL):
             raise KeyError(f"unknown traversal {traversal!r}")
         if not all(math.isfinite(value) for value in (pose.x, pose.y, pose.z, pose.yaw)):
             raise ValueError("world pose must be finite")
+        requested_camera_names = validated_camera_names(camera_names)
         assert self.pipeline is not None
         assert self.torch is not None
         assert self.model_scene_time is not None
@@ -574,7 +596,7 @@ class TbVWorldRenderer:
         started = time.perf_counter()
         frames: dict[str, Any] = {}
         with torch.no_grad():
-            for camera_name in CAMERAS:
+            for camera_name in requested_camera_names:
                 camera = deepcopy(self.source_cameras[traversal][camera_name])
                 camera.camera_to_worlds = self._transform_pose(
                     traversal, camera_name, pose
@@ -606,6 +628,7 @@ class TbVWorldRenderer:
             "traversal": traversal,
             "scene_time_seconds": self.model_scene_time,
             "pose": pose,
+            "camera_names": requested_camera_names,
         }
 
 

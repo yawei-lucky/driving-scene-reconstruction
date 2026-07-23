@@ -232,6 +232,18 @@ Stage H3 Level 9G
 → both traversal calibrations cover 99.98% of the requested panorama
 → a 25-sample 4.0 m/s host smoke retained seven finite cameras and route support;
   server control-to-driving-JPEG measured 97.40/100.34 ms p50/p95
+
+Stage H3 Level 9H
+→ removed four unused side/rear renders from the normal driving frame and made
+  the complete seven-camera diagnostic manual/on-demand
+→ compared fixed-checkpoint output scales 0.5/0.75/1.0 at the same pose; their
+  server control-to-JPEG p95 values were 81.25/94.99/111.38 ms
+→ selected 0.75 as the clearest scale that still passes the existing 100 ms
+  server p95 gate; the 1.0 scale is sharper but over budget
+→ a separate 25-sample 0.75-scale motion smoke reached 4.0 m/s with three
+  finite front cameras, no support violation, and 88.61 ms server p95
+→ no new training was performed; physical keyboard-to-display timing and
+  driving-relevant visual acceptance remain the next gate
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -356,8 +368,10 @@ right when the vehicle stops at the shared anchor. The default view is a
 calibrated approximately 150-degree cylindrical projection of the three front
 cameras with a logged-trajectory support inset. The full seven-camera mosaic
 is available separately at `/diagnostic`; it is a reconstruction diagnostic,
-not the driving view. The default speed cap is 4.0 m/s and can be changed with
-`H3_TBV_MAX_SPEED_MPS`.
+not the driving view, and it renders only when opened or manually refreshed.
+Normal driving renders only the three front cameras. The selected default
+output scale is 0.75; override it with `H3_TBV_DRIVING_SCALE` if needed. The
+default speed cap is 4.0 m/s and can be changed with `H3_TBV_MAX_SPEED_MPS`.
 
 The live evidence report is available at `/evidence.json` and is also written
 outside Git under
@@ -598,6 +612,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_tbv_cockpit_presentation.md` records the calibrated
   front panorama, trajectory-support inset, diagnostic split, host latency,
   and remaining seam/human-driving gate.
+- `experiments/stage_h3_tbv_cockpit_resolution_ab.md` records the fixed-8k
+  0.5/0.75/1.0 scale comparison, front-only driving render, selected 0.75
+  default, and its motion-smoke boundary.
 
 See also `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 

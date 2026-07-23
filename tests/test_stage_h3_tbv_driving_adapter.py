@@ -78,6 +78,8 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
     def test_diagnostic_page_is_separate_from_driving_cockpit(self) -> None:
         self.assertIn("/diagnostic.jpg", MODULE.DIAGNOSTIC_PAGE)
         self.assertIn("不作为真人驾驶视图", MODULE.DIAGNOSTIC_PAGE)
+        self.assertIn('id="refresh"', MODULE.DIAGNOSTIC_PAGE)
+        self.assertNotIn("setInterval", MODULE.DIAGNOSTIC_PAGE)
         self.assertIn('href="/"', MODULE.DIAGNOSTIC_PAGE)
 
     def test_diagnostic_mosaic_preserves_camera_aspect_ratios(self) -> None:

@@ -356,8 +356,8 @@ class RouteDrivingEvidenceRecorder:
                 "measurement_scope": {
                     "server_control_to_jpeg_ms": (
                         "server request receipt through state update, "
-                        "seven-camera render, and driving-display JPEG encode; evidence-file "
-                        "write is excluded"
+                        "configured driving-camera render, and driving-display "
+                        "JPEG encode; evidence-file write is excluded"
                     ),
                     "browser_request_to_image_ms": (
                         "browser request start through the corresponding JPEG "

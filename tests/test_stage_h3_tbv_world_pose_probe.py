@@ -20,6 +20,23 @@ SPEC.loader.exec_module(MODULE)
 
 
 class TbVWorldPoseProbeTests(unittest.TestCase):
+    def test_camera_subset_is_non_empty_unique_and_ordered(self) -> None:
+        requested = (
+            "ring_front_left",
+            "ring_front_center",
+            "ring_front_right",
+        )
+
+        self.assertEqual(MODULE.validated_camera_names(requested), requested)
+        for invalid in (
+            (),
+            ("ring_front_center", "ring_front_center"),
+            ("unknown",),
+        ):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    MODULE.validated_camera_names(invalid)
+
     def test_left_offset_uses_pose_heading(self) -> None:
         forward = MODULE.offset_pose(
             MODULE.LocalWorldPose(10.0, 2.0, 0.5, 0.0), 1.0

@@ -72,12 +72,15 @@ COCKPIT_TOP_ANGLE_DEGREES = 18.0
 COCKPIT_BOTTOM_ANGLE_DEGREES = -24.0
 BEV_SIZE = 284
 DEFAULT_MAX_SPEED_MPS = 4.0
+DEFAULT_OUTPUT_SCALE = 0.75
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
-    parser.add_argument("--output-scale", type=float, default=0.5)
+    parser.add_argument(
+        "--output-scale", type=float, default=DEFAULT_OUTPUT_SCALE
+    )
     parser.add_argument("--dt", type=float, default=0.1)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8768)
@@ -818,22 +821,19 @@ DIAGNOSTIC_PAGE = """<!doctype html>
 </head>
 <body>
   <h1>七相机重建诊断</h1>
-  <p>仅用于检查覆盖、变形和重影，不作为真人驾驶视图。<a href="/">返回驾驶舱</a></p>
+  <p>
+    七相机会在打开或手动刷新时按需渲染，不占用正常驾驶帧预算；
+    仅用于检查覆盖、变形和重影，不作为真人驾驶视图。
+    <a href="/">返回驾驶舱</a>
+  </p>
+  <button id="refresh">刷新当前状态</button>
   <img id="view" src="/diagnostic.jpg" alt="seven reconstructed camera diagnostics">
   <script>
     const view=document.getElementById("view");
-    let sequence=null;
-    async function refresh() {
-      try {
-        const response=await fetch("/state.json",{cache:"no-store"});
-        const state=await response.json();
-        if (state.sequence!==sequence) {
-          sequence=state.sequence;
-          view.src="/diagnostic.jpg?n="+sequence;
-        }
-      } catch (_) {}
-    }
-    setInterval(refresh,300);
+    let refreshSequence=0;
+    document.getElementById("refresh").addEventListener("click",()=>{
+      view.src="/diagnostic.jpg?n="+(++refreshSequence);
+    });
   </script>
 </body>
 </html>
@@ -870,7 +870,7 @@ def main() -> None:
     composer: CylindricalCockpitComposer
     evidence: RouteDrivingEvidenceRecorder
     runtime: dict[str, Any] = {
-        "state": EgoState(), "jpeg": b"", "frames": {}, "render": {},
+        "state": EgoState(), "jpeg": b"", "render": {},
         "diagnostic_jpeg": b"", "sequence": -1,
         "boundary_hit": False, "boundary_reason": None, "selection_required": False,
     }
@@ -908,6 +908,8 @@ def main() -> None:
             ),
             "frozen_scene_time_seconds": renderer.model_scene_time,
             "display_mode": "calibrated_three_camera_cylindrical_front",
+            "driving_camera_count": len(FRONT_CAMERAS),
+            "diagnostic_camera_count": len(CAMERAS),
             "front_horizontal_fov_degrees": (
                 composer.horizontal_fov_degrees
             ),
@@ -925,7 +927,7 @@ def main() -> None:
 
     def render_state(
         state: EgoState,
-    ) -> tuple[bytes, dict[str, Any], dict[str, object]]:
+    ) -> tuple[bytes, dict[str, object]]:
         from PIL import Image, ImageDraw
 
         support = adapter.support(state)
@@ -935,6 +937,7 @@ def main() -> None:
         observation = renderer.render(
             support.renderer_profile,
             LocalWorldPose(state.x, state.y, z, state.yaw),
+            FRONT_CAMERAS,
         )
         frames = dict(observation["frames"])
         presentation_started = time.perf_counter()
@@ -950,7 +953,7 @@ def main() -> None:
         buffer = io.BytesIO()
         cockpit.save(buffer, format="JPEG", quality=88)
         presentation_seconds = time.perf_counter() - presentation_started
-        return buffer.getvalue(), frames, {
+        return buffer.getvalue(), {
             "render_seconds": float(observation["render_seconds"]),
             "presentation_seconds": presentation_seconds,
             "scene_time_seconds": float(observation["scene_time_seconds"]),
@@ -964,7 +967,6 @@ def main() -> None:
     def commit(
         state: EgoState,
         jpeg: bytes,
-        frames: dict[str, Any],
         render: dict[str, object],
         *,
         boundary_hit: bool = False,
@@ -974,7 +976,6 @@ def main() -> None:
         runtime.update(
             state=state,
             jpeg=jpeg,
-            frames=frames,
             render=render,
             diagnostic_jpeg=b"",
             boundary_hit=boundary_hit,
@@ -990,8 +991,18 @@ def main() -> None:
 
         state: EgoState = runtime["state"]
         support = adapter.support(state).as_dict()
+        z = route_height(
+            renderer,
+            str(support["renderer_profile"]),
+            float(support["progress_from_anchor_meters"]),
+        )
+        observation = renderer.render(
+            str(support["renderer_profile"]),
+            LocalWorldPose(state.x, state.y, z, state.yaw),
+            CAMERAS,
+        )
         mosaic = make_diagnostic_mosaic(
-            Image, ImageDraw, runtime["frames"], state, support
+            Image, ImageDraw, dict(observation["frames"]), state, support
         )
         buffer = io.BytesIO()
         mosaic.save(buffer, format="JPEG", quality=88)
@@ -1045,12 +1056,11 @@ def main() -> None:
                         raise ValueError("keys must contain only W/S/A/D")
                     state: EgoState = runtime["state"]
                     update = adapter.step(state, control_for_keys(keys), args.dt)
-                    jpeg, frames, render = render_state(update.state)
+                    jpeg, render = render_state(update.state)
                     runtime["sequence"] += 1
                     commit(
                         update.state,
                         jpeg,
-                        frames,
                         render,
                         boundary_hit=update.boundary_hit,
                         boundary_reason=update.boundary_reason,
@@ -1103,9 +1113,9 @@ def main() -> None:
                     before_hash = hashlib.sha256(runtime["jpeg"]).hexdigest()
                     before_profile = adapter.support(state).renderer_profile
                     support = adapter.select_branch(branch, state)
-                    jpeg, frames, render = render_state(state)
+                    jpeg, render = render_state(state)
                     elapsed_ms = (time.perf_counter() - started) * 1000.0
-                    commit(state, jpeg, frames, render)
+                    commit(state, jpeg, render)
                     event = evidence.record_route_event(
                         "branch_selected",
                         {
@@ -1131,8 +1141,8 @@ def main() -> None:
                     return
                 if parsed.path == "/reset":
                     state = adapter.reset()
-                    jpeg, frames, render = render_state(state)
-                    commit(state, jpeg, frames, render)
+                    jpeg, render = render_state(state)
+                    commit(state, jpeg, render)
                     elapsed_ms = (time.perf_counter() - started) * 1000.0
                     evidence.record_reset(
                         {
@@ -1192,7 +1202,7 @@ def main() -> None:
             checkpoint_step=renderer.checkpoint_step,
             output_scale=args.output_scale,
             dt_seconds=args.dt,
-            camera_names=CAMERAS,
+            camera_names=FRONT_CAMERAS,
             route_contract={
                 "spawn_progress_from_anchor_meters": COMMON_START_METERS,
                 "branch_anchor_progress_meters": BRANCH_ANCHOR_METERS,
@@ -1212,6 +1222,8 @@ def main() -> None:
                     "top_angle_degrees": composer.top_angle_degrees,
                     "bottom_angle_degrees": composer.bottom_angle_degrees,
                     "bev_source": "logged_trajectory_support_corridor",
+                    "diagnostic_camera_names": list(CAMERAS),
+                    "diagnostic_render_policy": "manual_on_demand",
                     "seven_camera_diagnostic_url": "/diagnostic",
                 },
             },
@@ -1224,13 +1236,15 @@ def main() -> None:
                 "parallax and seams are presentation artifacts, not geometry evidence.",
                 "The inset is logged-trajectory support, not an overhead RGB camera or "
                 "a LiDAR-derived free-space certification.",
+                "Normal driving renders only the three front cameras; the seven-camera "
+                "diagnostic is a separate manual on-demand render.",
                 "Browser timing excludes monitor scan-out.",
             ),
             output_path=args.evidence_output,
         )
         initial = adapter.reset()
-        jpeg, frames, render = render_state(initial)
-        commit(initial, jpeg, frames, render)
+        jpeg, render = render_state(initial)
+        commit(initial, jpeg, render)
         evidence.record_reset(
             {
                 "simulation_time_seconds": initial.time,

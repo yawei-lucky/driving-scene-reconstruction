@@ -188,7 +188,7 @@ case "$MODE" in
     fi
     "$PYTHON" "$REPO_ROOT/examples/stage_h3_tbv_driving_adapter.py" \
       --config "$STATIC_CONFIG" \
-      --output-scale "${H3_TBV_DRIVING_SCALE:-0.5}" \
+      --output-scale "${H3_TBV_DRIVING_SCALE:-0.75}" \
       --host "${H3_TBV_DRIVING_HOST:-127.0.0.1}" \
       --port "${H3_TBV_DRIVING_PORT:-8768}" \
       --max-speed-mps "${H3_TBV_MAX_SPEED_MPS:-4.0}" \

@@ -196,6 +196,10 @@ class RouteDrivingEvidenceRecorderTests(unittest.TestCase):
         self.assertEqual(
             report["summary"]["claim_status"], "evidence_only_not_certified"
         )
+        self.assertIn(
+            "configured driving-camera render",
+            report["trial"]["measurement_scope"]["server_control_to_jpeg_ms"],
+        )
 
 
 if __name__ == "__main__":
