@@ -113,12 +113,36 @@ class RouteDrivingEvidenceRecorder:
         keys = "".join(sorted(set(str(payload.get("control_keys", "")).lower())))
         if not set(keys) <= set("wasd"):
             raise ValueError("control keys must contain only W/S/A/D")
+        control_mode = str(payload.get("control_mode", "manual"))
+        if control_mode not in {"manual", "autoplay_route_follower"}:
+            raise ValueError("unknown control mode")
+        raw_control = payload.get("control_values")
+        if raw_control is None:
+            raw_control = {
+                "steer": float("a" in keys) - float("d" in keys),
+                "throttle": float("w" in keys and "s" not in keys),
+                "brake": float("s" in keys),
+            }
+        if not isinstance(raw_control, Mapping):
+            raise ValueError("control values must be an object")
+        control = {
+            name: _finite(raw_control.get(name), f"control.{name}")
+            for name in ("steer", "throttle", "brake")
+        }
+        if (
+            not -1.0 <= control["steer"] <= 1.0
+            or not 0.0 <= control["throttle"] <= 1.0
+            or not 0.0 <= control["brake"] <= 1.0
+        ):
+            raise ValueError("normalized control values are outside [-1, 1]")
         sample = {
             "sequence": sequence,
             "server_recorded_at_utc": datetime.now(timezone.utc).isoformat(
                 timespec="milliseconds"
             ),
             "control_keys": keys,
+            "control_mode": control_mode,
+            "control_values": control,
             "simulation_time_seconds": _finite(
                 payload.get("simulation_time_seconds"),
                 "simulation time",
@@ -296,6 +320,9 @@ class RouteDrivingEvidenceRecorder:
                     for event in self.route_events
                     if event["event"] == "branch_selected"
                 }
+            ),
+            "control_modes": sorted(
+                {str(sample["control_mode"]) for sample in self.samples}
             ),
             "browser_timing_coverage": (
                 len(browser) / len(self.samples) if self.samples else 0.0

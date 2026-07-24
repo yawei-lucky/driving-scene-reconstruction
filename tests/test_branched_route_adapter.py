@@ -189,6 +189,11 @@ class RouteDrivingEvidenceRecorderTests(unittest.TestCase):
         self.assertEqual(report["summary"]["sample_count"], 1)
         self.assertEqual(report["summary"]["browser_timing_coverage"], 1.0)
         self.assertEqual(report["summary"]["support_violation_count"], 0)
+        self.assertEqual(report["summary"]["control_modes"], ["manual"])
+        self.assertEqual(
+            report["samples"][0]["control_values"],
+            {"brake": 0.0, "steer": 1.0, "throttle": 1.0},
+        )
         self.assertEqual(
             report["summary"]["browser_branch_selection_to_image_ms"]["p50"],
             80.0,

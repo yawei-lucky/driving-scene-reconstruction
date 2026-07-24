@@ -68,6 +68,11 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
 
         self.assertIn('data-branch="straight"', page)
         self.assertIn('data-branch="right"', page)
+        self.assertIn('id="autoplay"', page)
+        self.assertIn('id="autoplay-branch"', page)
+        self.assertIn('autoplayButton.addEventListener("click"', page)
+        self.assertIn('"&autoplay="+(autoplay?"1":"0")', page)
+        self.assertIn("chooseBranch(autoBranchToChoose,true)", page)
         self.assertIn("/evidence.json", page)
         self.assertIn("/evidence-sample", page)
         self.assertIn("/evidence-route-timing", page)
@@ -79,6 +84,54 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
         self.assertNotIn("data-surround-view", page)
         self.assertIn("cylindrical driving view", page)
         self.assertIn("100.000000", page)
+
+    def test_autoplay_follows_a_curve_and_stops_without_leaving_support(self) -> None:
+        radius = 12.0
+        samples = tuple(
+            MODULE.LoggedCenterlineSample(
+                logical_frame=index,
+                log_time=float(index),
+                x=radius * math.sin(angle),
+                y=radius * (1.0 - math.cos(angle)),
+                yaw=angle,
+            )
+            for index, angle in enumerate(
+                index * math.radians(3.0) for index in range(31)
+            )
+        )
+        route = MODULE.SupportedRoute(
+            name="right",
+            renderer_profile="test",
+            corridor=MODULE.LoggedCenterlineCorridor(
+                samples,
+                half_width=1.0,
+                max_heading_error=math.radians(30.0),
+            ),
+            start_progress_from_anchor=0.0,
+        )
+        adapter = SimpleNamespace(
+            active_route=route,
+            selected_branch="right",
+            vehicle_model=MODULE.SimpleVehicleModel(
+                max_steer_angle=math.radians(15.0),
+                max_acceleration=2.0,
+                max_braking=5.0,
+                max_speed=4.0,
+            ),
+        )
+        state = MODULE.EgoState(x=0.0, y=0.0, yaw=0.0)
+        maximum_offset = 0.0
+        for _ in range(400):
+            control = MODULE.autoplay_control(adapter, state)
+            state = adapter.vehicle_model.step(state, control, 0.1)
+            measurement = route.corridor.measure(state)
+            maximum_offset = max(maximum_offset, measurement.distance)
+            if MODULE.autoplay_finished(adapter, state):
+                break
+
+        self.assertTrue(MODULE.autoplay_finished(adapter, state))
+        self.assertLess(maximum_offset, 0.35)
+        self.assertLessEqual(state.speed, MODULE.AUTOPLAY_STOPPED_SPEED_MPS)
 
     def test_3d_surround_fixed_view_has_real_height_parallax(self) -> None:
         camera = MODULE.surround_virtual_camera()

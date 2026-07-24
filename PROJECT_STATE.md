@@ -801,6 +801,41 @@ true geometry or occlusion of poles, trees, walls, or vehicles and cannot
 certify drivable free space. Exact scope, evidence, and artifact paths are in
 `experiments/stage_h3_tbv_surround_3d.md`.
 
+### Stage H3 Level 9K — TbV passive route auto-play
+
+Completed on 2026-07-24 without retraining:
+
+- added a manual-default browser auto-play toggle plus straight/right route
+  preselection to the existing TbV driving adapter;
+- implemented a small pure-pursuit viewing controller over the observed
+  centreline, retaining the existing 4.0 m/s maximum, fail-closed +/-1 m route
+  support, explicit traversal-profile switch, and endpoint braking;
+- auto-play pauses without reloading the checkpoint, automatically selects the
+  preselected branch, and yields immediately to W/S/A/D or arrow-key input;
+- automatic branch selection deliberately records no physical
+  branch-selection-to-image timing;
+- extended route evidence with `manual` versus `autoplay_route_follower`
+  control mode and the normalized steer/throttle/brake values used per sample;
+- passed a dependency-light 90-degree, 12 m-radius curve/stop regression and
+  the complete 118-test suite, plus JavaScript syntax validation;
+- ran the actual RTX 4090 D / step-7,999 service through a 153-sample right
+  route: maximum speed 3.99995 m/s, maximum centreline distance 0.03615 m,
+  minimum distance margin 0.96386 m, maximum absolute heading error 1.9575
+  degrees, zero support violations, zero boundary hits, and a final speed of
+  0.0 m/s at progress +29.9657 m;
+- measured that machine run at 39.47/43.00 ms renderer p50/p95 and
+  84.08/87.56 ms server control-to-JPEG p50/p95;
+- preserved its report outside Git at
+  `/home/yawei/stage3_external/artifacts/tbv_surround_3d_dev/tbv_autoplay_right_smoke_20260724.json`;
+- preserved the preceding 244-sample browser session before restarting at
+  `tbv_driving_evidence_20260724T015026Z_pre_autoplay.json` in the same
+  directory.
+
+Auto-play is a passive visual-inspection convenience over known route
+geometry. It is not an autonomous-driving model, does not increase observed
+scene coverage, and does not replace the straight/right physical operator
+trials or their visual decisions.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -835,7 +870,7 @@ is accepted for a first human-driving prototype, but it is not certified for
 closed-loop autonomous-driving evaluation; the full +/-3 m probe remains a
 coverage diagnostic.
 
-The Level-9J TbV path now supports:
+The Level-9K TbV path now supports:
 
 ```text
 Branch-local world pose plus traversal route role
@@ -851,6 +886,8 @@ Branch-local world pose plus traversal route role
 → a simple vehicle mask plus the evidence-bearing logged-trajectory overlay
 → a separate manual/on-demand original-camera-view diagnostic
 → fail-closed route support and per-control machine-readable JSON evidence
+→ optional straight/right centreline auto-play up to 4.0 m/s with manual
+  takeover and endpoint braking
 ```
 
 This is connected to a dedicated manual browser but not the common `Renderer`
@@ -1003,8 +1040,9 @@ limitation, and borrow UniSim's compositional closed-loop concepts without
 treating generated completion as observed ground truth. NeuRAD, MTGS, and
 UniSim are not currently integrated.
 
-The adapter, forward surround, fixed-bathtub 360° 3D visual aid, and 0.75-scale
-selection are complete. The next action is deliberately narrow: use the
+The adapter, forward surround, fixed-bathtub 360° 3D visual aid, 0.75-scale
+selection, and passive auto-play are complete. The next action is deliberately
+narrow: use auto-play only for an initial passive inspection, then use the
 forward surround to run straight and right as separate human reset trials,
 capture browser request-to-image and physical input-to-image timing, inspect
 the transition when the renderer changes traversal profile, and reject any

@@ -271,6 +271,20 @@ Stage H3 Level 9J
   control-to-JPEG p50/p95/max with zero boundary hits or background skips
 → this improves presentation only and does not recover real object geometry,
   occlusion, or drivable free space
+
+Stage H3 Level 9K
+→ added a manual-default auto-play toggle and straight/right route preselection
+  to the dedicated TbV browser
+→ uses a centreline-following viewing controller up to the existing 4.0 m/s
+  cap, automatically selects the requested branch, and brakes before route end
+→ any W/S/A/D or arrow input immediately returns control to the human; pausing
+  freezes simulation and does not restart the checkpoint
+→ records auto-play as a separate control mode with normalized steer/throttle/
+  brake values and never labels automatic branch choice as physical input
+→ an actual 153-frame right-turn run reached 4.00 m/s, stayed within 0.037 m of
+  centreline, stopped at route end, and had zero support/boundary violations
+→ auto-play is a passive inspection aid, not autonomous-driving evidence or a
+  substitute for the pending human trial
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -391,7 +405,14 @@ scripts/run_stage_h3_tbv_pilot.sh driving-adapter
 
 Open `http://localhost:8768` through the existing SSH/VS Code port-forwarding
 path. Drive with W/S/A/D, reset with R, and choose `1` for straight or `2` for
-right when the vehicle stops at the shared anchor. The primary **forward
+right when the vehicle stops at the shared anchor. For passive inspection,
+select straight or right beside **自动播放**, then start/pause it from the same
+page. Auto-play follows the observed centreline up to 4.0 m/s, selects that
+branch automatically, and stops at route end. Any W/S/A/D or arrow input
+immediately returns to manual control. This is route playback for viewing, not
+an autonomous-driving policy or evaluation.
+
+The primary **forward
 surround** is a calibrated approximately 150-degree cylindrical projection of
 the three 0.75-scale front cameras. Its right-side **360° 3D surround** maps
 the latest completed same-profile seven-camera RGB pose snapshot onto a fixed

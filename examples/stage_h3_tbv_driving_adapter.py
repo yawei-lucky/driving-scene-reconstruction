@@ -80,6 +80,11 @@ DEFAULT_MAX_SPEED_MPS = 4.0
 DEFAULT_OUTPUT_SCALE = 0.75
 DEFAULT_SURROUND_EXTRA_SCALE = 0.375
 DEFAULT_SURROUND_UPDATE_EVERY = 1
+AUTOPLAY_TARGET_SPEED_MPS = DEFAULT_MAX_SPEED_MPS
+AUTOPLAY_MIN_LOOKAHEAD_METERS = 1.5
+AUTOPLAY_LOOKAHEAD_SECONDS = 0.8
+AUTOPLAY_END_MARGIN_METERS = 0.15
+AUTOPLAY_STOPPED_SPEED_MPS = 0.08
 SURROUND_FORWARD_METERS = 8.0
 SURROUND_REAR_METERS = 6.0
 SURROUND_SIDE_METERS = 7.0
@@ -128,6 +133,111 @@ def control_for_keys(keys: set[str]) -> HumanControl:
         steer=float("a" in keys) - float("d" in keys),
         throttle=float("w" in keys and not braking),
         brake=float(braking),
+    )
+
+
+def route_remaining_meters(
+    adapter: BranchedRouteDrivingAdapter,
+    state: EgoState,
+) -> float:
+    route = adapter.active_route
+    measurement = route.corridor.measure(state)
+    return max(0.0, route.corridor.length - measurement.progress)
+
+
+def autoplay_control(
+    adapter: BranchedRouteDrivingAdapter,
+    state: EgoState,
+) -> HumanControl:
+    """Follow the observed centreline for passive route playback.
+
+    This is a small pure-pursuit viewer aid, not an autonomous-driving agent.
+    The normal fail-closed route adapter still owns the accepted pose.
+    """
+
+    route = adapter.active_route
+    corridor = route.corridor
+    measurement = corridor.measure(state)
+    remaining = max(0.0, corridor.length - measurement.progress)
+    lookahead = max(
+        AUTOPLAY_MIN_LOOKAHEAD_METERS,
+        state.speed * AUTOPLAY_LOOKAHEAD_SECONDS,
+    )
+    target_progress = min(corridor.length, measurement.progress + lookahead)
+    target = corridor.pose_at_progress(target_progress)
+    dx = target.x - state.x
+    dy = target.y - state.y
+    target_distance = max(1e-6, math.hypot(dx, dy))
+    target_bearing = math.atan2(dy, dx)
+    bearing_error = math.atan2(
+        math.sin(target_bearing - state.yaw),
+        math.cos(target_bearing - state.yaw),
+    )
+    desired_steer_angle = math.atan2(
+        2.0 * adapter.vehicle_model.wheelbase * math.sin(bearing_error),
+        target_distance,
+    )
+    steer = max(
+        -1.0,
+        min(
+            1.0,
+            desired_steer_angle / adapter.vehicle_model.max_steer_angle,
+        ),
+    )
+
+    if adapter.selected_branch is not None:
+        stopping_distance = (
+            state.speed * state.speed
+            / max(2.0 * adapter.vehicle_model.max_braking, 1e-9)
+        )
+        if remaining <= stopping_distance + AUTOPLAY_END_MARGIN_METERS:
+            return HumanControl(
+                steer=steer,
+                brake=float(state.speed > AUTOPLAY_STOPPED_SPEED_MPS),
+            )
+
+    target_speed = min(
+        AUTOPLAY_TARGET_SPEED_MPS,
+        adapter.vehicle_model.max_speed or AUTOPLAY_TARGET_SPEED_MPS,
+    )
+    if adapter.selected_branch is not None:
+        comfortable_braking = min(
+            2.0,
+            adapter.vehicle_model.max_braking,
+        )
+        stopping_room = max(0.0, remaining - AUTOPLAY_END_MARGIN_METERS)
+        target_speed = min(
+            target_speed,
+            math.sqrt(2.0 * comfortable_braking * stopping_room),
+        )
+
+    desired_acceleration = 1.5 * (target_speed - state.speed)
+    desired_acceleration += adapter.vehicle_model.linear_drag * state.speed
+    if desired_acceleration >= 0.0:
+        throttle = min(
+            1.0,
+            desired_acceleration
+            / max(adapter.vehicle_model.max_acceleration, 1e-9),
+        )
+        brake = 0.0
+    else:
+        throttle = 0.0
+        brake = min(
+            1.0,
+            -desired_acceleration / max(adapter.vehicle_model.max_braking, 1e-9),
+        )
+    return HumanControl(steer=steer, throttle=throttle, brake=brake)
+
+
+def autoplay_finished(
+    adapter: BranchedRouteDrivingAdapter,
+    state: EgoState,
+) -> bool:
+    return (
+        adapter.selected_branch is not None
+        and route_remaining_meters(adapter, state)
+        <= AUTOPLAY_END_MARGIN_METERS + 0.08
+        and state.speed <= AUTOPLAY_STOPPED_SPEED_MPS
     )
 
 
@@ -1247,6 +1357,7 @@ WEB_PAGE = """<!doctype html>
     #view { display:block; width:calc(100vw - 8px); max-height:calc(100vh - 128px); object-fit:contain; margin:auto; border:1px solid #444; }
     #status { min-height:22px; color:#ffd84d; margin:4px; }
     button { margin:2px; padding:7px 12px; font-size:14px; }
+    select { margin:2px; padding:6px 8px; font-size:14px; }
     #branches { color:#ffb27a; }
     #branches[hidden] { display:none; }
     a { color:#8ed8ff; }
@@ -1261,6 +1372,13 @@ WEB_PAGE = """<!doctype html>
     <button data-branch="right">2 / 右转</button>
   </div>
   <div>
+    <button id="autoplay">自动播放</button>
+    <label>自动路线
+      <select id="autoplay-branch">
+        <option value="straight">直行</option>
+        <option value="right">右转</option>
+      </select>
+    </label>
     <button id="reset">R 重置</button>
     <a href="/diagnostic" target="_blank">原相机图</a> ·
     <a href="/evidence.json" target="_blank">可信证据 JSON</a>
@@ -1269,27 +1387,53 @@ WEB_PAGE = """<!doctype html>
     const view = document.getElementById("view");
     const status = document.getElementById("status");
     const branches = document.getElementById("branches");
+    const autoplayButton = document.getElementById("autoplay");
+    const autoplayBranch = document.getElementById("autoplay-branch");
     const held = new Set();
     const aliases = new Map([["arrowup","w"],["arrowdown","s"],["arrowleft","a"],["arrowright","d"]]);
     const driving = new Set(["w","a","s","d"]);
     const tickPeriodMs = __TICK_PERIOD_MS__;
     let speed = 0, inFlight = false, timer = null, imageSequence = 0, generation = 0;
     let blocked = false, selectionRequired = false, pendingInputAt = null;
+    let autoplay = false, autoplayPaused = false;
 
     function keyName(value) { const key=value.toLowerCase(); return aliases.get(key)||key; }
+    function routeLabel(value) { return value==="right" ? "右转" : "直行"; }
+    function updateAutoplayButton() {
+      autoplayButton.textContent=autoplay ? "暂停自动播放" : "自动播放";
+    }
+    function setAutoplay(enabled, pauseWhenDisabled=true) {
+      autoplay=enabled; autoplayPaused=!enabled&&pauseWhenDisabled;
+      if (enabled) held.clear();
+      updateAutoplayButton();
+      pendingInputAt=performance.now();
+      if (timer!==null) { clearTimeout(timer); timer=null; }
+      if (enabled) {
+        status.textContent=`自动播放 ${routeLabel(autoplayBranch.value)} · 任意驾驶键可接管`;
+        if (selectionRequired) chooseBranch(autoplayBranch.value,true);
+        else requestTick();
+      } else if (pauseWhenDisabled) {
+        status.textContent="自动播放已暂停 · 再次点击继续，或按 W/S/A/D 接管";
+      }
+    }
+    function takeManualControl() {
+      if (!autoplay&&!autoplayPaused) return;
+      autoplay=false; autoplayPaused=false; updateAutoplayButton();
+      if (timer!==null) { clearTimeout(timer); timer=null; }
+    }
     function setHeld(key, active) {
       const changed = held.has(key) !== active;
       if (active) held.add(key); else held.delete(key);
       if (changed) { pendingInputAt=performance.now(); requestTick(); }
     }
     function requestTick() {
-      if (inFlight || blocked || selectionRequired) return;
+      if (inFlight || blocked || selectionRequired || autoplayPaused) return;
       if (timer !== null) { clearTimeout(timer); timer=null; }
       tick(generation);
     }
     function schedule(token, started) {
-      if (blocked || selectionRequired || token !== generation) return;
-      if (!held.has("w") && speed <= 1e-6) return;
+      if (blocked || selectionRequired || autoplayPaused || token !== generation) return;
+      if (!autoplay && !held.has("w") && speed <= 1e-6) return;
       timer=setTimeout(()=>tick(token), Math.max(0,tickPeriodMs-(performance.now()-started)));
     }
     async function loadFrame() {
@@ -1301,6 +1445,7 @@ WEB_PAGE = """<!doctype html>
       const route=result.route_support;
       let text=`${route.phase} · ${result.selected_branch||"未选路"} · 进度 ${route.progress_from_anchor_meters.toFixed(1)}m · `+
         `横向 ${route.lateral_offset_meters.toFixed(2)}m · 速度 ${result.speed_mps.toFixed(2)}m/s · 请求→画面 ${requestMs.toFixed(0)}ms`;
+      if (autoplay) text+=` · 自动播放${routeLabel(autoplayBranch.value)}`;
       if (inputMs !== null) text+=` · 输入→画面 ${inputMs.toFixed(0)}ms`;
       if (result.boundary_hit) text+=` · 已停止：${result.boundary_reason}`;
       return text;
@@ -1313,12 +1458,16 @@ WEB_PAGE = """<!doctype html>
       if (!response.ok) throw new Error((await response.json()).error||"证据写入失败");
     }
     async function tick(token) {
-      if (token!==generation || inFlight || blocked || selectionRequired) return;
+      if (token!==generation || inFlight || blocked || selectionRequired || autoplayPaused) return;
       inFlight=true; if (timer!==null) { clearTimeout(timer); timer=null; }
       const started=performance.now(), inputStarted=pendingInputAt;
+      let autoBranchToChoose=null;
       try {
         const keys=[...held].sort().join("");
-        const response=await fetch("/tick?keys="+encodeURIComponent(keys),{method:"POST"});
+        const response=await fetch(
+          "/tick?keys="+encodeURIComponent(keys)+"&autoplay="+(autoplay?"1":"0"),
+          {method:"POST"}
+        );
         const result=await response.json(); if (!response.ok) throw new Error(result.error||"控制失败");
         await loadFrame(); const loaded=performance.now();
         const requestMs=loaded-started, inputMs=inputStarted===null?null:loaded-inputStarted;
@@ -1326,22 +1475,38 @@ WEB_PAGE = """<!doctype html>
         if (pendingInputAt===inputStarted) pendingInputAt=null;
         speed=result.speed_mps; blocked=result.boundary_hit; selectionRequired=result.selection_required;
         branches.hidden=!selectionRequired; status.textContent=stateText(result,requestMs,inputMs);
+        if (autoplay&&selectionRequired) autoBranchToChoose=autoplayBranch.value;
+        if (autoplay&&result.autoplay_finished) {
+          autoplay=false; autoplayPaused=true; updateAutoplayButton();
+          status.textContent+=" · 自动路线已播放完，按 R 重置";
+        } else if (autoplay&&blocked) {
+          autoplay=false; autoplayPaused=true; updateAutoplayButton();
+        }
       } catch(error) { status.textContent=error.toString(); }
       finally { inFlight=false; }
+      if (autoBranchToChoose!==null&&autoplay) {
+        chooseBranch(autoBranchToChoose,true);
+        return;
+      }
       schedule(token,started);
     }
-    async function chooseBranch(branch) {
+    async function chooseBranch(branch, automatic=false) {
       if (inFlight) return; inFlight=true; const started=performance.now();
       try {
-        const response=await fetch("/branch?name="+branch,{method:"POST"});
+        const response=await fetch(
+          "/branch?name="+branch+"&autoplay="+(automatic?"1":"0"),
+          {method:"POST"}
+        );
         const result=await response.json(); if (!response.ok) throw new Error(result.error||"选路失败");
         await loadFrame(); const loaded=performance.now();
-        const timingResponse=await fetch("/evidence-route-timing", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-          event_index:result.route_event_index, client_unix_ms:Date.now(), browser_selection_to_image_ms:loaded-started
-        })});
-        if (!timingResponse.ok) throw new Error((await timingResponse.json()).error||"选路证据写入失败");
+        if (!automatic) {
+          const timingResponse=await fetch("/evidence-route-timing", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+            event_index:result.route_event_index, client_unix_ms:Date.now(), browser_selection_to_image_ms:loaded-started
+          })});
+          if (!timingResponse.ok) throw new Error((await timingResponse.json()).error||"选路证据写入失败");
+        }
         speed=result.speed_mps; selectionRequired=false; blocked=false; branches.hidden=true;
-        status.textContent=`已选择 ${branch} · 切换渲染 ${result.server_route_selection_to_jpeg_ms.toFixed(0)}ms`;
+        status.textContent=`已选择 ${routeLabel(branch)}${automatic?"（自动）":""} · 切换渲染 ${result.server_route_selection_to_jpeg_ms.toFixed(0)}ms`;
       } catch(error) { status.textContent=error.toString(); }
       finally { inFlight=false; }
       requestTick();
@@ -1352,10 +1517,11 @@ WEB_PAGE = """<!doctype html>
       const response=await fetch("/reset",{method:"POST"}); const result=await response.json();
       if (!response.ok) { status.textContent=result.error||"重置失败"; return; }
       await loadFrame(); speed=0; pendingInputAt=null; status.textContent="已重置到公共入口 -20m";
+      if (autoplay) requestTick();
     }
     document.addEventListener("keydown",event=>{
       const key=keyName(event.key);
-      if (driving.has(key)) { event.preventDefault(); setHeld(key,true); }
+      if (driving.has(key)) { event.preventDefault(); takeManualControl(); setHeld(key,true); }
       if (key==="r"&&!event.repeat) { event.preventDefault(); reset(); }
       if (selectionRequired&&key==="1") chooseBranch("straight");
       if (selectionRequired&&key==="2") chooseBranch("right");
@@ -1363,7 +1529,9 @@ WEB_PAGE = """<!doctype html>
     document.addEventListener("keyup",event=>{ const key=keyName(event.key); if(driving.has(key)){event.preventDefault();setHeld(key,false);} });
     window.addEventListener("blur",()=>{ if(held.size){held.clear();pendingInputAt=performance.now();requestTick();} });
     document.querySelectorAll("button[data-branch]").forEach(button=>button.addEventListener("click",()=>chooseBranch(button.dataset.branch)));
+    autoplayButton.addEventListener("click",()=>setAutoplay(!autoplay));
     document.getElementById("reset").addEventListener("click",reset);
+    updateAutoplayButton();
   </script>
 </body>
 </html>
@@ -1590,6 +1758,14 @@ def main() -> None:
             "yaw_degrees": math.degrees(state.yaw),
             "speed_mps": state.speed,
             "maximum_speed_mps": args.max_speed_mps,
+            "autoplay_available": True,
+            "autoplay_target_speed_mps": min(
+                AUTOPLAY_TARGET_SPEED_MPS,
+                args.max_speed_mps,
+            ),
+            "route_end_remaining_meters": route_remaining_meters(
+                adapter, state
+            ),
             "selected_branch": adapter.selected_branch,
             "selection_required": runtime["selection_required"],
             "boundary_hit": runtime["boundary_hit"],
@@ -1875,11 +2051,25 @@ def main() -> None:
                         raise ValueError("reconstruction boundary reached; reset is required")
                     if runtime["selection_required"]:
                         raise ValueError("branch selection is required before driving")
-                    keys = set(parse_qs(parsed.query).get("keys", [""])[0])
+                    query = parse_qs(parsed.query)
+                    keys = set(query.get("keys", [""])[0])
                     if not keys <= set("wasd"):
                         raise ValueError("keys must contain only W/S/A/D")
+                    autoplay_value = query.get("autoplay", ["0"])[0]
+                    if autoplay_value not in {"0", "1"}:
+                        raise ValueError("autoplay must be 0 or 1")
+                    autoplay = autoplay_value == "1"
+                    if autoplay and keys:
+                        raise ValueError(
+                            "autoplay cannot be combined with manual keys"
+                        )
                     state: EgoState = runtime["state"]
-                    update = adapter.step(state, control_for_keys(keys), args.dt)
+                    control = (
+                        autoplay_control(adapter, state)
+                        if autoplay
+                        else control_for_keys(keys)
+                    )
+                    update = adapter.step(state, control, args.dt)
                     jpeg, render = render_state(update.state)
                     runtime["sequence"] += 1
                     commit(
@@ -1891,12 +2081,31 @@ def main() -> None:
                         selection_required=update.selection_required,
                     )
                     elapsed_ms = (time.perf_counter() - started) * 1000.0
-                    response = payload({"server_control_to_jpeg_ms": elapsed_ms})
+                    response = payload(
+                        {
+                            "server_control_to_jpeg_ms": elapsed_ms,
+                            "autoplay": autoplay,
+                            "autoplay_finished": (
+                                autoplay
+                                and autoplay_finished(adapter, update.state)
+                            ),
+                        }
+                    )
                     support = adapter.support(update.state)
                     evidence.record_server_sample(
                         {
                             "sequence": runtime["sequence"],
                             "control_keys": "".join(sorted(keys)),
+                            "control_mode": (
+                                "autoplay_route_follower"
+                                if autoplay
+                                else "manual"
+                            ),
+                            "control_values": {
+                                "steer": control.steer,
+                                "throttle": control.throttle,
+                                "brake": control.brake,
+                            },
                             "simulation_time_seconds": update.state.time,
                             "x_meters": update.state.x,
                             "y_meters": update.state.y,
@@ -1932,7 +2141,12 @@ def main() -> None:
                     self.send_json(200, response)
                     return
                 if parsed.path == "/branch":
-                    branch = parse_qs(parsed.query).get("name", [""])[0]
+                    query = parse_qs(parsed.query)
+                    branch = query.get("name", [""])[0]
+                    autoplay_value = query.get("autoplay", ["0"])[0]
+                    if autoplay_value not in {"0", "1"}:
+                        raise ValueError("autoplay must be 0 or 1")
+                    automatic = autoplay_value == "1"
                     state = runtime["state"]
                     before_hash = hashlib.sha256(runtime["jpeg"]).hexdigest()
                     before_profile = adapter.support(state).renderer_profile
@@ -1944,6 +2158,9 @@ def main() -> None:
                         "branch_selected",
                         {
                             "branch": branch,
+                            "selection_mode": (
+                                "autoplay" if automatic else "manual"
+                            ),
                             "simulation_time_seconds": state.time,
                             "route_support": support.as_dict(),
                             "renderer_profile_before": before_profile,
@@ -2043,6 +2260,15 @@ def main() -> None:
                 "maximum_heading_error_degrees": CORRIDOR_HEADING_LIMIT_DEGREES,
                 "selection_window_meters": SELECTION_WINDOW_METERS,
                 "maximum_speed_mps": args.max_speed_mps,
+                "autoplay": {
+                    "mode": "passive_route_follower_not_autonomous_driving",
+                    "target_speed_mps": min(
+                        AUTOPLAY_TARGET_SPEED_MPS,
+                        args.max_speed_mps,
+                    ),
+                    "branch_policy": "browser_preselects_straight_or_right",
+                    "manual_takeover": "any_wasd_or_arrow_key",
+                },
                 "boundary_policy": "fail_closed_keep_last_valid_pose_and_stop",
                 "driving_display": {
                     "primary_name": "forward_surround",
@@ -2112,6 +2338,8 @@ def main() -> None:
                 "reduced-scale side/rear cameras update 3D surround in the background.",
                 "The original seven-camera views remain a separate manual diagnostic.",
                 "Browser timing excludes monitor scan-out.",
+                "Auto-play is a centreline-following viewing aid, not an "
+                "autonomous-driving policy or evaluation result.",
             ),
             output_path=args.evidence_output,
         )
@@ -2130,7 +2358,10 @@ def main() -> None:
         print(f"TbV route adapter: http://{args.host}:{args.port}")
         print(f"original camera views: http://{args.host}:{args.port}/diagnostic")
         print(f"evidence: {args.evidence_output.expanduser().resolve()}")
-        print("controls: W/S/A/D, R reset, select 1=straight or 2=right at anchor")
+        print(
+            "controls: W/S/A/D, R reset, select 1=straight or 2=right at "
+            "anchor, or use browser auto-play"
+        )
         print("scope: static evidence-only route following; +/-1m fail-closed support")
         print("warning: trusted localhost/tunnel only; one shared driving state")
         server.serve_forever()
