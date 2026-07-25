@@ -704,6 +704,11 @@ the multi-traversal spatial-coverage direction; and UniSim is a closed-loop
 architecture reference. The latter three roles do not imply completed
 integrations.
 
+For a beginner-oriented, end-to-end build manual, see
+`docs/automated_drivable_simulator_build_guide_zh.md`. It condenses the target
+automation into eight input/action/output/gate stages and clearly separates
+the proposed one-command interface from what this repository implements now.
+
 The success criteria are deliberately separate from generic image metrics:
 
 - `docs/drivability_acceptance_criteria.md` defines whether the scene can be
