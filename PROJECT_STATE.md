@@ -923,6 +923,36 @@ to a local keyboard/display loop. Dynamic-time truth, collision truth, and
 surround-camera quality remain untested. Exact evidence is in
 `experiments/stage_h3_mtgs_continuous_drive.md`.
 
+### Stage H3 Level 9O — MTGS simulated-driver closed loop
+
+Completed on 2026-07-25 without training, browser control, or a physical
+operator:
+
+- connected a deterministic pure-pursuit/speed controller to `HumanControl`,
+  `SimpleVehicleModel`, the actual-route support adapter, camera-pose sampler,
+  and released MTGS renderer;
+- accelerated from rest to 11.994 m/s, completed actual +2.541/-2.671 m
+  vehicle-driven lateral excursions and recovery, and braked to rest at
+  progress 83.8 m;
+- produced 183 fixed-time 960x540 frames over 9.15 encoded seconds with zero
+  boundary hits and 2.329 m minimum support margin;
+- limited the maximum per-tick normalized steer change to 0.0636 and kept the
+  maximum heading error at 16.675 degrees inside the reviewed 30-degree gate;
+- explicitly measured and corrected the camera-right versus route-left sign
+  alignment instead of assuming matching lateral coordinates;
+- rendered every frame finite at 6.72/12.16 ms p50/p95 with 1.455 GiB peak
+  reserved CUDA memory;
+- found the maximum adjacent-frame image difference in a clustered recovery
+  around the negative lateral extremum rather than an isolated route-knot
+  jump;
+- manually retained continuous road, lane, curb, and open-corridor evidence,
+  while close foliage and edges remain soft or stretched.
+
+This passes the simulated-driver vehicle/control/render loop for the existing
+84 m block. It does not establish a long route, physical-human driving,
+dynamic-time truth, collision truth, or surround quality. Exact evidence is in
+`experiments/stage_h3_mtgs_autodrive.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -997,13 +1027,16 @@ released multi-traversal Singapore road block
 → 15 finite views over 30 m forward and +/-5 m lateral
 → JSON timings, peak VRAM, individual frames, and a contact sheet
 → a 72 m / 12 m/s / +/-4 m continuous fixed-time front-camera video
-→ an actual-route, 15 m/s-cap control/support adapter awaiting local input
+→ an actual-route, 15 m/s-cap control/support adapter
+→ a simulated driver commanding the vehicle model at up to 11.99 m/s
+→ 183 vehicle-driven frames with left/right recovery and endpoint braking
 ```
 
-This path is deliberately not connected to live human controls yet. The
-world-pose grid and continuous video remove the prior environment, 24 GB
-inference, and first high-speed spatial-continuity uncertainties, but do not
-prove trustworthy dynamic actor motion.
+This path is deliberately not connected to live human controls. The world-pose
+grid, prescribed-path video, and simulated-driver loop remove the prior
+environment, 24 GB inference, high-speed spatial-continuity, and first
+control/render integration uncertainties, but do not prove trustworthy dynamic
+actor motion or a long route.
 
 This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint. The logged browser loop now
@@ -1124,10 +1157,10 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
   NumPy, and tyro versions conflict with `h3_splatad`. Its built
   `tiny-cuda-nn` extension reports sm86 on the sm89 GPU, which is accepted for
   the gate but may leave performance on the table.
-- The MTGS continuous video still holds scene time fixed, uses only the front
-  camera, and follows one 84.25 m travel-3 route. It proves spatial continuity
-  at 12 m/s, not dynamic-time truth, surround quality, or a physical-human
-  control loop.
+- The MTGS closed loop still holds scene time fixed, uses only the front
+  camera, and follows one 84.25 m travel-3 route. It proves simulated control
+  and spatial continuity near 12 m/s, not long-route coverage, dynamic-time
+  truth, surround quality, or physical-human control.
 - The selected MTGS block contains substantial annotated traffic. Its dynamic
   reconstruction may be an advantage over static TbV, but false obstacles or
   actor ghosts remain a driving rejection condition.
@@ -1136,12 +1169,12 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 
 ## 5. Current Next Action — Stage H3
 
-Stage H3 now prioritizes a local no-browser MTGS keyboard/render bridge over
-the released Singapore block. The continuous 12 m/s spatial smoke and minimal
-control/support adapter are complete. TbV Miami `OCa... + QMn...` remains the
-accepted cheap restricted-route regression, and PandaSet scene-040 remains
-fixed world-coordinate regression evidence. PandaSet `003+057` remains only a
-same-direction parser/alignment control.
+Stage H3 now prioritizes a long-route data and tiling gate. The prescribed-path
+smoke, control/support adapter, and simulated-driver MTGS render loop are
+complete for the released 84 m Singapore block. TbV Miami `OCa... + QMn...`
+remains the accepted cheap restricted-route regression, and PandaSet scene-040
+remains fixed world-coordinate regression evidence. PandaSet `003+057` remains
+only a same-direction parser/alignment control.
 
 Both PandaSet scene-040 static-8k and the new TbV static-8k candidate remain
 fixed; they have different data and acceptance boundaries. The agreed
@@ -1152,16 +1185,17 @@ MTGS-style multi-traversal reconstruction when spatial coverage is the
 limitation, and borrow UniSim's compositional closed-loop concepts without
 treating generated completion as observed ground truth. NeuRAD, MTGS, and
 UniSim are not integrated into the common simulator; MTGS now has the isolated
-inference probe, continuous fixed-time video, and standalone control/support
-adapter described above, but not the common live-control/render loop.
+inference probe, fixed-time videos, standalone support adapter, and local
+experimental simulated control/render loop described above.
 
-The next action is deliberately narrow: connect `MtgsDrivingAdapter` to the
-existing MTGS camera-pose sampler and checkpoint inside one local front-camera
-loop. Exercise actual W/S/A/D-like controls at 10-12 m/s, including one lane
-change, recovery, braking, intentional boundary rejection, and reset. Record
-video plus per-control progress, lateral offset, heading error, support margin,
-frame hash, and render time. Keep scene time fixed and do not add browser
-presentation, training, or a broader dataset audit before this gate.
+The next action is deliberately data-first: identify one contiguous 300-500 m
+nuPlan-compatible route with repeated traversal coverage. Partition it into
+overlapping 80-100 m reconstruction tiles and verify the data alignment and
+support of one genuinely adjacent pair before implementing checkpoint
+streaming. The six released MTGS blocks are geographically separate and only
+about 57-105 m long, so do not loop the current scene or concatenate unrelated
+blocks. Keep dynamic time, collision work, and browser presentation outside
+this gate.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -1181,8 +1215,8 @@ plan. The short version is:
 7. retain the completed route-constrained TbV browser/evidence adapter plus
    the direct no-browser A/D/recovery trial as the +/-1 m regression gate;
 8. retain the successful isolated MTGS checkpoint, +/-5 m pose grid, 12 m/s
-   continuous video, and minimal adapter, then build only the local keyboard/
-   renderer bridge before any browser integration;
+   prescribed-path video, minimal adapter, and simulated-driver render loop,
+   then verify one adjacent long-route tile pair before streaming work;
 9. keep the implemented provisional scene-040 world browser and operator trial
    as regression/acceptance work rather than coupling them to this new scene;
 10. return dynamic actors to the main line when they obscure the road, create a

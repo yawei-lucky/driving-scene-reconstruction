@@ -131,3 +131,7 @@ local, no-browser front-camera loop. Run one short actual keyboard trial at
 10-12 m/s, including a bounded lane change, recovery, brake, boundary
 rejection, and reset. Keep fixed scene time until that control/render bridge
 is stable.
+
+Status on 2026-07-25: the user removed the physical-keyboard requirement. The
+equivalent vehicle/control/render integration gate was completed with a
+deterministic simulated driver in `stage_h3_mtgs_autodrive.md`.

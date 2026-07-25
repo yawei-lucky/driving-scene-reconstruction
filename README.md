@@ -316,6 +316,16 @@ Stage H3 Level 9N
   false obstacle, while close foliage and edges still stretch
 → added a minimal actual-route control adapter with a 15 m/s cap, fail-closed
   +/-5 m support, endpoint stop, and per-state render query
+
+Stage H3 Level 9O
+→ replaced the prescribed camera path with a deterministic simulated driver,
+  actual HumanControl values, and SimpleVehicleModel integration
+→ accelerated from rest to 11.99 m/s, completed +2.54/-2.67 m vehicle-driven
+  excursions and recovery, then stopped at the observed-route endpoint
+→ all 183 fixed-time front-camera frames were finite with zero boundary hits
+  and 2.329 m minimum support margin
+→ render p50/p95 was 6.72/12.16 ms; manual review retained continuous road and
+  lane evidence through the maximum frame-difference transition
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -485,6 +495,7 @@ scripts/run_stage_h3_mtgs_gate.sh verify-assets
 scripts/run_stage_h3_mtgs_gate.sh checkpoint-gate
 scripts/run_stage_h3_mtgs_gate.sh corridor-probe
 scripts/run_stage_h3_mtgs_gate.sh continuous-drive
+scripts/run_stage_h3_mtgs_gate.sh autodrive
 ```
 
 The launcher expects the pinned external MTGS environment, official Singapore
@@ -493,7 +504,9 @@ block, and step-30,000 checkpoint documented in
 The corridor probe changes one camera's world pose while holding time and
 heading fixed. `continuous-drive` then renders the accepted 12 m/s,
 0/+4/0/-4/0 m fixed-time path and constructs the minimal route-control
-adapter. Neither command is a physical-human keyboard trial.
+adapter. `autodrive` closes the loop through a simulated driver, actual vehicle
+dynamics, support checks, and the MTGS renderer. None is a physical-human
+keyboard trial.
 
 For the true world-pose backend and current corridor probe, without retraining:
 
@@ -678,17 +691,18 @@ The PandaSet and TbV static-8k checkpoints remain fixed. The direct TbV
 straight/right regression now passes with useful correction reserve, so it
 remains the cheap restricted-route baseline. The published MTGS checkpoint is
 no longer merely an environment fallback: it loads on the 24 GB host, keeps
-the road readable through the +/-5 m grid, and passes a 72 m continuous
-front-camera smoke at 12 m/s and +/-4 m. A minimal actual-route
-control/support adapter is also implemented and tested independently.
+the road readable through the +/-5 m grid, passes a 72 m prescribed-path smoke,
+and now passes a vehicle-driven simulated-driver loop at 11.99 m/s with
++2.54/-2.67 m excursions, recovery, and endpoint braking.
 
-The next implementation gate is to connect that adapter and the existing
-camera-pose sampler inside one local, no-browser front-camera loop. Run one
-short actual keyboard trial at 10-12 m/s with lane change, recovery, braking,
-boundary rejection, and reset while saving video and JSON. Keep scene time
-fixed for this first control/render bridge; dynamic-time truth, collision, and
-responsive traffic remain separate gates. Do not train MTGS on the 24 GB card
-or add browser presentation work yet.
+The next implementation gate is a long-route data and tiling pilot, not a
+keyboard interface. Identify one contiguous 300-500 m nuPlan-compatible route
+with repeated traversal coverage, divide it into overlapping 80-100 m tiles,
+and validate one genuinely adjacent pair before building checkpoint streaming.
+The six released MTGS blocks are geographically separate and only 57-105 m
+long; do not loop the current block or concatenate unrelated blocks to claim a
+long route. Dynamic time, collision, and responsive traffic remain separate
+later gates.
 
 Do not join another scene to 040: the nearest available track is about 165.3 m
 away. Do not claim intersection branching from the current archive: the scan
@@ -734,7 +748,10 @@ The success criteria are deliberately separate from generic image metrics:
   observed render, and +/-5 m world-pose corridor result.
 - `experiments/stage_h3_mtgs_continuous_drive.md` records the 12 m/s,
   72 m, +/-4 m fixed-time video, visual decision, control adapter contract, and
-  remaining local-keyboard gate.
+  subsequent control-integration gate.
+- `experiments/stage_h3_mtgs_autodrive.md` records the actual simulated-driver
+  control loop, vehicle dynamics, endpoint braking, frame evidence, and
+  remaining long-route data/tile gate.
 - `experiments/stage_h3_tbv_splatad_pilot.md` records the bounded TbV download,
   multi-traversal parser, LiDAR alignment, and 100/2,000-step reload renders.
 - `experiments/stage_h3_tbv_world_pose_corridor_probe.md` records the 2k/8k

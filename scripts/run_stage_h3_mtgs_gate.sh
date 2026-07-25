@@ -10,6 +10,7 @@ BLOCK="road_block-365000_144000_365100_144080"
 MTGS_RUN_ROOT="${MTGS_RUN_ROOT:-${H3_ROOT}/outputs/mtgs_gate/${BLOCK}}"
 MTGS_ARTIFACT_ROOT="${MTGS_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/mtgs_checkpoint_gate_20260725}"
 MTGS_DRIVE_ARTIFACT_ROOT="${MTGS_DRIVE_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/mtgs_continuous_drive_20260725_v4}"
+MTGS_AUTODRIVE_ARTIFACT_ROOT="${MTGS_AUTODRIVE_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/mtgs_autodrive_20260725_v2}"
 CONFIG="${MTGS_RUN_ROOT}/config.yml"
 CHECKPOINT="${MTGS_RUN_ROOT}/nerfstudio_models/step-000030000.ckpt"
 ROAD_BLOCK_CONFIG="${MTGS_CODE}/nuplan_scripts/configs/mtgs_exp/${BLOCK}.yml"
@@ -70,6 +71,18 @@ case "$MODE" in
       --road-block-config "$ROAD_BLOCK_CONFIG" \
       --output-dir "$MTGS_DRIVE_ARTIFACT_ROOT"
     ;;
+  autodrive)
+    if [[ ! -x "$PYTHON" || ! -f "$CONFIG" || ! -f "$CHECKPOINT" ]]; then
+      echo "MTGS environment/config/checkpoint is incomplete" >&2
+      exit 1
+    fi
+    cd "$MTGS_CODE"
+    "$PYTHON" "$REPO_ROOT/scripts/run_stage_h3_mtgs_autodrive.py" \
+      --config "$CONFIG" \
+      --checkpoint "$CHECKPOINT" \
+      --road-block-config "$ROAD_BLOCK_CONFIG" \
+      --output-dir "$MTGS_AUTODRIVE_ARTIFACT_ROOT"
+    ;;
   paths)
     echo "environment: $MTGS_ENV"
     echo "code: $MTGS_CODE"
@@ -78,9 +91,10 @@ case "$MODE" in
     echo "checkpoint: $CHECKPOINT"
     echo "artifacts: $MTGS_ARTIFACT_ROOT"
     echo "continuous drive artifacts: $MTGS_DRIVE_ARTIFACT_ROOT"
+    echo "autodrive artifacts: $MTGS_AUTODRIVE_ARTIFACT_ROOT"
     ;;
   *)
-    echo "Usage: $0 {verify-assets|checkpoint-gate|corridor-probe|continuous-drive|paths}" >&2
+    echo "Usage: $0 {verify-assets|checkpoint-gate|corridor-probe|continuous-drive|autodrive|paths}" >&2
     exit 2
     ;;
 esac
