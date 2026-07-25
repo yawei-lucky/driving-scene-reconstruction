@@ -346,6 +346,17 @@ Stage H3 Level 9Q
   pairwise RGB MAE fell from 26.57 to 18.04 / 255
 → both models now recover aligned road/building/pole structure, promoting only
   this pair to a 2k continuous seam video; it is not yet drivable
+
+Stage H3 Level 9R
+→ trained only tiles 2/3 to 2k, then exactly resumed model/optimizer/scheduler
+  state to 8k; matched-pose front PSNR p50 reached 24.06/24.84 dB
+→ rendered both models through the same 18.75 m overlap at 12 m/s and 20 fps;
+  all 32 hard-switch/blend frames decoded and path lengths agreed within 1 mm
+→ a 5.6 m smooth blend reduced the transition-frame RGB delta from 10.83 to
+  4.63 / 255; -1/0/+1 m views retained readable road and lane structure
+→ static road/building geometry passes, but baked vehicles and dark floating
+  blobs remain a possible false obstacle, so dynamic-scene truth and long-route
+  driving do not pass
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -715,18 +726,21 @@ the road readable through the +/-5 m grid, passes a 72 m prescribed-path smoke,
 and now passes a vehicle-driven simulated-driver loop at 11.99 m/s with
 +2.54/-2.67 m excursions, recovery, and endpoint braking.
 
-The long-route data and first adjacent-tile method gates now pass on a genuine
-610.07 m repeated TbV route. The exact tile-2/tile-3 payload is downloaded,
-independent 100-step checkpoints pass plumbing, and bounded 500-step models
-recover corresponding road/building structure at five identical world poses.
-Their pairwise RGB MAE improves from 26.57 to 18.04 / 255, but the images remain
-soft and an instantaneous checkpoint switch would still be visible.
+The long-route data and static-background seam now pass on one adjacent pair
+of the genuine 610.07 m repeated TbV route. Tiles 2/3 were independently
+trained to 2k and exactly resumed to 8k. At five identical world poses their
+PSNR p50 is 24.06/24.84 dB. A 12 m/s, 32-frame traversal through the 18.75 m
+shared path retains aligned road/building geometry; a 5.6 m blend reduces the
+transition-frame RGB delta from 10.83 to 4.63 / 255, and `-1/0/+1 m` views
+remain navigable.
 
-The next implementation gate remains only this pair: train tiles 2 and 3 to
-2,000 steps, repeat the observed-pose comparison, and render a continuous
-centreline switch/blend video plus -1/0/+1 m front views through the 20 m
-overlap. Do not train the other five tiles, build checkpoint streaming, or
-claim long-route driving until that quality-bearing seam passes.
+This is not yet a complete driving-scene seam. Independently baked vehicles
+and dark blobs remain possible false obstacles, and raising training from 2k
+to 8k reduces the model-to-model RGB MAE p50 only from 9.98 to 9.50 / 255.
+Keep the two 8k checkpoints fixed and run one minimal vehicle/transient
+suppression comparison on this exact pair. If it removes the false-obstacle
+risk without damaging road geometry, build the approximately 180 m two-tile
+auto-drive next. Do not train the other five tiles or claim 610 m driving yet.
 The six released MTGS blocks remain geographically separate and only 57-105 m
 long; do not loop the current block or concatenate unrelated blocks to claim a
 long route. Dynamic time, collision, wide lateral support, and responsive
@@ -786,6 +800,10 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_tbv_adjacent_tile_seam.md` records the exact download,
   independent 100/500-step checkpoints, matched-world-pose comparison, visual
   decision, and bounded 2,000-step seam-video gate.
+- `experiments/stage_h3_tbv_adjacent_tile_continuous.md` records the
+  2,000/8,000-step exact-resume comparison, 12 m/s hard/blended overlap videos,
+  `-1/0/+1 m` views, static-background seam pass, and transient-traffic
+  rejection.
 - `experiments/stage_h3_tbv_splatad_pilot.md` records the bounded TbV download,
   multi-traversal parser, LiDAR alignment, and 100/2,000-step reload renders.
 - `experiments/stage_h3_tbv_world_pose_corridor_probe.md` records the 2k/8k

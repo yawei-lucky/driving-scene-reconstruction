@@ -55,11 +55,24 @@ scripts/run_stage_h3_tbv_long_route_tiles.sh seam
 scripts/run_stage_h3_tbv_long_route_tiles.sh pilot-2
 scripts/run_stage_h3_tbv_long_route_tiles.sh pilot-3
 scripts/run_stage_h3_tbv_long_route_tiles.sh seam-500
+scripts/run_stage_h3_tbv_long_route_tiles.sh quality-2
+scripts/run_stage_h3_tbv_long_route_tiles.sh quality-3
+scripts/run_stage_h3_tbv_long_route_tiles.sh seam-2000
+scripts/run_stage_h3_tbv_long_route_tiles.sh continuous-2000
+scripts/run_stage_h3_tbv_long_route_tiles.sh static-2
+scripts/run_stage_h3_tbv_long_route_tiles.sh static-3
+scripts/run_stage_h3_tbv_long_route_tiles.sh seam-8000
+scripts/run_stage_h3_tbv_long_route_tiles.sh continuous-8000
 ```
 
 The 100-step pair tests integration; the bounded 500-step pair establishes
 whether the same adjacent tiles warrant a 2,000-step continuous seam video.
-Completed checkpoints are reused unless `H3_ALLOW_RETRAIN=1` is set.
+The 2,000-step runs are independent training; `static-2/static-3` exactly
+restore their optimizer, scheduler, model, and global-step state for the
+bounded 8,000-step comparison. The continuous probes render the real 18.75 m
+overlap at 12 m/s and 20 fps, compare hard switching with a 5.6 m blend, and
+add `-1/0/+1 m` front views. Completed checkpoints are reused unless
+`H3_ALLOW_RETRAIN=1` is set.
 
 Prepare or verify the separate H3 environment:
 

@@ -48,6 +48,9 @@ Recorded experiments:
 - `stage_h3_tbv_adjacent_tile_seam.md`: exact two-tile download, independent
   100/500-step checkpoints, identical-world-pose seam comparison, and the
   bounded 2,000-step promotion decision.
+- `stage_h3_tbv_adjacent_tile_continuous.md`: 2,000/8,000-step exact-pose and
+  12 m/s continuous overlap evidence, `-1/0/+1 m` views, static-background seam
+  pass, and unresolved transient-traffic rejection.
 
 Stage H2 connects that H1 checkpoint to the simulator interface. Its design and
 GPU validation record live in `docs/stage_h2_reconstruction_renderer.md`.

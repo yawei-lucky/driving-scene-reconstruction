@@ -2,6 +2,10 @@
 
 Date: 2026-07-25
 
+Status: the prescribed 2,000/8,000-step continuous follow-up is complete in
+`experiments/stage_h3_tbv_adjacent_tile_continuous.md`. This file remains the
+historical 100/500-step promotion record.
+
 ## Question
 
 Can two genuinely adjacent 100 m TbV reconstruction tiles be downloaded,

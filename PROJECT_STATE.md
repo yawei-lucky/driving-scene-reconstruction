@@ -1015,6 +1015,40 @@ gate. It does not pass the final visual seam, checkpoint switching,
 counterfactual lateral views, or driving. Exact evidence is in
 `experiments/stage_h3_tbv_adjacent_tile_seam.md`.
 
+### Stage H3 Level 9R — TbV continuous adjacent-tile seam gate
+
+Completed on 2026-07-25 in the accepted H3 SplatAD environment:
+
+- trained only tiles 2 and 3 to step 1,999, then restored model, optimizer,
+  scheduler, and global-step state for a bounded continuation to step 7,999;
+- preserved exact-resume audits for both tiles. RNG and dataloader state are
+  absent from the source checkpoint, so the resume is not bitwise equivalent
+  to uninterrupted training;
+- improved matched observed-pose PSNR p50 from 19.873/20.902 dB at 500 steps
+  to 23.527/22.774 dB at 2,000 and 24.059/24.845 dB at 8,000;
+- reduced matched-pose tile-to-tile RGB MAE p50 from 18.037 / 255 at 500 steps
+  to 9.835 at 2,000 and 9.420 at 8,000;
+- rendered the same 18.7522/18.7524 m interpolated world-pose path through both
+  8k models at 12 m/s and 20 fps; all 32 frames were finite and both videos
+  decoded completely;
+- reduced the hard transition-frame RGB delta from 10.834 to 4.635 / 255 with
+  a 5.626 m smoothstep blend;
+- rendered `-1/0/+1 m` front views at the overlap start, middle, and end with
+  no mostly-black result;
+- manually retained aligned road, lane, building, utility-pole, wire, and
+  horizon structure without a coordinate/topology jump or obvious blended
+  double building edge;
+- retained independently baked vehicles, dark floating blobs, and sharpness
+  differences. A central vehicle-shaped smear remains a possible false
+  obstacle, so pixel blending is not accepted as dynamic-scene truth;
+- preserved the first partial 2k run, which exposed a nanosecond timestamp
+  endpoint-rounding bug, then bounded the fix to 128 ns with regression tests.
+
+This passes the static-background geometry seam for the selected pair. It does
+not pass credible traffic, live checkpoint residency, the approximately 180 m
+two-tile drive, or the full 610 m route. Exact evidence is in
+`experiments/stage_h3_tbv_adjacent_tile_continuous.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -1231,10 +1265,11 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 
 ## 5. Current Next Action — Stage H3
 
-Stage H3 now has a real long-route data candidate and a working independent
-adjacent-tile method. The 610.072 m repeated Miami route partitions into seven
-100 m tiles with 20 m overlaps. Tiles 2 and 3 have exact downloaded data,
-independent 100/500-step checkpoints, and a five-pose overlap comparison.
+Stage H3 now has a real long-route data candidate and one quality-bearing
+static-background seam. The 610.072 m repeated Miami route partitions into
+seven 100 m tiles with 20 m overlaps. Tiles 2 and 3 have exact downloaded data,
+independent 2k checkpoints, exact-resumed 8k checkpoints, a five-pose overlap
+comparison, and a 12 m/s continuous overlap render.
 The prescribed-path smoke, control/support adapter, and simulated-driver MTGS
 render loop remain complete for the released 84 m Singapore block. TbV Miami
 `OCa... + QMn...` remains the cheap restricted branch regression, and PandaSet
@@ -1252,14 +1287,14 @@ UniSim are not integrated into the common simulator; MTGS now has the isolated
 inference probe, fixed-time videos, standalone support adapter, and local
 experimental simulated control/render loop described above.
 
-The next action is a quality-bearing seam test only for tiles 2 and 3. Train
-both to 2,000 steps, repeat the five identical observed-pose renders, then
-render a continuous centreline sequence through the complete 20 m overlap with
-both hard switching and a short blend. Add -1/0/+1 m front-camera views and
-reject any road-geometry jump, false obstacle, or driving-relevant traffic
-ghost. Do not train tiles 0/1/4/5/6 or build general checkpoint streaming until
-this pair passes. Keep dynamic time, collision work, wide-lateral acceptance,
-and browser presentation outside this gate.
+The next action remains only this pair: compare a minimal vehicle/transient
+suppression or static-background treatment against the fixed 8k checkpoints
+at the same five poses and 18.75 m transition. It must remove the central
+false-obstacle risk without damaging road geometry. If it passes, build the
+approximately 180 m tile-2/tile-3 auto-drive with both checkpoints resident
+and a bounded overlap transition. Do not train tiles 0/1/4/5/6 or claim the
+610 m route before that two-tile drive passes. Keep dynamic time, collision
+work, wider-lateral acceptance, and browser presentation outside this gate.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -1280,9 +1315,9 @@ plan. The short version is:
    the direct no-browser A/D/recovery trial as the +/-1 m regression gate;
 8. retain the successful isolated MTGS checkpoint, +/-5 m pose grid, 12 m/s
    prescribed-path video, minimal adapter, and simulated-driver render loop;
-   use the verified 610 m TbV route and promote only the selected adjacent
-   100 m tile pair from its completed 500-step gate to a 2,000-step seam video
-   before streaming work;
+   retain the selected TbV pair's completed 8k static-background seam and
+   remove its false-obstacle transient residue before the approximately 180 m
+   two-tile auto-drive;
 9. keep the implemented provisional scene-040 world browser and operator trial
    as regression/acceptance work rather than coupling them to this new scene;
 10. return dynamic actors to the main line when they obscure the road, create a
