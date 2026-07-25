@@ -125,3 +125,7 @@ path at about 10-12 m/s over a bounded +/-4 m lateral envelope, recording pose,
 support, finite output, and render timing. If the video keeps road boundaries
 and false obstacles decision-safe, reuse the small TbV vehicle/evidence
 contract for keyboard control. Do not start MTGS training on this 24 GB host.
+
+Status on 2026-07-25: the continuous-video and standalone-adapter parts of this
+gate were completed in `stage_h3_mtgs_continuous_drive.md`. Local keyboard and
+renderer integration remains pending.

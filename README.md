@@ -304,6 +304,18 @@ Stage H3 Level 9M
   -5/-3/0/+3/+5 m; all were finite, with 10.04/12.94 ms p50/p95
 → road and lane structure remained readable across the grid, while close
   foliage and curbs still stretched at extreme offsets
+
+Stage H3 Level 9N
+→ followed the observed 84.25 m travel-3 front-camera centreline instead of
+  extrapolating one pose forward
+→ rendered 72 m in 6.0 s at 12.0 m/s with a smooth
+  0/+4/0/-4/0 m lateral path and zero-heading endpoints
+→ all 121 fixed-time 960x540 frames were finite; render p50/p95 was
+  6.43/12.10 ms and peak reserved VRAM remained 1.455 GiB
+→ manual review retained continuous road/lane/curb evidence with no blocking
+  false obstacle, while close foliage and edges still stretch
+→ added a minimal actual-route control adapter with a 15 m/s cap, fail-closed
+  +/-5 m support, endpoint stop, and per-state render query
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -472,13 +484,16 @@ For the isolated released MTGS checkpoint and wide-corridor gate:
 scripts/run_stage_h3_mtgs_gate.sh verify-assets
 scripts/run_stage_h3_mtgs_gate.sh checkpoint-gate
 scripts/run_stage_h3_mtgs_gate.sh corridor-probe
+scripts/run_stage_h3_mtgs_gate.sh continuous-drive
 ```
 
 The launcher expects the pinned external MTGS environment, official Singapore
 block, and step-30,000 checkpoint documented in
 `experiments/stage_h3_mtgs_checkpoint_gate.md`. It performs inference only.
 The corridor probe changes one camera's world pose while holding time and
-heading fixed; it is coverage evidence, not yet a keyboard driving adapter.
+heading fixed. `continuous-drive` then renders the accepted 12 m/s,
+0/+4/0/-4/0 m fixed-time path and constructs the minimal route-control
+adapter. Neither command is a physical-human keyboard trial.
 
 For the true world-pose backend and current corridor probe, without retraining:
 
@@ -662,18 +677,18 @@ manual drivability gates as `pass`.
 The PandaSet and TbV static-8k checkpoints remain fixed. The direct TbV
 straight/right regression now passes with useful correction reserve, so it
 remains the cheap restricted-route baseline. The published MTGS checkpoint is
-no longer merely an environment fallback: it loads on the 24 GB host and keeps
-the road readable in a first +/-5 m, 30 m world-pose grid.
+no longer merely an environment fallback: it loads on the 24 GB host, keeps
+the road readable through the +/-5 m grid, and passes a 72 m continuous
+front-camera smoke at 12 m/s and +/-4 m. A minimal actual-route
+control/support adapter is also implemented and tested independently.
 
-The next implementation gate is a minimal MTGS driving adapter over this
-released Singapore block: select a recorded centreline, advance a free ego at
-about 10-12 m/s, allow bounded +/-4 m lane changes, render only the front
-camera first, and emit the same pose/support/frame evidence used by the TbV
-trial. Start with a scripted continuous video, then expose keyboard control
-only if the video keeps road boundaries and false obstacles decision-safe.
-Keep time fixed for the first spatial smoke; dynamic-time truth, collision,
-and responsive traffic remain separate gates. Do not train MTGS on the 24 GB
-card or widen this into a general simulator integration yet.
+The next implementation gate is to connect that adapter and the existing
+camera-pose sampler inside one local, no-browser front-camera loop. Run one
+short actual keyboard trial at 10-12 m/s with lane change, recovery, braking,
+boundary rejection, and reset while saving video and JSON. Keep scene time
+fixed for this first control/render bridge; dynamic-time truth, collision, and
+responsive traffic remain separate gates. Do not train MTGS on the 24 GB card
+or add browser presentation work yet.
 
 Do not join another scene to 040: the nearest available track is about 165.3 m
 away. Do not claim intersection branching from the current archive: the scan
@@ -712,6 +727,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_mtgs_checkpoint_gate.md` records the isolated
   environment, verified official assets, successful 24 GB checkpoint load,
   observed render, and +/-5 m world-pose corridor result.
+- `experiments/stage_h3_mtgs_continuous_drive.md` records the 12 m/s,
+  72 m, +/-4 m fixed-time video, visual decision, control adapter contract, and
+  remaining local-keyboard gate.
 - `experiments/stage_h3_tbv_splatad_pilot.md` records the bounded TbV download,
   multi-traversal parser, LiDAR alignment, and 100/2,000-step reload renders.
 - `experiments/stage_h3_tbv_world_pose_corridor_probe.md` records the 2k/8k
