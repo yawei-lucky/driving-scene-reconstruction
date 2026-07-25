@@ -13,6 +13,38 @@ SPEC.loader.exec_module(MODULE)
 
 
 class TbVWindowDownloadTests(unittest.TestCase):
+    def test_custom_window_is_parsed(self):
+        window = MODULE.parse_window("log_id,1.25,2.5")
+
+        self.assertEqual(window, MODULE.Window("log_id", 1.25, 2.5))
+
+    def test_invalid_custom_window_is_rejected(self):
+        with self.assertRaises(MODULE.argparse.ArgumentTypeError):
+            MODULE.parse_window("log_id,2.5,1.25")
+        with self.assertRaises(MODULE.argparse.ArgumentTypeError):
+            MODULE.parse_window("log_id,nan,2.5")
+
+    def test_manifest_totals_deduplicate_overlapping_windows(self):
+        shared = MODULE.S3Object(
+            "datasets/av2/tbv/log/calibration/shared.feather", 10, "a"
+        )
+        first_only = MODULE.S3Object(
+            "datasets/av2/tbv/log/sensors/lidar/1.feather", 20, "b"
+        )
+        second_only = MODULE.S3Object(
+            "datasets/av2/tbv/log/sensors/lidar/2.feather", 30, "c"
+        )
+        plans = {
+            MODULE.Window("log", 1.0, 2.0): [shared, first_only],
+            MODULE.Window("log", 1.5, 2.5): [shared, second_only],
+        }
+
+        manifest = MODULE.build_manifest(plans, Path("/tmp/data"), 2)
+
+        self.assertEqual(manifest["window_object_references"], 4)
+        self.assertEqual(manifest["total_objects"], 3)
+        self.assertEqual(manifest["total_bytes"], 60)
+
     def test_parse_object_page_and_continuation(self):
         xml = b'''<?xml version="1.0" encoding="UTF-8"?>
         <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">

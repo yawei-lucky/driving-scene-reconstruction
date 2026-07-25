@@ -135,3 +135,8 @@ experiment is:
 
 Do not start 2,000-step training, all-seven-tile reconstruction, checkpoint
 streaming, or long-route simulated driving until this one adjacent seam passes.
+
+Status on 2026-07-25: the payload was downloaded and the independent
+100/500-step tile pair passed the technical and bounded promotion gate. The
+result and remaining 2,000-step continuous seam video are recorded in
+`stage_h3_tbv_adjacent_tile_seam.md`.

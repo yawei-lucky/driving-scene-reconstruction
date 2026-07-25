@@ -44,6 +44,23 @@ env MPLCONFIGDIR=/tmp \
 The command refuses to overwrite a non-empty output directory. Its default
 artifacts remain outside Git under `/home/yawei/stage3_external/artifacts`.
 
+Run the selected adjacent-pair download, independent checkpoints, and matched
+world-pose seam probes:
+
+```bash
+scripts/run_stage_h3_tbv_long_route_tiles.sh download
+scripts/run_stage_h3_tbv_long_route_tiles.sh smoke-2
+scripts/run_stage_h3_tbv_long_route_tiles.sh smoke-3
+scripts/run_stage_h3_tbv_long_route_tiles.sh seam
+scripts/run_stage_h3_tbv_long_route_tiles.sh pilot-2
+scripts/run_stage_h3_tbv_long_route_tiles.sh pilot-3
+scripts/run_stage_h3_tbv_long_route_tiles.sh seam-500
+```
+
+The 100-step pair tests integration; the bounded 500-step pair establishes
+whether the same adjacent tiles warrant a 2,000-step continuous seam video.
+Completed checkpoints are reused unless `H3_ALLOW_RETRAIN=1` is set.
+
 Prepare or verify the separate H3 environment:
 
 ```bash

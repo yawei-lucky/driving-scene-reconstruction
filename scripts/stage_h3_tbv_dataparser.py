@@ -8,6 +8,7 @@ Sensor's upper/lower LiDAR split.
 
 from __future__ import annotations
 
+import math
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -65,6 +66,7 @@ class TbVDataParserConfig(ADDataParserConfig):
     sequence: str = "tbv_miami_branch_pair"
     sequences: Tuple[str, ...] = DEFAULT_SEQUENCES
     window_start_seconds: Tuple[float, ...] = DEFAULT_WINDOW_STARTS
+    window_end_seconds: Tuple[float, ...] = ()
     cameras: Tuple[
         Literal[
             "ring_front_center",
@@ -89,9 +91,23 @@ class TbVDataParserConfig(ADDataParserConfig):
     def __post_init__(self) -> None:
         super().__post_init__()
         if len(self.sequences) != len(self.window_start_seconds):
-            raise ValueError("sequences and window_start_seconds must have equal length")
+            raise ValueError(
+                "sequences and window_start_seconds must have equal length"
+            )
         if len(set(self.sequences)) != len(self.sequences):
             raise ValueError("sequences must be unique")
+        if self.window_end_seconds:
+            if len(self.window_end_seconds) != len(self.sequences):
+                raise ValueError(
+                    "window_end_seconds and sequences must have equal length"
+                )
+            for start, end in zip(
+                self.window_start_seconds, self.window_end_seconds
+            ):
+                if not all(math.isfinite(value) for value in (start, end)):
+                    raise ValueError("window bounds must be finite")
+                if end <= start:
+                    raise ValueError("window end must be greater than start")
 
 
 @dataclass
@@ -108,6 +124,19 @@ class TbV(ADDataParser):
     def _local_time(self, traversal_idx: int, timestamp_ns: int) -> float:
         start_ns = round(self.config.window_start_seconds[traversal_idx] * 1e9)
         return (timestamp_ns - start_ns) / 1e9
+
+    def _timestamp_in_window(
+        self, traversal_idx: int, timestamp_ns: int
+    ) -> bool:
+        if not self.config.window_end_seconds:
+            return True
+        start_ns = round(
+            self.config.window_start_seconds[traversal_idx] * 1e9
+        )
+        end_ns = round(
+            self.config.window_end_seconds[traversal_idx] * 1e9
+        )
+        return start_ns <= timestamp_ns <= end_ns
 
     def _get_cameras(self) -> Tuple[Cameras, List[Path]]:
         filenames: List[Path] = []
@@ -127,6 +156,10 @@ class TbV(ADDataParser):
                 )
                 for path in camera_paths:
                     timestamp_ns = int(path.stem)
+                    if not self._timestamp_in_window(
+                        traversal_idx, timestamp_ns
+                    ):
+                        continue
                     ego_to_world = self.av2.get_city_SE3_ego(
                         sequence, timestamp_ns
                     )
@@ -172,6 +205,10 @@ class TbV(ADDataParser):
 
         for traversal_idx, sequence in enumerate(self.config.sequences):
             for timestamp_ns in self.av2.get_ordered_log_lidar_timestamps(sequence):
+                if not self._timestamp_in_window(
+                    traversal_idx, timestamp_ns
+                ):
+                    continue
                 path = self.av2.get_lidar_fpath(sequence, timestamp_ns)
                 ego_to_world = self.av2.get_city_SE3_ego(sequence, timestamp_ns)
                 filenames.append(path)

@@ -336,6 +336,16 @@ Stage H3 Level 9P
   evidence agrees, while differing vehicles must remain transient
 → planned the exact two-tile sensor payload at 2,805 objects / 424.2 MB;
   the full payload is not downloaded and no reconstruction was trained
+
+Stage H3 Level 9Q
+→ downloaded the exact 2,805-object / 424.2 MB tile-2/tile-3 payload once and
+  added absolute-time parser windows for independent adjacent-tile training
+→ trained separate 100-step checkpoints and rendered five identical observed
+  world poses; plumbing passed but coloured particles blocked visual judgment
+→ bounded both tiles to 500 steps; front PSNR p50 reached 19.87/20.90 dB and
+  pairwise RGB MAE fell from 26.57 to 18.04 / 255
+→ both models now recover aligned road/building/pole structure, promoting only
+  this pair to a 2k continuous seam video; it is not yet drivable
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -705,16 +715,18 @@ the road readable through the +/-5 m grid, passes a 72 m prescribed-path smoke,
 and now passes a vehicle-driven simulated-driver loop at 11.99 m/s with
 +2.54/-2.67 m excursions, recovery, and endpoint braking.
 
-The long-route data gate now passes on a genuine 610.07 m repeated TbV route.
-It yields seven 100 m tiles with 20 m overlap; source images verify the selected
-tile-2/tile-3 pair is one continuous physical road rather than a synthetic
-join. The next implementation gate is deliberately only this pair: download
-the planned 424.2 MB payload, reuse the existing TbV SplatAD parser, train one
-100-step smoke checkpoint per tile, and compare matched world-pose renders
-through the 20 m overlap.
+The long-route data and first adjacent-tile method gates now pass on a genuine
+610.07 m repeated TbV route. The exact tile-2/tile-3 payload is downloaded,
+independent 100-step checkpoints pass plumbing, and bounded 500-step models
+recover corresponding road/building structure at five identical world poses.
+Their pairwise RGB MAE improves from 26.57 to 18.04 / 255, but the images remain
+soft and an instantaneous checkpoint switch would still be visible.
 
-Do not start 2,000-step training, all-seven-tile reconstruction, checkpoint
-streaming, or long-route simulated driving until the adjacent seam passes.
+The next implementation gate remains only this pair: train tiles 2 and 3 to
+2,000 steps, repeat the observed-pose comparison, and render a continuous
+centreline switch/blend video plus -1/0/+1 m front views through the 20 m
+overlap. Do not train the other five tiles, build checkpoint streaming, or
+claim long-route driving until that quality-bearing seam passes.
 The six released MTGS blocks remain geographically separate and only 57-105 m
 long; do not loop the current block or concatenate unrelated blocks to claim a
 long route. Dynamic time, collision, wide lateral support, and responsive
@@ -771,6 +783,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_tbv_long_route_tile_audit.md` records the 610 m
   repeated route, seven-tile contract, source-image review, exact payload plan,
   and selected adjacent-pair reconstruction gate.
+- `experiments/stage_h3_tbv_adjacent_tile_seam.md` records the exact download,
+  independent 100/500-step checkpoints, matched-world-pose comparison, visual
+  decision, and bounded 2,000-step seam-video gate.
 - `experiments/stage_h3_tbv_splatad_pilot.md` records the bounded TbV download,
   multi-traversal parser, LiDAR alignment, and 100/2,000-step reload renders.
 - `experiments/stage_h3_tbv_world_pose_corridor_probe.md` records the 2k/8k

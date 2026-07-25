@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import time
 import urllib.parse
@@ -162,6 +163,30 @@ def plan_window(window: Window, *, camera_stride: int) -> list[S3Object]:
     return sorted({obj.key: obj for obj in selected}.values(), key=lambda obj: obj.key)
 
 
+def parse_window(value: str) -> Window:
+    parts = value.split(",")
+    if len(parts) != 3:
+        raise argparse.ArgumentTypeError(
+            "window must be LOG_ID,START_SECONDS,END_SECONDS"
+        )
+    log_id = parts[0].strip()
+    try:
+        start_seconds, end_seconds = map(float, parts[1:])
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "window start/end must be numeric seconds"
+        ) from error
+    if (
+        not log_id
+        or not all(math.isfinite(value) for value in (start_seconds, end_seconds))
+        or end_seconds <= start_seconds
+    ):
+        raise argparse.ArgumentTypeError(
+            "window needs a log ID and end greater than start"
+        )
+    return Window(log_id, start_seconds, end_seconds)
+
+
 def local_path(output_dir: Path, obj: S3Object) -> Path:
     relative = Path(obj.key).relative_to(TBV_PREFIX)
     return output_dir / relative
@@ -218,16 +243,20 @@ def build_manifest(
                 ],
             }
         )
+    unique_objects = {
+        obj.key: obj for objects in plans.values() for obj in objects
+    }
     return {
         "schema_version": 1,
         "source": S3_ENDPOINT,
         "dataset_prefix": TBV_PREFIX,
         "output_dir": str(output_dir),
         "logs": logs,
-        "total_objects": sum(len(objects) for objects in plans.values()),
-        "total_bytes": sum(
-            obj.size for objects in plans.values() for obj in objects
+        "window_object_references": sum(
+            len(objects) for objects in plans.values()
         ),
+        "total_objects": len(unique_objects),
+        "total_bytes": sum(obj.size for obj in unique_objects.values()),
     }
 
 
@@ -242,15 +271,27 @@ def main() -> None:
     )
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--plan-only", action="store_true")
+    parser.add_argument(
+        "--window",
+        action="append",
+        type=parse_window,
+        help=(
+            "repeatable LOG_ID,START_SECONDS,END_SECONDS override; "
+            "defaults to the historical branch pair"
+        ),
+    )
     args = parser.parse_args()
     if args.camera_stride < 1:
         parser.error("--camera-stride must be positive")
     if args.workers < 1:
         parser.error("--workers must be positive")
 
+    windows = tuple(args.window) if args.window else WINDOWS
+    if len(set(windows)) != len(windows):
+        parser.error("duplicate --window values are not allowed")
     plans = {
         window: plan_window(window, camera_stride=args.camera_stride)
-        for window in WINDOWS
+        for window in windows
     }
     manifest = build_manifest(plans, args.output_dir, args.camera_stride)
     print(
@@ -279,7 +320,11 @@ def main() -> None:
         return
 
     results = {"downloaded": 0, "reused": 0}
-    objects = [obj for plan in plans.values() for obj in plan]
+    objects = list(
+        {
+            obj.key: obj for plan in plans.values() for obj in plan
+        }.values()
+    )
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
         futures = {
             executor.submit(download_object, args.output_dir, obj): obj

@@ -26,9 +26,18 @@ def build_config(args: argparse.Namespace):
     config.pipeline.calc_fid_steps = (999_999,)
     config.pipeline.datamanager.max_thread_workers = args.workers
     config.pipeline.datamanager.downsample_factor = args.downsample_factor
-    config.pipeline.datamanager.dataparser = TbVDataParserConfig(
+    dataparser_kwargs = dict(
         data=args.data,
         train_split_fraction=args.train_split_fraction,
+    )
+    if args.sequences:
+        dataparser_kwargs.update(
+            sequences=tuple(args.sequences),
+            window_start_seconds=tuple(args.window_start_seconds),
+            window_end_seconds=tuple(args.window_end_seconds),
+        )
+    config.pipeline.datamanager.dataparser = TbVDataParserConfig(
+        **dataparser_kwargs
     )
     config.pipeline.model.max_steps = args.iterations
     config.pipeline.model.max_num_seed_points = args.max_num_seed_points
@@ -56,7 +65,29 @@ def main() -> None:
     parser.add_argument("--downsample-factor", type=float, default=0.25)
     parser.add_argument("--train-split-fraction", type=float, default=0.9)
     parser.add_argument("--max-num-seed-points", type=int, default=250_000)
+    parser.add_argument("--sequence", dest="sequences", action="append")
+    parser.add_argument(
+        "--window-start-seconds", action="append", type=float
+    )
+    parser.add_argument(
+        "--window-end-seconds", action="append", type=float
+    )
     args = parser.parse_args()
+    custom_lengths = tuple(
+        len(value or ())
+        for value in (
+            args.sequences,
+            args.window_start_seconds,
+            args.window_end_seconds,
+        )
+    )
+    if any(custom_lengths) and (
+        not all(custom_lengths) or len(set(custom_lengths)) != 1
+    ):
+        parser.error(
+            "--sequence, --window-start-seconds, and "
+            "--window-end-seconds must be repeated equally"
+        )
     train_main(build_config(args))
 
 
