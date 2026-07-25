@@ -953,6 +953,36 @@ This passes the simulated-driver vehicle/control/render loop for the existing
 dynamic-time truth, collision truth, or surround quality. Exact evidence is in
 `experiments/stage_h3_mtgs_autodrive.md`.
 
+### Stage H3 Level 9P — TbV long-route and adjacent-tile data gate
+
+Completed on 2026-07-25 without downloading a complete sensor payload or
+training:
+
+- selected two existing Miami Spring 2020 TbV traversals whose full pose tracks
+  are 640.934 m and 666.906 m;
+- found a 610.072 m continuous same-direction supported run with 521 samples,
+  monotonic cross-traversal matches, and 0.440/0.878/2.598 m nearest-distance
+  p50/p95/maximum;
+- measured 0.298/2.404/4.107 degree cross-traversal heading-difference
+  p50/p95/maximum;
+- divided the run into seven complete 100 m tiles with 20 m overlaps and an
+  80 m stride;
+- selected genuinely adjacent tiles 2 and 3, covering 160-260 m and 240-340 m;
+  both have 100% sampled support and share the real 240-260 m road interval;
+- downloaded only eight matched `ring_front_center` source images at progress
+  160/240/260/340 m and verified corresponding permanent road, building,
+  tower, power-line, and vegetation evidence across both traversals;
+- observed different vehicles across traversals, so transient traffic must be
+  masked or separated rather than baked into a shared static background;
+- listed but did not download the exact two-tile payload: 2,805 unique objects
+  and 424,193,048 bytes for seven cameras at stride 2, all LiDAR, poses,
+  calibration, and maps.
+
+This passes the long-route metadata and adjacent-source-data gate. It does not
+prove a reconstructed seam, wide lateral support, long-route rendering, or
+driving. Exact evidence is in
+`experiments/stage_h3_tbv_long_route_tile_audit.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -1169,12 +1199,14 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 
 ## 5. Current Next Action — Stage H3
 
-Stage H3 now prioritizes a long-route data and tiling gate. The prescribed-path
-smoke, control/support adapter, and simulated-driver MTGS render loop are
-complete for the released 84 m Singapore block. TbV Miami `OCa... + QMn...`
-remains the accepted cheap restricted-route regression, and PandaSet scene-040
-remains fixed world-coordinate regression evidence. PandaSet `003+057` remains
-only a same-direction parser/alignment control.
+Stage H3 now has a real long-route data candidate. The existing TbV inventory
+contains a 610.072 m repeated Miami route that partitions into seven 100 m
+tiles with 20 m overlaps. Tiles 2 and 3 are the selected first reconstruction
+pair. The prescribed-path smoke, control/support adapter, and simulated-driver
+MTGS render loop remain complete for the released 84 m Singapore block. TbV
+Miami `OCa... + QMn...` remains the cheap restricted branch regression, and
+PandaSet scene-040 remains fixed world-coordinate regression evidence.
+PandaSet `003+057` remains only a same-direction parser/alignment control.
 
 Both PandaSet scene-040 static-8k and the new TbV static-8k candidate remain
 fixed; they have different data and acceptance boundaries. The agreed
@@ -1188,14 +1220,15 @@ UniSim are not integrated into the common simulator; MTGS now has the isolated
 inference probe, fixed-time videos, standalone support adapter, and local
 experimental simulated control/render loop described above.
 
-The next action is deliberately data-first: identify one contiguous 300-500 m
-nuPlan-compatible route with repeated traversal coverage. Partition it into
-overlapping 80-100 m reconstruction tiles and verify the data alignment and
-support of one genuinely adjacent pair before implementing checkpoint
-streaming. The six released MTGS blocks are geographically separate and only
-about 57-105 m long, so do not loop the current scene or concatenate unrelated
-blocks. Keep dynamic time, collision work, and browser presentation outside
-this gate.
+The next action is the smallest reconstruction seam smoke: download only the
+planned 424,193,048-byte payload for TbV tiles 2 and 3, reuse the existing TbV
+SplatAD parser, train separate 100-step checkpoints, and render matched world
+poses through their 20 m overlap. Do not start 2,000-step training, all-seven
+tile reconstruction, checkpoint streaming, or long-route driving until this
+pair passes. The six released MTGS blocks remain geographically separate and
+only about 57-105 m long, so do not loop the current scene or concatenate
+unrelated blocks. Keep dynamic time, collision work, wide-lateral acceptance,
+and browser presentation outside this gate.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -1215,8 +1248,9 @@ plan. The short version is:
 7. retain the completed route-constrained TbV browser/evidence adapter plus
    the direct no-browser A/D/recovery trial as the +/-1 m regression gate;
 8. retain the successful isolated MTGS checkpoint, +/-5 m pose grid, 12 m/s
-   prescribed-path video, minimal adapter, and simulated-driver render loop,
-   then verify one adjacent long-route tile pair before streaming work;
+   prescribed-path video, minimal adapter, and simulated-driver render loop;
+   use the verified 610 m TbV route and first train only the selected adjacent
+   100 m tile pair before streaming work;
 9. keep the implemented provisional scene-040 world browser and operator trial
    as regression/acceptance work rather than coupling them to this new scene;
 10. return dynamic actors to the main line when they obscure the road, create a

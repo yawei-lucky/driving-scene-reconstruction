@@ -29,6 +29,21 @@ environment:
   --contact-sheet /home/yawei/stage3_external/artifacts/pandaset_multi_trajectory_inventory/front_contact_sheet.jpg
 ```
 
+Audit the selected 610 m repeated TbV route, generate its seven-tile contract,
+sample eight source images, and list the exact adjacent-pair payload without
+downloading it:
+
+```bash
+env MPLCONFIGDIR=/tmp \
+  /home/yawei/stage3_external/envs/h3_splatad/bin/python \
+  scripts/audit_stage_h3_tbv_long_route_tiles.py \
+  --download-source-images \
+  --plan-tile-payload
+```
+
+The command refuses to overwrite a non-empty output directory. Its default
+artifacts remain outside Git under `/home/yawei/stage3_external/artifacts`.
+
 Prepare or verify the separate H3 environment:
 
 ```bash

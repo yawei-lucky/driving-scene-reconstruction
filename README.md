@@ -326,6 +326,16 @@ Stage H3 Level 9O
   and 2.329 m minimum support margin
 → render p50/p95 was 6.72/12.16 ms; manual review retained continuous road and
   lane evidence through the maximum frame-difference transition
+
+Stage H3 Level 9P
+→ found a 610.07 m continuous same-direction repeat in the existing public TbV
+  inventory; cross-traversal distance was 0.440/0.878 m p50/p95
+→ partitioned the supported route into seven real 100 m tiles with 20 m overlap
+  and selected tiles 2/3, covering 160-340 m with a 240-260 m shared interval
+→ reviewed eight matched front-camera source images: permanent road/building
+  evidence agrees, while differing vehicles must remain transient
+→ planned the exact two-tile sensor payload at 2,805 objects / 424.2 MB;
+  the full payload is not downloaded and no reconstruction was trained
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -695,14 +705,20 @@ the road readable through the +/-5 m grid, passes a 72 m prescribed-path smoke,
 and now passes a vehicle-driven simulated-driver loop at 11.99 m/s with
 +2.54/-2.67 m excursions, recovery, and endpoint braking.
 
-The next implementation gate is a long-route data and tiling pilot, not a
-keyboard interface. Identify one contiguous 300-500 m nuPlan-compatible route
-with repeated traversal coverage, divide it into overlapping 80-100 m tiles,
-and validate one genuinely adjacent pair before building checkpoint streaming.
-The six released MTGS blocks are geographically separate and only 57-105 m
+The long-route data gate now passes on a genuine 610.07 m repeated TbV route.
+It yields seven 100 m tiles with 20 m overlap; source images verify the selected
+tile-2/tile-3 pair is one continuous physical road rather than a synthetic
+join. The next implementation gate is deliberately only this pair: download
+the planned 424.2 MB payload, reuse the existing TbV SplatAD parser, train one
+100-step smoke checkpoint per tile, and compare matched world-pose renders
+through the 20 m overlap.
+
+Do not start 2,000-step training, all-seven-tile reconstruction, checkpoint
+streaming, or long-route simulated driving until the adjacent seam passes.
+The six released MTGS blocks remain geographically separate and only 57-105 m
 long; do not loop the current block or concatenate unrelated blocks to claim a
-long route. Dynamic time, collision, and responsive traffic remain separate
-later gates.
+long route. Dynamic time, collision, wide lateral support, and responsive
+traffic remain separate later gates.
 
 Do not join another scene to 040: the nearest available track is about 165.3 m
 away. Do not claim intersection branching from the current archive: the scan
@@ -752,6 +768,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_mtgs_autodrive.md` records the actual simulated-driver
   control loop, vehicle dynamics, endpoint braking, frame evidence, and
   remaining long-route data/tile gate.
+- `experiments/stage_h3_tbv_long_route_tile_audit.md` records the 610 m
+  repeated route, seven-tile contract, source-image review, exact payload plan,
+  and selected adjacent-pair reconstruction gate.
 - `experiments/stage_h3_tbv_splatad_pilot.md` records the bounded TbV download,
   multi-traversal parser, LiDAR alignment, and 100/2,000-step reload renders.
 - `experiments/stage_h3_tbv_world_pose_corridor_probe.md` records the 2k/8k

@@ -42,6 +42,9 @@ Recorded experiments:
 - `stage_h3_mtgs_published_block_probe.md`: trajectory audit of all six MTGS
   releases, selected Singapore gentle curve, checkpoint evidence, and the
   isolated load-only gate.
+- `stage_h3_tbv_long_route_tile_audit.md`: 610 m repeated TbV route, seven
+  overlapping reconstruction tiles, source-image review, and the selected
+  adjacent-pair smoke gate.
 
 Stage H2 connects that H1 checkpoint to the simulator interface. Its design and
 GPU validation record live in `docs/stage_h2_reconstruction_renderer.md`.

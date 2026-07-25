@@ -126,3 +126,8 @@ nuPlan-compatible route with repeated traversal coverage, partition it into
 overlapping 80-100 m reconstruction tiles, and verify one pair of genuinely
 adjacent tiles before implementing checkpoint streaming. Do not loop this
 84 m scene or concatenate unrelated blocks and call the result a long route.
+
+Status on 2026-07-25: the data part of this gate passed on a 610.072 m repeated
+TbV route. Seven overlapping 100 m tiles and one real adjacent pair are
+recorded in `stage_h3_tbv_long_route_tile_audit.md`. The remaining gate is a
+two-tile 100-step reconstruction and overlap-render seam smoke.
