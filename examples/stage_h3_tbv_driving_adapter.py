@@ -58,6 +58,7 @@ COMMON_START_METERS = -20.0
 BRANCH_ANCHOR_METERS = 0.0
 STRAIGHT_END_METERS = 40.0
 RIGHT_END_METERS = 30.0
+STRAIGHT_HANDOFF_BLEND_END_METERS = 12.0
 CORRIDOR_HALF_WIDTH_METERS = 1.0
 CORRIDOR_HEADING_LIMIT_DEGREES = 30.0
 SELECTION_WINDOW_METERS = 0.5
@@ -296,6 +297,68 @@ def supported_route(
     )
 
 
+def blended_route_handoff(
+    common_route: tuple[RouteSample, ...],
+    branch_route: tuple[RouteSample, ...],
+    *,
+    start: float,
+    end: float,
+    blend_end: float,
+) -> tuple[RouteSample, ...]:
+    """Join one branch to the common approach without a centreline jump.
+
+    The two registered TbV traversals are close before the junction but are
+    not pose-identical.  Driving the straight traversal's raw centreline from
+    the right-traversal common approach therefore consumed almost the complete
+    +/-1 m correction reserve at branch selection.  Keep the observed common
+    path through the anchor, then smoothly join the branch over a short region
+    that both traversals observed.
+    """
+
+    if not start < 0.0 < blend_end < end:
+        raise ValueError("handoff requires start < 0 < blend_end < end")
+    progresses = {
+        start,
+        0.0,
+        blend_end,
+        end,
+        *(
+            sample.progress
+            for route in (common_route, branch_route)
+            for sample in route
+            if start < sample.progress < end
+        ),
+    }
+    result = []
+    for progress in sorted(progresses):
+        branch = pose_at_progress(branch_route, progress)
+        if progress <= 0.0:
+            common = pose_at_progress(common_route, progress)
+            blend = 0.0
+        elif progress < blend_end:
+            common = pose_at_progress(common_route, progress)
+            ratio = progress / blend_end
+            blend = ratio * ratio * (3.0 - 2.0 * ratio)
+        else:
+            common = branch
+            blend = 1.0
+        yaw_delta = math.atan2(
+            math.sin(branch.yaw - common.yaw),
+            math.cos(branch.yaw - common.yaw),
+        )
+        result.append(
+            RouteSample(
+                time=progress,
+                progress=progress,
+                x=common.x * (1.0 - blend) + branch.x * blend,
+                y=common.y * (1.0 - blend) + branch.y * blend,
+                z=common.z * (1.0 - blend) + branch.z * blend,
+                yaw=common.yaw + yaw_delta * blend,
+            )
+        )
+    return tuple(result)
+
+
 def make_adapter(
     renderer: TbVWorldRenderer,
     *,
@@ -304,7 +367,13 @@ def make_adapter(
     if not math.isfinite(max_speed_mps) or max_speed_mps <= 0.0:
         raise ValueError("maximum speed must be finite and positive")
     right_route = renderer.routes[RIGHT_TRAVERSAL]
-    straight_route = renderer.routes[STRAIGHT_TRAVERSAL]
+    straight_route = blended_route_handoff(
+        right_route,
+        renderer.routes[STRAIGHT_TRAVERSAL],
+        start=COMMON_START_METERS,
+        end=STRAIGHT_END_METERS,
+        blend_end=STRAIGHT_HANDOFF_BLEND_END_METERS,
+    )
     common = supported_route(
         name="common",
         renderer_profile=RIGHT_TRAVERSAL,

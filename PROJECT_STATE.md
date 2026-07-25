@@ -1,6 +1,6 @@
 # Project State — Driving Scene Reconstruction
 
-Last updated: 2026-07-23
+Last updated: 2026-07-25
 
 ## 1. Product Goal
 
@@ -836,6 +836,64 @@ geometry. It is not an autonomous-driving model, does not increase observed
 scene coverage, and does not replace the straight/right physical operator
 trials or their visual decisions.
 
+### Stage H3 Level 9L — TbV no-browser humanized trial
+
+Completed on 2026-07-25 without browser control or retraining:
+
+- added a direct 20 Hz simulator/renderer entry point that records one H.264
+  video and per-frame JSON evidence;
+- exercised passive start, manual-like takeover, deliberate A/D departures,
+  lateral and heading recovery, straight/right selection, endpoint braking,
+  and a separate reset before each route;
+- replaced the raw common-to-straight centreline jump with a smooth 12 m join
+  inside the segment observed by both traversals;
+- accepted a 45.75 s / 915-frame / 665-render run: both routes reached
+  +0.378/-0.339 m, retained at least 0.622 m corridor reserve, and stopped at
+  0.0 m/s;
+- retained 0.921 m straight handoff reserve with 4.97 degrees maximum handoff
+  heading error; right retained 0.979 m and 3.52 degrees;
+- measured the three-front-camera renderer at 38.81/43.44 ms straight and
+  40.65/43.54 ms right p50/p95 after warm-up;
+- visually retained continuous road, curb, and route direction, while noting
+  foliage/panorama stretching, one dark edge smear, and a baked white van.
+
+This passes only the restricted static-route regression. The deterministic
+control sequence is human-like, not physical-human evidence, and does not
+support dynamic traffic, collision truth, or lateral travel beyond +/-1 m.
+Exact evidence is in
+`experiments/stage_h3_tbv_headless_humanized_trial.md`.
+
+### Stage H3 Level 9M — MTGS released-checkpoint and wide-corridor gate
+
+Completed on 2026-07-25 without training:
+
+- pinned the official MTGS source at
+  `7ab67a3e386e5a4830017819324922a7bb9f26f7`;
+- verified and extracted the official Singapore
+  `road_block-365000_144000_365100_144080` archive
+  (`3,983,371,020` bytes,
+  SHA-256 `d75c7e4ed0ec675d1ee7c656aa1695738f04b154bc30482ded6706661470808c`);
+- range-extracted the released step-30,000 checkpoint and matching config from
+  the official checkpoint archive, then verified the checkpoint step and
+  tensor structure on CPU;
+- built an isolated Python 3.9 / Torch 2.0.1+cu118 / Nerfstudio 1.1.5
+  environment; `tiny-cuda-nn` links only when the host driver library path is
+  explicit and reports an sm86-on-sm89 performance warning;
+- loaded the checkpoint on the RTX 4090 D in 19.72 s with 1.455 GiB peak
+  reserved CUDA memory and rendered the observed 960x540 front camera at
+  13.52/13.71 ms warm p50/p95;
+- rendered a fixed-time, fixed-heading 15-pose grid over forward 0/15/30 m and
+  lateral -5/-3/0/+3/+5 m; every RGB image was finite and rendering measured
+  10.04/12.94 ms p50/p95;
+- visually found the road, lane markings, and curbs readable across the grid.
+  Close foliage and curbs stretch at the extreme offsets, so this is not yet a
+  driving-safety or collision certificate.
+
+This clears the 24 GB inference and first spatial-coverage risks. It does not
+clear continuous motion, arbitrary yaw, temporal actor truth, or keyboard
+driving. Exact paths and evidence are in
+`experiments/stage_h3_mtgs_checkpoint_gate.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -898,6 +956,23 @@ rear-left three-quarter auxiliary view without depth or environment geometry;
 the post-change 25-sample host latency smoke passed the existing 100 ms server
 p95 gate. A real operator keyboard-to-display trial remains required before
 any human-drivability claim.
+
+The separate Level-9M MTGS path now supports:
+
+```text
+released multi-traversal Singapore road block
+→ pinned MTGS config plus step-30,000 checkpoint
+→ isolated Python 3.9 / CUDA 11.8 inference environment
+→ observed 960x540 front-camera render
+→ fixed-time world-pose translation in the camera right/forward basis
+→ 15 finite views over 30 m forward and +/-5 m lateral
+→ JSON timings, peak VRAM, individual frames, and a contact sheet
+```
+
+This path is deliberately not connected to human controls yet. Its first
+world-pose grid removes the prior environment and 24 GB inference uncertainty,
+but does not prove a continuous high-speed path or trustworthy dynamic actor
+motion.
 
 This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint. The logged browser loop now
@@ -1011,11 +1086,16 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
   Close foliage and parked vehicles deform, and no-annotation vehicle ghosts
   remain a rejection condition if they block the lane or create a false
   obstacle during the continuous trial.
-- The selected MTGS block is trajectory- and checkpoint-qualified but has not
-  been visually reviewed or loaded on this host. Official training guidance
-  asks for at least 40 GB VRAM, versus the available 24 GB.
-- MTGS requires a separate environment because its Nerfstudio, gsplat, NumPy,
-  and tyro versions conflict with the accepted `h3_splatad` environment.
+- The selected MTGS block now loads and renders on this host, but only
+  inference has been tested. Official training guidance asks for at least
+  40 GB VRAM, versus the available 24 GB, so no training is planned here.
+- MTGS uses a separate 7.9 GB environment because its Nerfstudio, gsplat,
+  NumPy, and tyro versions conflict with `h3_splatad`. Its built
+  `tiny-cuda-nn` extension reports sm86 on the sm89 GPU, which is accepted for
+  the gate but may leave performance on the table.
+- The first MTGS +/-5 m grid holds time and heading fixed and spans only 30 m
+  forward from one eval camera. It proves neither continuous high-speed
+  control nor coverage across the full block.
 - The selected MTGS block contains substantial annotated traffic. Its dynamic
   reconstruction may be an advantage over static TbV, but false obstacles or
   actor ghosts remain a driving rejection condition.
@@ -1024,11 +1104,11 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 
 ## 5. Current Next Action — Stage H3
 
-Stage H3 now prioritizes the real operator trial for the completed TbV Miami
-`OCa... + QMn...` route adapter. The accepted scene-040 static-8k checkpoint
-and its world-coordinate browser remain fixed regression evidence. The
-released MTGS Singapore checkpoint remains an isolated fallback, while
-PandaSet `003+057` remains a same-direction parser/alignment control.
+Stage H3 now prioritizes a minimal continuous MTGS driving smoke over the
+released Singapore block. TbV Miami `OCa... + QMn...` remains the accepted
+cheap restricted-route regression, and PandaSet scene-040 remains fixed
+world-coordinate regression evidence. PandaSet `003+057` remains only a
+same-direction parser/alignment control.
 
 Both PandaSet scene-040 static-8k and the new TbV static-8k candidate remain
 fixed; they have different data and acceptance boundaries. The agreed
@@ -1038,18 +1118,19 @@ interactive renderer, use NeuRAD only for a matched quality comparison, use
 MTGS-style multi-traversal reconstruction when spatial coverage is the
 limitation, and borrow UniSim's compositional closed-loop concepts without
 treating generated completion as observed ground truth. NeuRAD, MTGS, and
-UniSim are not currently integrated.
+UniSim are not integrated into the common simulator; MTGS currently has only
+the isolated inference/probe path described above.
 
-The adapter, forward surround, fixed-bathtub 360° 3D visual aid, 0.75-scale
-selection, and passive auto-play are complete. The next action is deliberately
-narrow: use auto-play only for an initial passive inspection, then use the
-forward surround to run straight and right as separate human reset trials,
-capture browser request-to-image and physical input-to-image timing, inspect
-the transition when the renderer changes traversal profile, and reject any
-segment where panorama seams, baked vehicles, permanent geometry, or temporal
-artifacts alter the driving decision. Use the 3D surround only as an auxiliary
-orientation view and the original camera views only for paused/post-drive
-inspection. Do not train beyond 8k or restart a broad audit before this gate.
+The next action is deliberately narrow: reuse the Level-9M camera-pose path to
+render one continuous front-camera video at about 10-12 m/s with a bounded
+lane-change envelope near +/-4 m, while logging world pose, requested lateral
+offset, frame validity, render time, and support distance. Keep scene time
+fixed for this first spatial test and reject any path where the road edge,
+lane markings, baked actors, or reconstruction stretching would change the
+driving decision. Only after that video passes should this path receive the
+small control/evidence adapter used for keyboard driving. Do not train MTGS on
+24 GB, add browser presentation work, or broaden the dataset audit before this
+gate.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -1066,10 +1147,11 @@ plan. The short version is:
    control;
 6. retain the completed TbV download, registration, 8k checkpoint, held-out
    render, and 36-pose sweep as the multi-traversal regression gate;
-7. retain the completed route-constrained TbV browser/evidence adapter and run
-   a continuous +/-1 m straight/right-turn human trial before more training;
-8. keep the released MTGS checkpoint as a separate-environment fallback if the
-   TbV continuous trial exposes a model/data limitation rather than plumbing;
+7. retain the completed route-constrained TbV browser/evidence adapter plus
+   the direct no-browser A/D/recovery trial as the +/-1 m regression gate;
+8. retain the successful isolated MTGS checkpoint and +/-5 m pose grid, then
+   build only a continuous 10-12 m/s front-camera video and minimal evidence
+   adapter before any keyboard/browser integration;
 9. keep the implemented provisional scene-040 world browser and operator trial
    as regression/acceptance work rather than coupling them to this new scene;
 10. return dynamic actors to the main line when they obscure the road, create a

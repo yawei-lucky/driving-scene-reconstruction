@@ -63,6 +63,50 @@ class TbVDrivingAdapterEntryPointTests(unittest.TestCase):
         self.assertAlmostEqual(adapter.vehicle_model.max_acceleration, 2.0)
         self.assertAlmostEqual(adapter.vehicle_model.max_braking, 5.0)
 
+    def test_straight_handoff_starts_on_common_route_with_full_margin(self) -> None:
+        common = tuple(
+            MODULE.RouteSample(
+                float(progress),
+                float(progress),
+                float(progress),
+                0.0,
+                0.0,
+                0.0,
+            )
+            for progress in range(-30, 51)
+        )
+        raw_straight = tuple(
+            MODULE.RouteSample(
+                float(progress),
+                float(progress),
+                float(progress),
+                0.6,
+                0.0,
+                0.0,
+            )
+            for progress in range(-30, 51)
+        )
+        renderer = SimpleNamespace(
+            routes={
+                MODULE.RIGHT_TRAVERSAL: common,
+                MODULE.STRAIGHT_TRAVERSAL: raw_straight,
+            }
+        )
+
+        adapter = MODULE.make_adapter(renderer)
+        state = MODULE.EgoState(x=0.0, y=0.0, yaw=0.0)
+        self.assertTrue(adapter.support(state).selection_required)
+
+        support = adapter.select_branch("straight", state)
+
+        self.assertAlmostEqual(support.lateral_offset_meters, 0.0)
+        self.assertAlmostEqual(support.distance_margin_meters, 1.0)
+        blended_end = adapter.branches["straight"].corridor.pose_at_progress(
+            MODULE.STRAIGHT_HANDOFF_BLEND_END_METERS
+            - MODULE.COMMON_START_METERS
+        )
+        self.assertAlmostEqual(blended_end.y, 0.6, places=2)
+
     def test_page_exposes_branch_choice_and_evidence(self) -> None:
         page = MODULE.render_web_page(0.1)
 

@@ -285,6 +285,25 @@ Stage H3 Level 9K
   centreline, stopped at route end, and had zero support/boundary violations
 → auto-play is a passive inspection aid, not autonomous-driving evidence or a
   substitute for the pending human trial
+
+Stage H3 Level 9L
+→ added a direct no-browser TbV trial at 20 Hz with auto/manual-like takeover,
+  A/D departures and recovery, branch choice, endpoint braking, and reset
+→ replaced the raw straight-route profile jump with a 12 m observed-route join
+→ accepted a 45.75 s H.264 straight/right trial with at least 0.622 m corridor
+  reserve and 38.81-40.65 ms three-front-camera renderer p50
+→ this is deterministic human-like regression evidence, not a physical-human
+  trial or unrestricted lateral-driving evidence
+
+Stage H3 Level 9M
+→ installed pinned MTGS commit `7ab67a3` in a separate Python 3.9/CUDA 11.8
+  environment and verified the official 3.98 GB Singapore block/checkpoint
+→ loaded step 30,000 on the RTX 4090 D without training; peak reserved VRAM was
+  1.455 GiB and the 960x540 observed pose rendered at 13.52 ms p50
+→ rendered 15 world poses over forward 0/15/30 m and lateral
+  -5/-3/0/+3/+5 m; all were finite, with 10.04/12.94 ms p50/p95
+→ road and lane structure remained readable across the grid, while close
+  foliage and curbs still stretched at extreme offsets
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -328,8 +347,9 @@ save/reload, held-out, and common-world counterfactual gates. Exact resume from
 23.2130/0.7734/0.3805, and the same 36-pose sweep kept the shared entrance,
 straight branch, right turn, and -1/0/+1 m front views readable. This is a
 restricted route-constrained driving candidate, not a dynamic or certified
-360-degree simulator. MTGS remains a later fallback rather than the current
-environment task.
+360-degree simulator. The later Level-9M gate independently loads the released
+MTGS checkpoint and tests a wider pose grid; it does not merge MTGS into this
+TbV implementation.
 
 ## Run
 
@@ -434,6 +454,31 @@ The live evidence report is available at `/evidence.json` and is also written
 outside Git under
 `/home/yawei/stage3_external/artifacts/tbv_branch_pair_driving_adapter/`. The
 report is evidence-only; it does not certify the rendered scene.
+
+For the reproducible no-browser straight/right regression:
+
+```bash
+scripts/run_stage_h3_tbv_pilot.sh headless-trial
+```
+
+This directly drives the simulator and renderer at 20 Hz and saves an H.264
+video plus JSON evidence outside Git. It exercises A/D-like departures,
+recovery, route handoff, braking, and reset, but it must not be described as a
+physical-human trial.
+
+For the isolated released MTGS checkpoint and wide-corridor gate:
+
+```bash
+scripts/run_stage_h3_mtgs_gate.sh verify-assets
+scripts/run_stage_h3_mtgs_gate.sh checkpoint-gate
+scripts/run_stage_h3_mtgs_gate.sh corridor-probe
+```
+
+The launcher expects the pinned external MTGS environment, official Singapore
+block, and step-30,000 checkpoint documented in
+`experiments/stage_h3_mtgs_checkpoint_gate.md`. It performs inference only.
+The corridor probe changes one camera's world pose while holding time and
+heading fixed; it is coverage evidence, not yet a keyboard driving adapter.
 
 For the true world-pose backend and current corridor probe, without retraining:
 
@@ -614,17 +659,21 @@ manual drivability gates as `pass`.
 
 ## Current Next Step
 
-The PandaSet and TbV static-8k checkpoints now remain fixed. The minimal
-route-constrained TbV adapter, evidence outlet, forward surround, and
-fixed-bathtub 360° 3D visual aid are implemented. The next gate is the real
-operator visual run: drive the common approach, select straight and right in
-separate reset runs, capture physical keyboard-to-image timing, and record
-whether road continuity, branch choice, traversal-profile switching, seams,
-and baked traffic remain decision-safe. The 3D surround is only a comfort aid;
-do not infer real pole/vehicle geometry, occlusion, or free space from it. Do
-not add more static TbV training or a broad audit before this operator gate.
-The published MTGS checkpoint remains a separate-environment fallback;
-PandaSet `003+057` remains the same-direction parser/alignment control.
+The PandaSet and TbV static-8k checkpoints remain fixed. The direct TbV
+straight/right regression now passes with useful correction reserve, so it
+remains the cheap restricted-route baseline. The published MTGS checkpoint is
+no longer merely an environment fallback: it loads on the 24 GB host and keeps
+the road readable in a first +/-5 m, 30 m world-pose grid.
+
+The next implementation gate is a minimal MTGS driving adapter over this
+released Singapore block: select a recorded centreline, advance a free ego at
+about 10-12 m/s, allow bounded +/-4 m lane changes, render only the front
+camera first, and emit the same pose/support/frame evidence used by the TbV
+trial. Start with a scripted continuous video, then expose keyboard control
+only if the video keeps road boundaries and false obstacles decision-safe.
+Keep time fixed for the first spatial smoke; dynamic-time truth, collision,
+and responsive traffic remain separate gates. Do not train MTGS on the 24 GB
+card or widen this into a general simulator integration yet.
 
 Do not join another scene to 040: the nearest available track is about 165.3 m
 away. Do not claim intersection branching from the current archive: the scan
@@ -660,6 +709,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_mtgs_published_block_probe.md` records the six released
   MTGS trajectories, selected Singapore gentle curve, official checkpoint
   evidence, environment conflict, and checkpoint-only gate.
+- `experiments/stage_h3_mtgs_checkpoint_gate.md` records the isolated
+  environment, verified official assets, successful 24 GB checkpoint load,
+  observed render, and +/-5 m world-pose corridor result.
 - `experiments/stage_h3_tbv_splatad_pilot.md` records the bounded TbV download,
   multi-traversal parser, LiDAR alignment, and 100/2,000-step reload renders.
 - `experiments/stage_h3_tbv_world_pose_corridor_probe.md` records the 2k/8k
@@ -667,6 +719,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_tbv_driving_adapter.md` records the route adapter,
   evidence schema, GPU/HTTP rehearsal, display correction, and remaining human
   gate.
+- `experiments/stage_h3_tbv_headless_humanized_trial.md` records the direct
+  no-browser A/D/recovery/branch/reset trial, correction-margin fix, video, and
+  restricted visual decision.
 - `experiments/stage_h3_tbv_cockpit_presentation.md` records the calibrated
   front panorama, trajectory-support inset, diagnostic split, host latency,
   and remaining seam/human-driving gate.
