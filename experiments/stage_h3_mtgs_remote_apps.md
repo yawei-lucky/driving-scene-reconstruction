@@ -1,0 +1,119 @@
+# Stage H3 MTGS Two-App Remote Driving Pilot
+
+Date: 2026-07-26
+
+## Question
+
+Can the accepted MTGS simulated-driver loop be exposed as two separable LAN
+applications while preserving the earlier TbV cockpit layout and keeping the
+simulator authoritative?
+
+This pilot tests the application boundary and a localhost transport loop. It
+does not claim a real two-computer LAN latency result.
+
+## Implemented Contract
+
+The simulator application on the RTX host owns:
+
+```text
+AUTO or latest REMOTE HumanControl
+→ 250 ms stale-control watchdog
+→ SimpleVehicleModel
+→ fail-closed +/-5 m route support
+→ rigid three-camera MTGS render
+→ calibrated 150-degree cylindrical panorama
+→ truthful route/vehicle 3D inset
+→ H.264 NVENC over SRT
+```
+
+The driver application owns keyboard shaping, AUTO/REMOTE/reset/estop
+commands, SRT decoding, display, and telemetry presentation. Control and
+telemetry use versioned JSON over WebSocket. A disconnected remote client
+cannot directly retain control of world state.
+
+The main view uses nearest-time `CAM_L0`, `CAM_F0`, and `CAM_R0` cameras; the
+measured normalized time gaps from the centre camera are 0.00097/0/0.00099.
+Each requested front pose is applied as one rigid delta to that calibrated
+three-camera rig. The inset shows route geometry, the accepted corridor, and
+the kinematic car; it is deliberately labelled as geometry rather than
+reconstructed overhead RGB.
+
+## GPU Visual/Performance Smoke
+
+The accepted short v2 smoke used the released step-30,000 checkpoint on the
+RTX 4090 D:
+
+| Measurement | Result |
+| --- | ---: |
+| Output | 1280x544 at 20 FPS |
+| Forward horizontal FOV | 150 degrees |
+| Calibrated projection coverage | 100.0% |
+| Three-camera render p50 / p95 | 22.16 / 27.80 ms |
+| CPU panorama compose p50 / p95 | 20.32 / 20.97 ms |
+| Peak CUDA reserved | 1.455 GiB |
+| Scene time | fixed |
+
+The initial 1600x668 attempt had 95.5% projection coverage, a visible lower
+black edge, and about 33 ms panorama composition. Reducing only the remote
+presentation raster to 1280x544 and changing the MTGS lower view angle from
+-24 to -19 degrees removed the unobserved edge and brought the steady combined
+render/compose time to about 47-48 ms. The 150-degree horizontal layout did not
+change.
+
+Short retained artifacts:
+
+- `/home/yawei/stage3_external/artifacts/mtgs_remote_apps_20260726_smoke_v2.mp4`;
+- `/home/yawei/stage3_external/artifacts/mtgs_remote_apps_20260726_smoke_v2.json`.
+
+The final launcher-produced AUTO presentation contains 183 frames over
+9.15 seconds. It reaches 11.994 m/s, completes actual +2.541/-2.671 m
+vehicle-model excursions, retains 2.329 m minimum support margin, and stops at
+the route endpoint with zero boundary hits. Manual inspection of the left
+extremum, right recovery, and endpoint retained readable road/lane structure
+and matching support-inset offsets. Artifacts:
+
+- video:
+  `/home/yawei/stage3_external/artifacts/mtgs_remote_apps_20260726/mtgs_remote_auto_demo.mp4`;
+- video SHA-256:
+  `95cd95e7338a21958c590570826ef8fdcaaec3bf4b21a12845f888b2dc7717d5`;
+- JSON:
+  `/home/yawei/stage3_external/artifacts/mtgs_remote_apps_20260726/mtgs_remote_auto_demo.json`.
+
+## Two-Process Loopback
+
+The final localhost run used the real MTGS model, WebSocket control on TCP
+18766, and H.264 SRT video on UDP 19002. The simulator produced 120 frames.
+The driver received all 120 telemetry messages and decoded 97 complete latest
+video frames; it intentionally discards old decoded frames during initial GOP
+acquisition. Both processes exited normally.
+
+After adding explicit takeover assertions, a separate 60-frame regression on
+TCP 18767 / UDP 19003 received 56 telemetry messages and 38 complete video
+frames before shutdown, observed both `auto` and `remote`, and observed
+non-zero applied steering (maximum absolute value 1.0). This directly verifies
+that the headless client's W+A takeover command reached the authoritative
+vehicle loop; the longer 120-frame run remains the transport-count evidence.
+
+An earlier attempt is retained as failure evidence:
+
+- TCP 8765 was already owned by an existing project service, so the new
+  simulator correctly failed to bind rather than replacing it;
+- a second attempt allowed the headless client's total timer to expire during
+  model warm-up and used too small a 64 KB MPEG-TS probe, receiving telemetry
+  but no complete video frame;
+- the final client starts its smoke timer after first telemetry and uses a
+  2 MB probe window.
+
+## Verdict And Next Gate
+
+Pass the two-application software boundary, three-camera cockpit, safety
+watchdog, localhost WebSocket telemetry/control path, and localhost SRT video
+path.
+
+Do not claim real LAN latency, Internet security, dynamic traffic truth,
+collision truth, a long route, or a tested desktop Tk window: the project host
+was a display-less TTY and exercised the client's headless path. The immediate
+application gate is one
+five-minute two-computer LAN run with manual takeover, reset, estop, and
+reconnect. The separate reconstruction next step remains the bounded
+cross-traversal 3D-persistence experiment for the adjacent TbV tiles.

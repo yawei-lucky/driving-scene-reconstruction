@@ -377,6 +377,16 @@ Stage H3 Level 9T
   13.58 / 255 continuously, versus 9.84/9.98 for the unmasked 2k pair
 → rejected broad 2D-silhouette point deletion before 8k; one cross-traversal
   3D-persistence filter is the next small gate
+
+Stage H3 Level 9U
+→ split the accepted MTGS loop into an authoritative simulator/video App and
+  a native keyboard/display App for two-computer LAN use
+→ reused the TbV cockpit hierarchy with a calibrated 150° MTGS three-camera
+  panorama and a truthful route/vehicle 3D inset
+→ added AUTO/REMOTE/reset/estop control, versioned WebSocket telemetry, a
+  250 ms stale-control brake, and NVENC H.264 over SRT
+→ the real-checkpoint localhost loop delivered all 120 telemetry messages and
+  97 complete latest video frames; real two-computer LAN latency remains open
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -558,6 +568,29 @@ heading fixed. `continuous-drive` then renders the accepted 12 m/s,
 adapter. `autodrive` closes the loop through a simulated driver, actual vehicle
 dynamics, support checks, and the MTGS renderer. None is a physical-human
 keyboard trial.
+
+For the two-App MTGS LAN cockpit, start the driver computer first, then point
+the simulator host at its LAN address:
+
+```bash
+# your computer
+python apps/mtgs_remote_driver.py \
+  --server ws://SHIDI_IP:18765 \
+  --video-listen \
+  'srt://0.0.0.0:19001?mode=listener&latency=80&transtype=live'
+
+# Shidi computer
+MTGS_REMOTE_CLIENT_HOST=YOUR_IP \
+MTGS_REMOTE_CONTROL_PORT=18765 \
+MTGS_REMOTE_VIDEO_PORT=19001 \
+scripts/run_stage_h3_mtgs_remote.sh server
+```
+
+The simulator remains the only owner of vehicle/world state. Its main view is
+a calibrated 150-degree `CAM_L0/F0/R0` panorama; the top-right 3D panel is
+route geometry plus the kinematic vehicle, not synthetic overhead RGB. See
+`docs/mtgs_remote_driving_apps.md` for setup, controls, ports, and the exact
+validation boundary.
 
 For the true world-pose backend and current corridor probe, without retraining:
 
@@ -744,7 +777,11 @@ remains the cheap restricted-route baseline. The published MTGS checkpoint is
 no longer merely an environment fallback: it loads on the 24 GB host, keeps
 the road readable through the +/-5 m grid, passes a 72 m prescribed-path smoke,
 and now passes a vehicle-driven simulated-driver loop at 11.99 m/s with
-+2.54/-2.67 m excursions, recovery, and endpoint braking.
++2.54/-2.67 m excursions, recovery, and endpoint braking. It now also has a
+two-App LAN boundary: a 1280x544, 150-degree three-camera simulator stream and
+the native display/control client's headless path passed a real-checkpoint
+localhost SRT plus WebSocket loop. This is not yet a real two-computer or
+desktop-window result.
 
 The long-route data and static-background seam now pass on one adjacent pair
 of the genuine 610.07 m repeated TbV route. Tiles 2/3 were independently
@@ -767,6 +804,10 @@ gate. Build the approximately 180 m auto-drive only if it recovers the
 unmasked road/consistency baseline while reducing false obstacles; otherwise
 pivot the long-route renderer/data choice toward actor-aware reconstruction.
 Do not train the other five tiles or claim 610 m driving yet.
+In parallel, the immediate application gate is only one five-minute Shidi-to-
+operator LAN run of the completed two-App MTGS path, including AUTO-to-REMOTE
+takeover, reset, estop, and reconnect. Do not add browser polish or a third
+relay service before that run.
 The six released MTGS blocks remain geographically separate and only 57-105 m
 long; do not loop the current block or concatenate unrelated blocks to claim a
 long route. Dynamic time, collision, wide lateral support, and responsive
@@ -820,6 +861,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_mtgs_autodrive.md` records the actual simulated-driver
   control loop, vehicle dynamics, endpoint braking, frame evidence, and
   remaining long-route data/tile gate.
+- `experiments/stage_h3_mtgs_remote_apps.md` records the two-App boundary,
+  calibrated 150-degree cockpit, watchdog, GPU smoke, and real-checkpoint
+  localhost SRT/WebSocket loop.
 - `experiments/stage_h3_tbv_long_route_tile_audit.md` records the 610 m
   repeated route, seven-tile contract, source-image review, exact payload plan,
   and selected adjacent-pair reconstruction gate.

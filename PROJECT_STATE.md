@@ -1124,6 +1124,37 @@ masks and pivot the long-route renderer/data choice toward actor-aware
 reconstruction. Exact evidence is in
 `experiments/stage_h3_tbv_rgb_lidar_mask_pilot.md`.
 
+### Stage H3 Level 9U — MTGS two-App remote cockpit
+
+Completed locally on 2026-07-26 without training:
+
+- split the MTGS closed loop into an authoritative simulator/video App for the
+  RTX host and a native keyboard/display App for the operator computer;
+- retained the TbV cockpit hierarchy while replacing its fixed visual bowl
+  with a labelled, geometry-bearing route/corridor/kinematic-car inset;
+- selected nearest-time `CAM_L0/F0/R0` cameras (normalized gaps below 0.001),
+  applied one rigid requested-pose delta, and composed a calibrated 150-degree
+  panorama;
+- achieved 100.0% projection coverage at 1280x496 plus a 48-pixel status bar;
+  the 183-frame result measured 22.16/27.80 ms three-camera render p50/p95 and
+  20.32/20.97 ms CPU composition p50/p95 on the RTX 4090 D host;
+- added versioned WebSocket control/telemetry, AUTO and REMOTE modes, reset,
+  latched estop, latest-sequence handling, and a 250 ms stale-control brake;
+- encoded the cockpit with H.264 NVENC over SRT and decoded it in the native
+  client through FFmpeg;
+- passed a real-checkpoint localhost two-process loop: 120/120 telemetry
+  messages and 97 complete latest video frames reached the client; a separate
+  asserted run observed both AUTO and REMOTE plus applied W+A steering;
+- preserved failed attempts showing the existing 8765 port conflict and the
+  initially insufficient video-probe/startup timing instead of hiding them.
+
+This passes the two-program software and localhost transport boundary. It does
+not pass a physical two-computer LAN run, measured input/display latency,
+the desktop Tk window (the project host is a display-less TTY), Internet
+exposure, dynamic time, collision truth, or a long route. Exact evidence and
+commands are in `experiments/stage_h3_mtgs_remote_apps.md` and
+`docs/mtgs_remote_driving_apps.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -1201,13 +1232,16 @@ released multi-traversal Singapore road block
 → an actual-route, 15 m/s-cap control/support adapter
 → a simulated driver commanding the vehicle model at up to 11.99 m/s
 → 183 vehicle-driven frames with left/right recovery and endpoint braking
+→ a 150-degree CAM_L0/F0/R0 cockpit plus route/vehicle 3D support view
+→ separate native driver and authoritative simulator Apps over SRT/WebSocket
 ```
 
-This path is deliberately not connected to live human controls. The world-pose
-grid, prescribed-path video, and simulated-driver loop remove the prior
-environment, 24 GB inference, high-speed spatial-continuity, and first
-control/render integration uncertainties, but do not prove trustworthy dynamic
-actor motion or a long route.
+This path now accepts live remote human controls, although only its localhost
+two-process transport has been tested. The world-pose grid, prescribed-path
+video, simulated-driver loop, and remote-App smoke remove the prior
+environment, 24 GB inference, high-speed spatial-continuity, first
+control/render, and basic transport uncertainties. They do not prove a real
+two-computer operator loop, trustworthy dynamic actor motion, or a long route.
 
 This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint. The logged browser loop now
@@ -1329,9 +1363,10 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
   `tiny-cuda-nn` extension reports sm86 on the sm89 GPU, which is accepted for
   the gate but may leave performance on the table.
 - The MTGS closed loop still holds scene time fixed, uses only the front
-  camera, and follows one 84.25 m travel-3 route. It proves simulated control
-  and spatial continuity near 12 m/s, not long-route coverage, dynamic-time
-  truth, surround quality, or physical-human control.
+  three-camera sector, and follows one 84.25 m travel-3 route. It proves
+  simulated control, a 150-degree forward cockpit, and localhost remote-App
+  continuity near 12 m/s, not long-route coverage, dynamic-time truth, full
+  surround quality, or a real two-computer operator trial.
 - The selected MTGS block contains substantial annotated traffic. Its dynamic
   reconstruction may be an advantage over static TbV, but false obstacles or
   actor ghosts remain a driving rejection condition.
@@ -1346,7 +1381,9 @@ seven 100 m tiles with 20 m overlaps. Tiles 2 and 3 have exact downloaded data,
 independent 2k checkpoints, exact-resumed 8k checkpoints, a five-pose overlap
 comparison, and a 12 m/s continuous overlap render.
 The prescribed-path smoke, control/support adapter, and simulated-driver MTGS
-render loop remain complete for the released 84 m Singapore block. TbV Miami
+render loop remain complete for the released 84 m Singapore block. The MTGS
+path now also has two separable LAN applications and a passed localhost
+SRT/WebSocket loop. TbV Miami
 `OCa... + QMn...` remains the cheap restricted branch regression, and PandaSet
 scene-040 remains fixed world-coordinate regression evidence.
 
@@ -1380,6 +1417,13 @@ long-route renderer/data choice toward actor-aware reconstruction. Do not
 train tiles 0/1/4/5/6 or claim the 610 m route before that two-tile drive
 passes. Keep dynamic time, collision work, wider-lateral acceptance, and
 browser presentation outside this gate.
+
+The separate immediate application action is narrower: run the completed MTGS
+driver App on the operator computer and the simulator App on Shidi for five
+minutes over the real LAN. Exercise AUTO-to-REMOTE takeover, W/S/A/D, reset,
+latched estop, disconnect, and reconnect. Record firewall/port facts and
+received video/telemetry counts. Do not add browser control, a cloud relay, or
+WebRTC before this two-machine SRT/WebSocket gate.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:

@@ -9,6 +9,21 @@ The scripts now cover five workflows:
 - Stage H3 isolated SplatAD environment preparation, PandaSet inspection,
   100-step smoke training, and checkpoint rendering.
 
+The MTGS remote-driving pair has one host launcher:
+
+```bash
+scripts/run_stage_h3_mtgs_remote.sh paths
+MTGS_REMOTE_CLIENT_HOST=YOUR_IP \
+MTGS_REMOTE_CONTROL_PORT=18765 \
+MTGS_REMOTE_VIDEO_PORT=19001 \
+scripts/run_stage_h3_mtgs_remote.sh server
+```
+
+Start `apps/mtgs_remote_driver.py` on the operator computer first. The launcher
+must enter the pinned MTGS source directory because the official road-block
+config uses a relative data root. Full two-machine setup is in
+`docs/mtgs_remote_driving_apps.md`.
+
 ## Stage H3
 
 Before extracting another sequence, scan the existing verified PandaSet ZIP

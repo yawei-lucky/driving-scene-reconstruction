@@ -42,6 +42,9 @@ Recorded experiments:
 - `stage_h3_mtgs_published_block_probe.md`: trajectory audit of all six MTGS
   releases, selected Singapore gentle curve, checkpoint evidence, and the
   isolated load-only gate.
+- `stage_h3_mtgs_remote_apps.md`: authoritative simulator and native driver
+  Apps, calibrated 150-degree cockpit, stale-control safety, GPU smoke, and
+  real-checkpoint localhost SRT/WebSocket loop.
 - `stage_h3_tbv_long_route_tile_audit.md`: 610 m repeated TbV route, seven
   overlapping reconstruction tiles, source-image review, and the selected
   adjacent-pair smoke gate.
