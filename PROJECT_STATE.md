@@ -1076,10 +1076,53 @@ Completed on 2026-07-26 in the accepted H3 SplatAD environment:
   unmasked LiDAR traffic points remained.
 
 The pilot supports suppressing transient traffic but rejects image-only masks
-and stops before 8,000 steps. The next bounded gate must also exclude
-synchronized LiDAR points projected into those masks, then repeat only the
-2,000-step pair comparison. Exact evidence is in
+and stops before 8,000 steps. At that point, its bounded follow-up was to
+exclude synchronized LiDAR points projected into those masks and repeat only
+the 2,000-step pair comparison. Exact image-only evidence is in
 `experiments/stage_h3_tbv_transient_mask_pilot.md`.
+
+### Stage H3 Level 9T — TbV RGB + projected-LiDAR mask pilot
+
+Completed on 2026-07-26 in the accepted H3 SplatAD environment:
+
+- added deterministic nearest-camera matching with an explicit 50 ms bound,
+  AV2 motion-compensated ego-to-image projection, and exclusion of each LiDAR
+  return landing on a zero-valued pixel in any of the seven camera masks;
+- rejected and preserved an initial sparse audit that inherited AV2's hidden
+  25 ms convenience-lookup gate; the corrected tile-2 audit used all seven
+  cameras for all 197 frames and passed its projection plumbing gates;
+- removed 1,488,573 of 19,431,663 tile-2 returns (7.66%) and 1,504,698 of
+  15,987,841 tile-3 returns (9.41%), with 100.00%/99.65% camera-frame
+  coverage and maximum image/LiDAR deltas of 48.129/47.967 ms;
+- trained independent joint RGB+LiDAR-mask tile-2/tile-3 checkpoints through
+  step 1,999 with no numerical failure;
+- completed the same five matched observed poses and the 32-frame, 18.75 m,
+  12 m/s continuous-overlap probe, including non-black `-1/0/+1 m` views;
+- measured matched-pose tile-2/tile-3 PSNR p50 of 22.524/21.999 dB and
+  cross-tile RGB MAE p50 of 13.769 / 255. The unmasked and image-only values
+  were 9.835 and 11.880 / 255;
+- measured continuous cross-model RGB MAE p50 of 13.582 / 255, hard-switch
+  delta 14.305 / 255, and blended same-frame delta 5.094 / 255. All are worse
+  than or effectively no better than the corresponding unmasked seam;
+- manually retained readable road, lanes, buildings, and suppressed vehicles,
+  but observed a stronger reddish/brown central smear and softer tile-2
+  appearance.
+
+The direct 2D-silhouette projection policy is therefore rejected before 8,000
+steps and before the approximately 180 m drive. This is a quality failure, not
+an environment or projection-plumbing failure. Broad silhouettes likely
+discard static returns behind traffic regions while the masked RGB pixels
+provide no replacement appearance supervision; that mechanism is an
+inference, not a separately isolated causal measurement.
+
+The next bounded treatment is one cross-traversal 3D-persistence filter:
+transform both visits to the common city frame, retain points supported within
+a small radius or voxel by the other visit, and treat non-recurrent points as
+transient candidates. If that 2,000-step pair does not recover unmasked road
+sharpness/consistency while reducing false obstacles, stop refining static TbV
+masks and pivot the long-route renderer/data choice toward actor-aware
+reconstruction. Exact evidence is in
+`experiments/stage_h3_tbv_rgb_lidar_mask_pilot.md`.
 
 ## 3. What The System Can Do Now
 
@@ -1319,19 +1362,24 @@ UniSim are not integrated into the common simulator; MTGS now has the isolated
 inference probe, fixed-time videos, standalone support adapter, and local
 experimental simulated control/render loop described above.
 
-The first minimal transient treatment is now measured. Image-space masks
-remove visible vehicles and the strongest central false-obstacle residue, but
-the 2,000-step pair loses road sharpness and cross-tile consistency because
-traffic LiDAR points remain. Do not resume those masked checkpoints to 8,000
-steps. The next action remains only this pair: exclude synchronized LiDAR
-points whose projections fall inside the existing masks, train tiles 2 and 3
-to 2,000 steps, and repeat the same five-pose and 18.75 m transition probes.
-It must retain the obstacle reduction while recovering the unmasked 2,000-step
-road sharpness and cross-tile error. If it passes, build the approximately
-180 m tile-2/tile-3 auto-drive with both checkpoints resident and a bounded
-overlap transition. Do not train tiles 0/1/4/5/6 or claim the 610 m route
-before that two-tile drive passes. Keep dynamic time, collision work,
-wider-lateral acceptance, and browser presentation outside this gate.
+Both minimal transient treatments are now measured. Image-space masks remove
+visible vehicle bodies but reduce road sharpness and cross-tile consistency.
+Directly projecting those masks onto synchronized LiDAR removes 7.66%/9.41%
+of tile-2/3 returns yet worsens matched-pose cross-tile RGB MAE to
+13.769 / 255, versus 9.835 unmasked and 11.880 with image masks alone. Do not
+resume either masked pair to 8,000 steps.
+
+The next action remains only this tile pair: build a cross-traversal
+city-frame persistence filter, retain points supported by both visits within a
+small radius or voxel, train tiles 2 and 3 to 2,000 steps, and repeat the same
+five-pose and 18.75 m transition probes. It must retain obstacle reduction
+while recovering the unmasked road sharpness and cross-tile error. If it
+passes, build the approximately 180 m tile-2/tile-3 auto-drive with both
+checkpoints resident and a bounded overlap transition. If it fails, pivot the
+long-route renderer/data choice toward actor-aware reconstruction. Do not
+train tiles 0/1/4/5/6 or claim the 610 m route before that two-tile drive
+passes. Keep dynamic time, collision work, wider-lateral acceptance, and
+browser presentation outside this gate.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -1353,8 +1401,9 @@ plan. The short version is:
 8. retain the successful isolated MTGS checkpoint, +/-5 m pose grid, 12 m/s
    prescribed-path video, minimal adapter, and simulated-driver render loop;
    retain the selected TbV pair's completed 8k static-background seam and the
-   rejected image-only 2k mask pilot; exclude matching LiDAR traffic points
-   before the approximately 180 m two-tile auto-drive;
+   rejected image-only and direct projected-LiDAR 2k mask pilots; try one
+   cross-traversal 3D-persistence gate before the approximately 180 m
+   two-tile auto-drive;
 9. keep the implemented provisional scene-040 world browser and operator trial
    as regression/acceptance work rather than coupling them to this new scene;
 10. return dynamic actors to the main line when they obscure the road, create a
@@ -1366,7 +1415,8 @@ In this plan, camera images remain the source of visual appearance. LiDAR
 anchors depth, metric scale, and ground geometry; fused ego pose/IMU anchors
 time-varying sensor placement and gravity; 3D cuboids drive the initial actor
 trajectories. Point-cloud semantics are supplemental and do not substitute for
-image masks.
+image masks. Cross-visit persistence is the next static/transient cue; a
+single-camera silhouette is not sufficient evidence to delete 3D geometry.
 
 ### H3-0A environment result
 

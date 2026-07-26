@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import warnings
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Literal, Tuple, Type
@@ -26,6 +27,11 @@ from nerfstudio.data.dataparsers.ad_dataparser import (
     OPENCV_TO_NERFSTUDIO,
     ADDataParser,
     ADDataParserConfig,
+)
+
+from stage_h3_tbv_lidar_masking import (
+    closest_timestamp_index,
+    projected_mask_exclusion,
 )
 
 
@@ -88,9 +94,20 @@ class TbVDataParserConfig(ADDataParserConfig):
     allow_per_point_times: bool = False
     min_lidar_dist: Tuple[float, float, float] = (1.0, 2.0, 2.0)
     mask_root: Path | None = None
+    mask_lidar_points: bool = False
+    lidar_mask_max_camera_delta_ms: float = 50.0
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        if self.mask_lidar_points and self.mask_root is None:
+            raise ValueError("mask_lidar_points requires mask_root")
+        if (
+            not math.isfinite(self.lidar_mask_max_camera_delta_ms)
+            or self.lidar_mask_max_camera_delta_ms <= 0.0
+        ):
+            raise ValueError(
+                "lidar_mask_max_camera_delta_ms must be positive and finite"
+            )
         if len(self.sequences) != len(self.window_start_seconds):
             raise ValueError(
                 "sequences and window_start_seconds must have equal length"
@@ -235,7 +252,40 @@ class TbV(ADDataParser):
     def _read_lidars(
         self, lidars: Lidars, filepaths: List[Path]
     ) -> List[torch.Tensor]:
+        from PIL import Image
+
         point_clouds = []
+        input_points = 0
+        removed_points = 0
+        frames_with_removals = 0
+        camera_mask_hits: Counter[str] = Counter()
+        camera_images_used: Counter[str] = Counter()
+        camera_images_missing: Counter[str] = Counter()
+        camera_delta_ms: list[float] = []
+        data_root = self.config.data.expanduser().resolve()
+        mask_root = (
+            self.config.mask_root.expanduser().resolve()
+            if self.config.mask_root is not None
+            else None
+        )
+        camera_paths: dict[tuple[str, str], tuple[Path, ...]] = {}
+        camera_timestamps: dict[tuple[str, str], tuple[int, ...]] = {}
+        if self.config.mask_lidar_points:
+            for sequence in self.config.sequences:
+                for camera_name in self._camera_names():
+                    key = (sequence, camera_name)
+                    paths = tuple(
+                        self.av2.get_ordered_log_cam_fpaths(
+                            sequence, camera_name
+                        )
+                    )
+                    camera_paths[key] = paths
+                    camera_timestamps[key] = tuple(
+                        int(camera_path.stem) for camera_path in paths
+                    )
+        max_delta_ns = round(
+            self.config.lidar_mask_max_camera_delta_ms * 1e6
+        )
         for path in filepaths:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", FutureWarning)
@@ -246,14 +296,116 @@ class TbV(ADDataParser):
                 / MAX_REFLECTANCE_VALUE
             )
             relative_time = np.zeros(len(frame), dtype=np.float32)
-            point_clouds.append(
-                torch.from_numpy(
-                    np.column_stack((xyz, intensity, relative_time)).astype(
-                        np.float32, copy=False
+            point_cloud = np.column_stack(
+                (xyz, intensity, relative_time)
+            ).astype(np.float32, copy=False)
+            input_points += len(point_cloud)
+            if self.config.mask_lidar_points:
+                assert mask_root is not None
+                sequence = path.parents[2].name
+                lidar_timestamp_ns = int(path.stem)
+                excluded = np.zeros(len(point_cloud), dtype=bool)
+                for camera_name in self._camera_names():
+                    key = (sequence, camera_name)
+                    camera_index = closest_timestamp_index(
+                        camera_timestamps[key],
+                        lidar_timestamp_ns,
+                        max_delta_ns,
                     )
-                )
-            )
+                    if camera_index is None:
+                        camera_images_missing[camera_name] += 1
+                        continue
+                    image_path = camera_paths[key][camera_index]
+                    mask_path = (
+                        mask_root
+                        / image_path.resolve()
+                        .relative_to(data_root)
+                        .with_suffix(".png")
+                    )
+                    if not mask_path.is_file():
+                        raise FileNotFoundError(
+                            f"TbV LiDAR projection mask is missing: {mask_path}"
+                        )
+                    with Image.open(mask_path) as mask_image:
+                        valid_pixel_mask = np.asarray(
+                            mask_image.convert("L")
+                        )
+                    camera_timestamp_ns = int(image_path.stem)
+                    camera_delta_ms.append(
+                        abs(camera_timestamp_ns - lidar_timestamp_ns) / 1e6
+                    )
+                    image_points, _, projection_valid = (
+                        self.av2.project_ego_to_img_motion_compensated(
+                            points_lidar_time=xyz,
+                            cam_name=camera_name,
+                            cam_timestamp_ns=camera_timestamp_ns,
+                            lidar_timestamp_ns=lidar_timestamp_ns,
+                            log_id=sequence,
+                        )
+                    )
+                    camera_excluded = projected_mask_exclusion(
+                        image_points,
+                        projection_valid,
+                        valid_pixel_mask,
+                    )
+                    excluded |= camera_excluded
+                    camera_images_used[camera_name] += 1
+                    camera_mask_hits[camera_name] += int(
+                        camera_excluded.sum()
+                    )
+                removed = int(excluded.sum())
+                if removed:
+                    frames_with_removals += 1
+                removed_points += removed
+                point_cloud = point_cloud[~excluded]
+            point_clouds.append(torch.from_numpy(point_cloud))
         lidars.lidar_to_worlds = lidars.lidar_to_worlds.float()
+        self._lidar_mask_filter_stats = {
+            "enabled": self.config.mask_lidar_points,
+            "checkpoint_trained_with_filter": bool(
+                self.config.mask_lidar_points
+                or getattr(
+                    self.config,
+                    "_checkpoint_trained_with_lidar_mask_filter",
+                    False,
+                )
+            ),
+            "evaluation_filter_skipped": bool(
+                not self.config.mask_lidar_points
+                and getattr(
+                    self.config,
+                    "_checkpoint_trained_with_lidar_mask_filter",
+                    False,
+                )
+            ),
+            "input_frame_count": len(filepaths),
+            "input_point_count": input_points,
+            "removed_point_count": removed_points,
+            "retained_point_count": input_points - removed_points,
+            "removed_point_fraction": (
+                removed_points / input_points if input_points else 0.0
+            ),
+            "frames_with_removals": frames_with_removals,
+            "camera_images_used": dict(sorted(camera_images_used.items())),
+            "camera_images_missing": dict(
+                sorted(camera_images_missing.items())
+            ),
+            "camera_mask_hits": dict(sorted(camera_mask_hits.items())),
+            "camera_projection_coverage_fraction": (
+                sum(camera_images_used.values())
+                / (len(filepaths) * len(self._camera_names()))
+                if filepaths
+                else 0.0
+            ),
+            "max_camera_delta_ms": max(camera_delta_ms, default=0.0),
+            "configured_max_camera_delta_ms": (
+                self.config.lidar_mask_max_camera_delta_ms
+            ),
+            "policy": (
+                "exclude a return if any closest synchronized camera "
+                "projects it onto a zero-valued traffic-mask pixel"
+            ),
+        }
         return point_clouds
 
     def _get_actor_trajectories(self) -> List[Dict]:
@@ -282,6 +434,17 @@ class TbV(ADDataParser):
             raise FileNotFoundError(f"TbV log directories not found: {sorted(missing)}")
         outputs = super()._generate_dataparser_outputs(split=split)
         outputs.metadata["sensor_idx_to_name"] = self._sensor_idx_to_name()
+        outputs.metadata["lidar_mask_filter"] = dict(
+            self._lidar_mask_filter_stats
+        )
+        outputs.metadata["lidar_mask_filter"]["output_split"] = split
+        outputs.metadata["lidar_mask_filter"]["output_frame_count"] = len(
+            outputs.metadata["point_clouds"]
+        )
+        outputs.metadata["lidar_mask_filter"]["output_point_count"] = sum(
+            len(point_cloud)
+            for point_cloud in outputs.metadata["point_clouds"]
+        )
         if self.config.mask_root is not None:
             data_root = self.config.data.expanduser().resolve()
             mask_root = self.config.mask_root.expanduser().resolve()

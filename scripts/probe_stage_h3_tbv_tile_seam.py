@@ -205,6 +205,15 @@ def render_tile(
                 datamanager.eval_dataset,
             )
         ),
+        "lidar_mask_filters": {
+            split: dataset._dataparser_outputs.metadata.get(
+                "lidar_mask_filter", {"enabled": False}
+            )
+            for split, dataset in (
+                ("train", datamanager.train_dataset),
+                ("eval", datamanager.eval_dataset),
+            )
+        },
     }
     del pipeline, datamanager, records
     gc.collect()
@@ -364,6 +373,16 @@ def main() -> None:
             "Only the shared reference traversal front camera is rendered.",
             "No counterfactual lateral pose or checkpoint switching is tested.",
             (
+                "Image-space masks and synchronized projected LiDAR return "
+                "filtering are present, but these remain detector exclusions "
+                "rather than actor tracks."
+                if all(
+                    tile["lidar_mask_filters"]["train"].get(
+                        "checkpoint_trained_with_filter", False
+                    )
+                    for tile in (tile_2, tile_3)
+                )
+                else
                 "Image-space training masks are present, but actors and "
                 "LiDAR traffic points are not decomposed."
                 if (

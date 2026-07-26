@@ -100,6 +100,19 @@ def frame_count_for_speed(
     return max(round(path_length_meters / speed_mps * fps) + 1, 2)
 
 
+def streamline_tbv_probe_config(config: Any) -> Any:
+    """Avoid repeating training-only point filtering during RGB evaluation."""
+
+    from nerfstudio.scripts.render import streamline_ad_config
+
+    config = streamline_ad_config(config)
+    dataparser = config.pipeline.datamanager.dataparser
+    if getattr(dataparser, "mask_lidar_points", False):
+        dataparser._checkpoint_trained_with_lidar_mask_filter = True
+        dataparser.mask_lidar_points = False
+    return config
+
+
 def _source_records(datamanager: Any) -> dict[int, Any]:
     records: dict[int, Any] = {}
     for dataset in (datamanager.train_dataset, datamanager.eval_dataset):
@@ -214,14 +227,13 @@ def render_tile(
 ) -> dict[str, Any]:
     import numpy as np
     import torch
-    from nerfstudio.scripts.render import streamline_ad_config
     from nerfstudio.utils.eval_utils import eval_setup
     from PIL import Image
 
     _, pipeline, checkpoint_path, checkpoint_step = eval_setup(
         config_path,
         test_mode="test",
-        update_config_callback=streamline_ad_config,
+        update_config_callback=streamline_tbv_probe_config,
     )
     pipeline.model.eval()
     records = _source_records(pipeline.datamanager)
@@ -348,6 +360,15 @@ def render_tile(
                 pipeline.datamanager.eval_dataset,
             )
         ),
+        "lidar_mask_filters": {
+            split: dataset._dataparser_outputs.metadata.get(
+                "lidar_mask_filter", {"enabled": False}
+            )
+            for split, dataset in (
+                ("train", pipeline.datamanager.train_dataset),
+                ("eval", pipeline.datamanager.eval_dataset),
+            )
+        },
     }
     del pipeline, records
     gc.collect()
@@ -736,6 +757,16 @@ def main() -> None:
             "The two checkpoints are loaded sequentially, not streamed live.",
             "Pixel blending can hide a cut but can also create double images.",
             (
+                "Image-space masks and synchronized projected LiDAR return "
+                "filtering are present, but these remain detector exclusions "
+                "rather than actor tracks."
+                if all(
+                    tile["lidar_mask_filters"]["train"].get(
+                        "checkpoint_trained_with_filter", False
+                    )
+                    for tile in (tile_2, tile_3)
+                )
+                else
                 "Image-space training masks are present, but actors and "
                 "LiDAR traffic points are not decomposed."
                 if (

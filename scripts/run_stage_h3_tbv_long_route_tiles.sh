@@ -16,6 +16,9 @@ STATIC_ARTIFACT_ROOT="${H3_TBV_LONG_STATIC_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/t
 STATIC_CONTINUOUS_ROOT="${H3_TBV_LONG_STATIC_CONTINUOUS_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_continuous_8000_20260725}"
 MASKED_ARTIFACT_ROOT="${H3_TBV_LONG_MASKED_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_seam_masked_2000_20260726}"
 MASKED_CONTINUOUS_ROOT="${H3_TBV_LONG_MASKED_CONTINUOUS_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_continuous_masked_2000_20260726}"
+JOINT_MASK_AUDIT_ROOT="${H3_TBV_LONG_JOINT_MASK_AUDIT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_rgb_lidar_mask_audit_20260726}"
+JOINT_MASKED_ARTIFACT_ROOT="${H3_TBV_LONG_JOINT_MASKED_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_seam_rgb_lidar_masked_2000_20260726}"
+JOINT_MASKED_CONTINUOUS_ROOT="${H3_TBV_LONG_JOINT_MASKED_CONTINUOUS_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_continuous_rgb_lidar_masked_2000_20260726}"
 PYTHON="${H3_ENV}/bin/python"
 
 REFERENCE="V17LgyVPyrd2yjWS4oEuipUBJQN5X0wZ__Spring_2020"
@@ -74,6 +77,15 @@ TILE2_MASKED_CONFIG="${TILE2_MASKED_RUN}/config.yml"
 TILE3_MASKED_CONFIG="${TILE3_MASKED_RUN}/config.yml"
 TILE2_MASKED_CHECKPOINT="${TILE2_MASKED_RUN}/nerfstudio_models/step-000001999.ckpt"
 TILE3_MASKED_CHECKPOINT="${TILE3_MASKED_RUN}/nerfstudio_models/step-000001999.ckpt"
+JOINT_MASKED_TIMESTAMP="2026-07-26_rgb_lidar_masked_2000step"
+TILE2_JOINT_MASKED_EXPERIMENT="tbv_long_route_tile_2_rgb_lidar_masked_2000"
+TILE3_JOINT_MASKED_EXPERIMENT="tbv_long_route_tile_3_rgb_lidar_masked_2000"
+TILE2_JOINT_MASKED_RUN="${TRAIN_ROOT}/${TILE2_JOINT_MASKED_EXPERIMENT}/splatad/${JOINT_MASKED_TIMESTAMP}"
+TILE3_JOINT_MASKED_RUN="${TRAIN_ROOT}/${TILE3_JOINT_MASKED_EXPERIMENT}/splatad/${JOINT_MASKED_TIMESTAMP}"
+TILE2_JOINT_MASKED_CONFIG="${TILE2_JOINT_MASKED_RUN}/config.yml"
+TILE3_JOINT_MASKED_CONFIG="${TILE3_JOINT_MASKED_RUN}/config.yml"
+TILE2_JOINT_MASKED_CHECKPOINT="${TILE2_JOINT_MASKED_RUN}/nerfstudio_models/step-000001999.ckpt"
+TILE3_JOINT_MASKED_CHECKPOINT="${TILE3_JOINT_MASKED_RUN}/nerfstudio_models/step-000001999.ckpt"
 
 export PYTHONPATH="${REPO_ROOT}/scripts:${H3_CODE}:${REPO_ROOT}/src:${PYTHONPATH:-}"
 export CUDA_HOME="$H3_ENV"
@@ -147,6 +159,8 @@ train_masked_tile() {
   local reference_end="$5"
   local repeat_start="$6"
   local repeat_end="$7"
+  local timestamp="${8:-$MASKED_TIMESTAMP}"
+  local mask_lidar_points="${9:-0}"
   if [[ -f "$checkpoint" && "${H3_ALLOW_RETRAIN:-0}" != "1" ]]; then
     echo "PASS: reusing masked tile ${tile} checkpoint: $checkpoint"
     return
@@ -155,12 +169,17 @@ train_masked_tile() {
     echo "vehicle masks are incomplete: $MASK_ROOT" >&2
     exit 1
   fi
+  local lidar_mask_args=()
+  if [[ "$mask_lidar_points" == "1" ]]; then
+    lidar_mask_args+=(--mask-lidar-points)
+  fi
   "$PYTHON" "$REPO_ROOT/scripts/train_stage_h3_tbv_smoke.py" \
     --data "$DATA_ROOT" \
     --mask-root "$MASK_ROOT" \
+    "${lidar_mask_args[@]}" \
     --output-dir "$TRAIN_ROOT" \
     --experiment-name "$experiment" \
-    --timestamp "$MASKED_TIMESTAMP" \
+    --timestamp "$timestamp" \
     --iterations 2000 \
     --sequence "$REFERENCE" \
     --window-start-seconds "$reference_start" \
@@ -186,6 +205,22 @@ case "$MODE" in
       --data-root "$DATA_ROOT" \
       --output-dir "$MASK_ROOT" \
       --batch-size "${H3_TBV_MASK_BATCH_SIZE:-8}"
+    ;;
+  joint-mask-audit-2)
+    if [[ ! -f "$MASK_ROOT/vehicle_mask_manifest.json" ]]; then
+      echo "vehicle masks are incomplete: $MASK_ROOT" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/audit_stage_h3_tbv_lidar_masks.py" \
+      --data "$DATA_ROOT" \
+      --mask-root "$MASK_ROOT" \
+      --output-json "$JOINT_MASK_AUDIT_ROOT/tile_2_lidar_mask_audit.json" \
+      --sequence "$REFERENCE" \
+      --window-start-seconds "$TILE2_REFERENCE_START" \
+      --window-end-seconds "$TILE2_REFERENCE_END" \
+      --sequence "$REPEAT" \
+      --window-start-seconds "$TILE2_REPEAT_START" \
+      --window-end-seconds "$TILE2_REPEAT_END"
     ;;
   smoke-2)
     train_tile 2 "$TILE2_EXPERIMENT" "$TILE2_CHECKPOINT" \
@@ -229,13 +264,27 @@ case "$MODE" in
     train_masked_tile 2 "$TILE2_MASKED_EXPERIMENT" \
       "$TILE2_MASKED_CHECKPOINT" \
       "$TILE2_REFERENCE_START" "$TILE2_REFERENCE_END" \
-      "$TILE2_REPEAT_START" "$TILE2_REPEAT_END"
+      "$TILE2_REPEAT_START" "$TILE2_REPEAT_END" "$MASKED_TIMESTAMP" 0
     ;;
   masked-3)
     train_masked_tile 3 "$TILE3_MASKED_EXPERIMENT" \
       "$TILE3_MASKED_CHECKPOINT" \
       "$TILE3_REFERENCE_START" "$TILE3_REFERENCE_END" \
-      "$TILE3_REPEAT_START" "$TILE3_REPEAT_END"
+      "$TILE3_REPEAT_START" "$TILE3_REPEAT_END" "$MASKED_TIMESTAMP" 0
+    ;;
+  joint-masked-2)
+    train_masked_tile 2 "$TILE2_JOINT_MASKED_EXPERIMENT" \
+      "$TILE2_JOINT_MASKED_CHECKPOINT" \
+      "$TILE2_REFERENCE_START" "$TILE2_REFERENCE_END" \
+      "$TILE2_REPEAT_START" "$TILE2_REPEAT_END" \
+      "$JOINT_MASKED_TIMESTAMP" 1
+    ;;
+  joint-masked-3)
+    train_masked_tile 3 "$TILE3_JOINT_MASKED_EXPERIMENT" \
+      "$TILE3_JOINT_MASKED_CHECKPOINT" \
+      "$TILE3_REFERENCE_START" "$TILE3_REFERENCE_END" \
+      "$TILE3_REPEAT_START" "$TILE3_REPEAT_END" \
+      "$JOINT_MASKED_TIMESTAMP" 1
     ;;
   seam)
     if [[ ! -f "$TILE2_CONFIG" || ! -f "$TILE2_CHECKPOINT" ||
@@ -344,6 +393,33 @@ case "$MODE" in
       --tile-3-config "$TILE3_MASKED_CONFIG" \
       --output-dir "$MASKED_CONTINUOUS_ROOT"
     ;;
+  joint-masked-seam-2000)
+    if [[ ! -f "$TILE2_JOINT_MASKED_CONFIG" ||
+          ! -f "$TILE2_JOINT_MASKED_CHECKPOINT" ||
+          ! -f "$TILE3_JOINT_MASKED_CONFIG" ||
+          ! -f "$TILE3_JOINT_MASKED_CHECKPOINT" ]]; then
+      echo "both RGB+LiDAR masked 2,000-step checkpoints are required" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_seam.py" \
+      --tile-2-config "$TILE2_JOINT_MASKED_CONFIG" \
+      --tile-3-config "$TILE3_JOINT_MASKED_CONFIG" \
+      --expected-checkpoint-step 1999 \
+      --output-dir "$JOINT_MASKED_ARTIFACT_ROOT"
+    ;;
+  joint-masked-continuous-2000)
+    if [[ ! -f "$TILE2_JOINT_MASKED_CONFIG" ||
+          ! -f "$TILE2_JOINT_MASKED_CHECKPOINT" ||
+          ! -f "$TILE3_JOINT_MASKED_CONFIG" ||
+          ! -f "$TILE3_JOINT_MASKED_CHECKPOINT" ]]; then
+      echo "both RGB+LiDAR masked 2,000-step checkpoints are required" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_continuous.py" \
+      --tile-2-config "$TILE2_JOINT_MASKED_CONFIG" \
+      --tile-3-config "$TILE3_JOINT_MASKED_CONFIG" \
+      --output-dir "$JOINT_MASKED_CONTINUOUS_ROOT"
+    ;;
   paths)
     echo "data: $DATA_ROOT"
     echo "vehicle masks: $MASK_ROOT"
@@ -375,13 +451,23 @@ case "$MODE" in
     echo "tile 3 masked checkpoint: $TILE3_MASKED_CHECKPOINT"
     echo "masked 2,000-step seam evidence: $MASKED_ARTIFACT_ROOT"
     echo "masked 2,000-step continuous evidence: $MASKED_CONTINUOUS_ROOT"
+    echo "RGB+LiDAR mask audit: $JOINT_MASK_AUDIT_ROOT"
+    echo "tile 2 RGB+LiDAR masked config: $TILE2_JOINT_MASKED_CONFIG"
+    echo "tile 2 RGB+LiDAR masked checkpoint: $TILE2_JOINT_MASKED_CHECKPOINT"
+    echo "tile 3 RGB+LiDAR masked config: $TILE3_JOINT_MASKED_CONFIG"
+    echo "tile 3 RGB+LiDAR masked checkpoint: $TILE3_JOINT_MASKED_CHECKPOINT"
+    echo "RGB+LiDAR masked seam evidence: $JOINT_MASKED_ARTIFACT_ROOT"
+    echo "RGB+LiDAR masked continuous evidence: $JOINT_MASKED_CONTINUOUS_ROOT"
     ;;
   *)
     echo "Usage: $0 MODE" >&2
-    echo "Modes: download mask-data smoke-2 smoke-3 seam pilot-2 pilot-3 seam-500" >&2
+    echo "Modes: download mask-data joint-mask-audit-2 smoke-2 smoke-3 seam" >&2
+    echo "       pilot-2 pilot-3 seam-500" >&2
     echo "       quality-2 quality-3 seam-2000 continuous-2000" >&2
     echo "       static-2 static-3 seam-8000 continuous-8000 paths" >&2
     echo "       masked-2 masked-3 masked-seam-2000 masked-continuous-2000" >&2
+    echo "       joint-masked-2 joint-masked-3 joint-masked-seam-2000" >&2
+    echo "       joint-masked-continuous-2000" >&2
     exit 2
     ;;
 esac

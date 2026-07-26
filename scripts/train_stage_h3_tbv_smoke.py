@@ -38,6 +38,8 @@ def build_config(args: argparse.Namespace):
         )
     if args.mask_root is not None:
         dataparser_kwargs["mask_root"] = args.mask_root
+    if args.mask_lidar_points:
+        dataparser_kwargs["mask_lidar_points"] = True
     config.pipeline.datamanager.dataparser = TbVDataParserConfig(
         **dataparser_kwargs
     )
@@ -72,6 +74,7 @@ def main() -> None:
     parser.add_argument("--train-split-fraction", type=float, default=0.9)
     parser.add_argument("--max-num-seed-points", type=int, default=250_000)
     parser.add_argument("--mask-root", type=Path)
+    parser.add_argument("--mask-lidar-points", action="store_true")
     parser.add_argument("--sequence", dest="sequences", action="append")
     parser.add_argument(
         "--window-start-seconds", action="append", type=float
@@ -95,6 +98,8 @@ def main() -> None:
             "--sequence, --window-start-seconds, and "
             "--window-end-seconds must be repeated equally"
         )
+    if args.mask_lidar_points and args.mask_root is None:
+        parser.error("--mask-lidar-points requires --mask-root")
     train_main(build_config(args))
 
 

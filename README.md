@@ -366,7 +366,17 @@ Stage H3 Level 9S
 → observed-pose PSNR fell by 1.00/0.43 dB and cross-tile RGB MAE rose from
   9.84 to 11.88 / 255; continuous-overlap MAE likewise rose by 15.7%
 → rejected image-only masking before 8k because removed vehicles became diffuse
-  smears; synchronized LiDAR traffic-point exclusion is the next small gate
+  smears; tested synchronized LiDAR traffic-point exclusion as the next gate
+
+Stage H3 Level 9T
+→ motion-compensated seven-camera projection removed 7.66%/9.41% of tile-2/3
+  LiDAR returns with 100.00%/99.65% camera-frame coverage
+→ trained the bounded RGB+LiDAR-mask 2k pair and completed the same five-pose
+  and 12 m/s continuous-overlap probes
+→ cross-tile RGB MAE worsened again: 13.77 / 255 at matched poses and
+  13.58 / 255 continuously, versus 9.84/9.98 for the unmasked 2k pair
+→ rejected broad 2D-silhouette point deletion before 8k; one cross-traversal
+  3D-persistence filter is the next small gate
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -744,17 +754,19 @@ shared path retains aligned road/building geometry; a 5.6 m blend reduces the
 transition-frame RGB delta from 10.83 to 4.63 / 255, and `-1/0/+1 m` views
 remain navigable.
 
-This is not yet a complete driving-scene seam. The first bounded transient
-comparison is complete: image-space masks visibly reduce vehicle bodies and
-the strongest central false-obstacle blob, but at 2k they lower matched-pose
-PSNR and raise cross-tile RGB MAE from 9.84 to 11.88 / 255. Removed vehicles
-also leave diffuse smears because TbV LiDAR traffic points remain in the static
-model. Keep the two unmasked 8k checkpoints fixed, do not continue the masked
-pair to 8k, and next exclude synchronized LiDAR points projected into the same
-traffic masks. Repeat only the 2k same-pose/continuous gate; build the
-approximately 180 m two-tile auto-drive only if obstacle reduction survives
-without the measured road/consistency regression. Do not train the other five
-tiles or claim 610 m driving yet.
+This is not yet a complete driving-scene seam. Both bounded transient
+comparisons are complete. Image-space masks reduced vehicle bodies but raised
+matched-pose cross-tile RGB MAE from 9.84 to 11.88 / 255. Projecting the same
+masks onto synchronized LiDAR removed 7.66%/9.41% of tile-2/3 returns, but
+worsened the error again to 13.77 / 255 and left a stronger central smear.
+Keep the two unmasked 8k checkpoints fixed and stop both masked pairs at 2k.
+The next and final small static-TbV treatment is cross-traversal 3D
+persistence: retain city-frame points supported by both visits and treat
+non-recurrent points as transient candidates. Repeat only this two-tile 2k
+gate. Build the approximately 180 m auto-drive only if it recovers the
+unmasked road/consistency baseline while reducing false obstacles; otherwise
+pivot the long-route renderer/data choice toward actor-aware reconstruction.
+Do not train the other five tiles or claim 610 m driving yet.
 The six released MTGS blocks remain geographically separate and only 57-105 m
 long; do not loop the current block or concatenate unrelated blocks to claim a
 long route. Dynamic time, collision, wide lateral support, and responsive
@@ -821,6 +833,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_tbv_transient_mask_pilot.md` records the 2,468-image
   traffic-mask inventory, bounded masked 2k pair, same-pose/continuous
   comparison, visible obstacle reduction, and image-only-mask rejection.
+- `experiments/stage_h3_tbv_rgb_lidar_mask_pilot.md` records the synchronized
+  seven-camera projection audit, bounded RGB+LiDAR-mask 2k pair, three-way
+  comparison, direct point-deletion rejection, and 3D-persistence next gate.
 - `experiments/stage_h3_tbv_splatad_pilot.md` records the bounded TbV download,
   multi-traversal parser, LiDAR alignment, and 100/2,000-step reload renders.
 - `experiments/stage_h3_tbv_world_pose_corridor_probe.md` records the 2k/8k

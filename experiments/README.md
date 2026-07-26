@@ -54,6 +54,10 @@ Recorded experiments:
 - `stage_h3_tbv_transient_mask_pilot.md`: bounded image-space traffic-mask
   implementation, two 2,000-step checkpoints, same-pose/continuous comparison,
   visible obstacle reduction, and rejection of image-only masking before 8k.
+- `stage_h3_tbv_rgb_lidar_mask_pilot.md`: synchronized seven-camera
+  image-guided LiDAR exclusion audit, bounded two-checkpoint comparison,
+  rejection of direct 2D-silhouette point deletion, and the cross-traversal
+  3D-persistence next gate.
 
 Stage H2 connects that H1 checkpoint to the simulator interface. Its design and
 GPU validation record live in `docs/stage_h2_reconstruction_renderer.md`.

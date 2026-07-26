@@ -2,6 +2,11 @@
 
 Date: 2026-07-26
 
+Status: the proposed projected-LiDAR follow-up has now been completed and
+rejected at 2,000 steps. See `stage_h3_tbv_rgb_lidar_mask_pilot.md`. The
+historical image-only measurements below remain unchanged; its former “next
+experiment” wording is superseded by that follow-up result.
+
 ## Question
 
 Can a minimal image-space traffic mask remove the false-obstacle residue from

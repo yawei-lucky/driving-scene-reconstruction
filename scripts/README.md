@@ -68,6 +68,11 @@ scripts/run_stage_h3_tbv_long_route_tiles.sh masked-2
 scripts/run_stage_h3_tbv_long_route_tiles.sh masked-3
 scripts/run_stage_h3_tbv_long_route_tiles.sh masked-seam-2000
 scripts/run_stage_h3_tbv_long_route_tiles.sh masked-continuous-2000
+scripts/run_stage_h3_tbv_long_route_tiles.sh joint-mask-audit-2
+scripts/run_stage_h3_tbv_long_route_tiles.sh joint-masked-2
+scripts/run_stage_h3_tbv_long_route_tiles.sh joint-masked-3
+scripts/run_stage_h3_tbv_long_route_tiles.sh joint-masked-seam-2000
+scripts/run_stage_h3_tbv_long_route_tiles.sh joint-masked-continuous-2000
 ```
 
 The 100-step pair tests integration; the bounded 500-step pair establishes
@@ -84,9 +89,17 @@ uses torchvision Mask R-CNN to write mirrored valid-pixel PNGs; the two
 masked training modes pass them through the TbV parser and align them with
 SplatAD's existing image crop. The 2,000-step seam and continuous probes report
 how many training masks were loaded. They intentionally do not resume to 8,000
-steps: the accepted pilot reduced visible vehicle residue but worsened
-cross-tile consistency, so synchronized LiDAR traffic-point exclusion is the
-next gate.
+steps: the image-only pilot reduced visible vehicle residue but worsened
+cross-tile consistency.
+
+The `joint-*` modes are the completed follow-up. They select the nearest image
+from each ring camera within 50 ms, use AV2 motion-compensated projection, and
+exclude a LiDAR return when any valid projection lands in a traffic-mask
+pixel. `joint-mask-audit-2` verifies coverage/removal before training. The
+joint 2,000-step pair removed 7.66%/9.41% of tile-2/3 returns but worsened
+matched-pose cross-tile RGB MAE to 13.77 / 255, so it is rejected before 8,000
+steps. The next experiment is cross-traversal city-frame 3D persistence, not
+more direct 2D-silhouette deletion.
 
 Prepare or verify the separate H3 environment:
 
