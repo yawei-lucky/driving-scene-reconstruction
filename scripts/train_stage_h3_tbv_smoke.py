@@ -36,9 +36,15 @@ def build_config(args: argparse.Namespace):
             window_start_seconds=tuple(args.window_start_seconds),
             window_end_seconds=tuple(args.window_end_seconds),
         )
+    if args.mask_root is not None:
+        dataparser_kwargs["mask_root"] = args.mask_root
     config.pipeline.datamanager.dataparser = TbVDataParserConfig(
         **dataparser_kwargs
     )
+    if args.mask_root is not None:
+        from stage_h3_mask_aligned_splatad import MaskAlignedSplatADModel
+
+        config.pipeline.model._target = MaskAlignedSplatADModel
     config.pipeline.model.max_steps = args.iterations
     config.pipeline.model.max_num_seed_points = args.max_num_seed_points
     return config
@@ -65,6 +71,7 @@ def main() -> None:
     parser.add_argument("--downsample-factor", type=float, default=0.25)
     parser.add_argument("--train-split-fraction", type=float, default=0.9)
     parser.add_argument("--max-num-seed-points", type=int, default=250_000)
+    parser.add_argument("--mask-root", type=Path)
     parser.add_argument("--sequence", dest="sequences", action="append")
     parser.add_argument(
         "--window-start-seconds", action="append", type=float

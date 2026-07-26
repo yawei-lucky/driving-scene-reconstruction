@@ -87,6 +87,7 @@ class TbVDataParserConfig(ADDataParserConfig):
     add_missing_points: bool = False
     allow_per_point_times: bool = False
     min_lidar_dist: Tuple[float, float, float] = (1.0, 2.0, 2.0)
+    mask_root: Path | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -281,5 +282,23 @@ class TbV(ADDataParser):
             raise FileNotFoundError(f"TbV log directories not found: {sorted(missing)}")
         outputs = super()._generate_dataparser_outputs(split=split)
         outputs.metadata["sensor_idx_to_name"] = self._sensor_idx_to_name()
+        if self.config.mask_root is not None:
+            data_root = self.config.data.expanduser().resolve()
+            mask_root = self.config.mask_root.expanduser().resolve()
+            mask_filenames = [
+                mask_root
+                / path.resolve().relative_to(data_root).with_suffix(".png")
+                for path in outputs.image_filenames
+            ]
+            missing_masks = [
+                path for path in mask_filenames if not path.is_file()
+            ]
+            if missing_masks:
+                preview = ", ".join(str(path) for path in missing_masks[:3])
+                raise FileNotFoundError(
+                    f"{len(missing_masks)} TbV masks are missing: {preview}"
+                )
+            outputs.mask_filenames = mask_filenames
+            outputs.metadata["mask_root"] = str(mask_root)
         del self.av2
         return outputs

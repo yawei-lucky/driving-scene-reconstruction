@@ -198,6 +198,13 @@ def render_tile(
         "dataparser_scale": float(
             datamanager.train_dataparser_outputs.dataparser_scale
         ),
+        "training_mask_count": sum(
+            len(dataset._dataparser_outputs.mask_filenames or ())
+            for dataset in (
+                datamanager.train_dataset,
+                datamanager.eval_dataset,
+            )
+        ),
     }
     del pipeline, datamanager, records
     gc.collect()
@@ -356,7 +363,15 @@ def main() -> None:
             ),
             "Only the shared reference traversal front camera is rendered.",
             "No counterfactual lateral pose or checkpoint switching is tested.",
-            "Vehicles are not masked or decomposed.",
+            (
+                "Image-space training masks are present, but actors and "
+                "LiDAR traffic points are not decomposed."
+                if (
+                    tile_2["training_mask_count"]
+                    and tile_3["training_mask_count"]
+                )
+                else "Vehicles are not masked or decomposed."
+            ),
         ],
     }
     report["technical_status"] = (

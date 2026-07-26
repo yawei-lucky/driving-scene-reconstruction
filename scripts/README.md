@@ -63,6 +63,11 @@ scripts/run_stage_h3_tbv_long_route_tiles.sh static-2
 scripts/run_stage_h3_tbv_long_route_tiles.sh static-3
 scripts/run_stage_h3_tbv_long_route_tiles.sh seam-8000
 scripts/run_stage_h3_tbv_long_route_tiles.sh continuous-8000
+scripts/run_stage_h3_tbv_long_route_tiles.sh mask-data
+scripts/run_stage_h3_tbv_long_route_tiles.sh masked-2
+scripts/run_stage_h3_tbv_long_route_tiles.sh masked-3
+scripts/run_stage_h3_tbv_long_route_tiles.sh masked-seam-2000
+scripts/run_stage_h3_tbv_long_route_tiles.sh masked-continuous-2000
 ```
 
 The 100-step pair tests integration; the bounded 500-step pair establishes
@@ -73,6 +78,15 @@ bounded 8,000-step comparison. The continuous probes render the real 18.75 m
 overlap at 12 m/s and 20 fps, compare hard switching with a 5.6 m blend, and
 add `-1/0/+1 m` front views. Completed checkpoints are reused unless
 `H3_ALLOW_RETRAIN=1` is set.
+
+The masked modes form a bounded static-background discriminator. `mask-data`
+uses torchvision Mask R-CNN to write mirrored valid-pixel PNGs; the two
+masked training modes pass them through the TbV parser and align them with
+SplatAD's existing image crop. The 2,000-step seam and continuous probes report
+how many training masks were loaded. They intentionally do not resume to 8,000
+steps: the accepted pilot reduced visible vehicle residue but worsened
+cross-tile consistency, so synchronized LiDAR traffic-point exclusion is the
+next gate.
 
 Prepare or verify the separate H3 environment:
 

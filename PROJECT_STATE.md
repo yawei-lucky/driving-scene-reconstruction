@@ -1049,6 +1049,38 @@ not pass credible traffic, live checkpoint residency, the approximately 180 m
 two-tile drive, or the full 610 m route. Exact evidence is in
 `experiments/stage_h3_tbv_adjacent_tile_continuous.md`.
 
+### Stage H3 Level 9S — TbV image-space transient-mask pilot
+
+Completed on 2026-07-26 in the accepted H3 SplatAD environment:
+
+- generated valid-pixel masks for all 2,468 downloaded camera images with
+  torchvision's official COCO Mask R-CNN weights, score threshold 0.60, mask
+  threshold 0.50, and 6-pixel dilation;
+- excluded person, bicycle, car, motorcycle, bus, train, and truck pixels from
+  the RGB loss. The masked pixel fraction was 3.71% p50 and 8.50% mean;
+- added optional TbV parser masks and a narrow SplatAD adapter that applies its
+  existing post-undistortion RGB crop to the mask as well;
+- preserved the first step-0 failure, which exposed that upstream crop/mask
+  shape mismatch, rather than treating it as model evidence;
+- trained only tiles 2 and 3 from scratch to step 1,999 and verified that
+  1,570/1,342 tile-specific train-plus-eval images loaded masks;
+- visibly removed several vehicle bodies and the strongest central
+  vehicle-shaped false-obstacle residue while retaining readable road, lanes,
+  buildings, and `-1/0/+1 m` views;
+- reduced observed-pose PSNR p50 from 23.527/22.774 dB to 22.532/22.344 dB and
+  worsened cross-tile RGB MAE p50 from 9.835 to 11.880 / 255;
+- rendered the same 18.75 m continuous path at 12 m/s; continuous cross-model
+  RGB MAE p50 worsened from 9.977 to 11.544 / 255, while the 5.626 m blend
+  retained an approximately unchanged transition delta of 4.947 / 255;
+- observed diffuse road-coloured smears where appearance was excluded while
+  unmasked LiDAR traffic points remained.
+
+The pilot supports suppressing transient traffic but rejects image-only masks
+and stops before 8,000 steps. The next bounded gate must also exclude
+synchronized LiDAR points projected into those masks, then repeat only the
+2,000-step pair comparison. Exact evidence is in
+`experiments/stage_h3_tbv_transient_mask_pilot.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -1287,14 +1319,19 @@ UniSim are not integrated into the common simulator; MTGS now has the isolated
 inference probe, fixed-time videos, standalone support adapter, and local
 experimental simulated control/render loop described above.
 
-The next action remains only this pair: compare a minimal vehicle/transient
-suppression or static-background treatment against the fixed 8k checkpoints
-at the same five poses and 18.75 m transition. It must remove the central
-false-obstacle risk without damaging road geometry. If it passes, build the
-approximately 180 m tile-2/tile-3 auto-drive with both checkpoints resident
-and a bounded overlap transition. Do not train tiles 0/1/4/5/6 or claim the
-610 m route before that two-tile drive passes. Keep dynamic time, collision
-work, wider-lateral acceptance, and browser presentation outside this gate.
+The first minimal transient treatment is now measured. Image-space masks
+remove visible vehicles and the strongest central false-obstacle residue, but
+the 2,000-step pair loses road sharpness and cross-tile consistency because
+traffic LiDAR points remain. Do not resume those masked checkpoints to 8,000
+steps. The next action remains only this pair: exclude synchronized LiDAR
+points whose projections fall inside the existing masks, train tiles 2 and 3
+to 2,000 steps, and repeat the same five-pose and 18.75 m transition probes.
+It must retain the obstacle reduction while recovering the unmasked 2,000-step
+road sharpness and cross-tile error. If it passes, build the approximately
+180 m tile-2/tile-3 auto-drive with both checkpoints resident and a bounded
+overlap transition. Do not train tiles 0/1/4/5/6 or claim the 610 m route
+before that two-tile drive passes. Keep dynamic time, collision work,
+wider-lateral acceptance, and browser presentation outside this gate.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:
@@ -1315,9 +1352,9 @@ plan. The short version is:
    the direct no-browser A/D/recovery trial as the +/-1 m regression gate;
 8. retain the successful isolated MTGS checkpoint, +/-5 m pose grid, 12 m/s
    prescribed-path video, minimal adapter, and simulated-driver render loop;
-   retain the selected TbV pair's completed 8k static-background seam and
-   remove its false-obstacle transient residue before the approximately 180 m
-   two-tile auto-drive;
+   retain the selected TbV pair's completed 8k static-background seam and the
+   rejected image-only 2k mask pilot; exclude matching LiDAR traffic points
+   before the approximately 180 m two-tile auto-drive;
 9. keep the implemented provisional scene-040 world browser and operator trial
    as regression/acceptance work rather than coupling them to this new scene;
 10. return dynamic actors to the main line when they obscure the road, create a

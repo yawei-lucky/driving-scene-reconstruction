@@ -341,6 +341,13 @@ def render_tile(
         "dataparser_scale": float(
             pipeline.datamanager.train_dataparser_outputs.dataparser_scale
         ),
+        "training_mask_count": sum(
+            len(dataset._dataparser_outputs.mask_filenames or ())
+            for dataset in (
+                pipeline.datamanager.train_dataset,
+                pipeline.datamanager.eval_dataset,
+            )
+        ),
     }
     del pipeline, records
     gc.collect()
@@ -728,7 +735,18 @@ def main() -> None:
             "The scene time follows the reference traversal only.",
             "The two checkpoints are loaded sequentially, not streamed live.",
             "Pixel blending can hide a cut but can also create double images.",
-            "TbV has no actor masks; traffic ghosts remain a rejection risk.",
+            (
+                "Image-space training masks are present, but actors and "
+                "LiDAR traffic points are not decomposed."
+                if (
+                    tile_2["training_mask_count"]
+                    and tile_3["training_mask_count"]
+                )
+                else (
+                    "TbV has no actor masks; traffic ghosts remain a "
+                    "rejection risk."
+                )
+            ),
             "The +/-1 m poses have no counterfactual ground-truth images.",
         ],
     }

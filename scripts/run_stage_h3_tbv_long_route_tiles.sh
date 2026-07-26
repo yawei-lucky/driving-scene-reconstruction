@@ -6,6 +6,7 @@ H3_ROOT="${H3_ROOT:-/home/yawei/stage3_external}"
 H3_ENV="${H3_ENV:-${H3_ROOT}/envs/h3_splatad}"
 H3_CODE="${H3_CODE:-${H3_ROOT}/code/neurad-studio}"
 DATA_ROOT="${H3_TBV_LONG_DATA_ROOT:-${H3_ROOT}/data/tbv_long_route_tiles_2_3}"
+MASK_ROOT="${H3_TBV_LONG_MASK_ROOT:-${H3_ROOT}/data/tbv_long_route_tiles_2_3_vehicle_masks}"
 TRAIN_ROOT="${H3_TBV_LONG_TRAIN_ROOT:-${H3_ROOT}/outputs/tbv_long_route_tiles}"
 ARTIFACT_ROOT="${H3_TBV_LONG_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_seam_20260725}"
 PILOT_ARTIFACT_ROOT="${H3_TBV_LONG_PILOT_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_seam_500_20260725}"
@@ -13,6 +14,8 @@ QUALITY_ARTIFACT_ROOT="${H3_TBV_LONG_QUALITY_ARTIFACT_ROOT:-${H3_ROOT}/artifacts
 CONTINUOUS_ARTIFACT_ROOT="${H3_TBV_LONG_CONTINUOUS_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_continuous_2000_20260725}"
 STATIC_ARTIFACT_ROOT="${H3_TBV_LONG_STATIC_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_seam_8000_20260725}"
 STATIC_CONTINUOUS_ROOT="${H3_TBV_LONG_STATIC_CONTINUOUS_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_continuous_8000_20260725}"
+MASKED_ARTIFACT_ROOT="${H3_TBV_LONG_MASKED_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_seam_masked_2000_20260726}"
+MASKED_CONTINUOUS_ROOT="${H3_TBV_LONG_MASKED_CONTINUOUS_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_continuous_masked_2000_20260726}"
 PYTHON="${H3_ENV}/bin/python"
 
 REFERENCE="V17LgyVPyrd2yjWS4oEuipUBJQN5X0wZ__Spring_2020"
@@ -62,6 +65,15 @@ TILE2_STATIC_CONFIG="${TILE2_STATIC_RUN}/config.yml"
 TILE3_STATIC_CONFIG="${TILE3_STATIC_RUN}/config.yml"
 TILE2_STATIC_CHECKPOINT="${TILE2_STATIC_RUN}/nerfstudio_models/step-000007999.ckpt"
 TILE3_STATIC_CHECKPOINT="${TILE3_STATIC_RUN}/nerfstudio_models/step-000007999.ckpt"
+MASKED_TIMESTAMP="2026-07-26_masked_2000step"
+TILE2_MASKED_EXPERIMENT="tbv_long_route_tile_2_masked_2000"
+TILE3_MASKED_EXPERIMENT="tbv_long_route_tile_3_masked_2000"
+TILE2_MASKED_RUN="${TRAIN_ROOT}/${TILE2_MASKED_EXPERIMENT}/splatad/${MASKED_TIMESTAMP}"
+TILE3_MASKED_RUN="${TRAIN_ROOT}/${TILE3_MASKED_EXPERIMENT}/splatad/${MASKED_TIMESTAMP}"
+TILE2_MASKED_CONFIG="${TILE2_MASKED_RUN}/config.yml"
+TILE3_MASKED_CONFIG="${TILE3_MASKED_RUN}/config.yml"
+TILE2_MASKED_CHECKPOINT="${TILE2_MASKED_RUN}/nerfstudio_models/step-000001999.ckpt"
+TILE3_MASKED_CHECKPOINT="${TILE3_MASKED_RUN}/nerfstudio_models/step-000001999.ckpt"
 
 export PYTHONPATH="${REPO_ROOT}/scripts:${H3_CODE}:${REPO_ROOT}/src:${PYTHONPATH:-}"
 export CUDA_HOME="$H3_ENV"
@@ -127,6 +139,37 @@ resume_tile() {
     --steps-per-eval-image 3000
 }
 
+train_masked_tile() {
+  local tile="$1"
+  local experiment="$2"
+  local checkpoint="$3"
+  local reference_start="$4"
+  local reference_end="$5"
+  local repeat_start="$6"
+  local repeat_end="$7"
+  if [[ -f "$checkpoint" && "${H3_ALLOW_RETRAIN:-0}" != "1" ]]; then
+    echo "PASS: reusing masked tile ${tile} checkpoint: $checkpoint"
+    return
+  fi
+  if [[ ! -f "$MASK_ROOT/vehicle_mask_manifest.json" ]]; then
+    echo "vehicle masks are incomplete: $MASK_ROOT" >&2
+    exit 1
+  fi
+  "$PYTHON" "$REPO_ROOT/scripts/train_stage_h3_tbv_smoke.py" \
+    --data "$DATA_ROOT" \
+    --mask-root "$MASK_ROOT" \
+    --output-dir "$TRAIN_ROOT" \
+    --experiment-name "$experiment" \
+    --timestamp "$MASKED_TIMESTAMP" \
+    --iterations 2000 \
+    --sequence "$REFERENCE" \
+    --window-start-seconds "$reference_start" \
+    --window-end-seconds "$reference_end" \
+    --sequence "$REPEAT" \
+    --window-start-seconds "$repeat_start" \
+    --window-end-seconds "$repeat_end"
+}
+
 MODE="${1:-}"
 case "$MODE" in
   download)
@@ -137,6 +180,12 @@ case "$MODE" in
       --window "$REPEAT,$TILE2_REPEAT_START,$TILE2_REPEAT_END" \
       --window "$REFERENCE,$TILE3_REFERENCE_START,$TILE3_REFERENCE_END" \
       --window "$REPEAT,$TILE3_REPEAT_START,$TILE3_REPEAT_END"
+    ;;
+  mask-data)
+    "$PYTHON" "$REPO_ROOT/scripts/generate_stage_h3_tbv_vehicle_masks.py" \
+      --data-root "$DATA_ROOT" \
+      --output-dir "$MASK_ROOT" \
+      --batch-size "${H3_TBV_MASK_BATCH_SIZE:-8}"
     ;;
   smoke-2)
     train_tile 2 "$TILE2_EXPERIMENT" "$TILE2_CHECKPOINT" \
@@ -175,6 +224,18 @@ case "$MODE" in
   static-3)
     resume_tile 3 "$TILE3_QUALITY_CONFIG" "$TILE3_QUALITY_CHECKPOINT" \
       "$TILE3_STATIC_EXPERIMENT" "$TILE3_STATIC_CHECKPOINT"
+    ;;
+  masked-2)
+    train_masked_tile 2 "$TILE2_MASKED_EXPERIMENT" \
+      "$TILE2_MASKED_CHECKPOINT" \
+      "$TILE2_REFERENCE_START" "$TILE2_REFERENCE_END" \
+      "$TILE2_REPEAT_START" "$TILE2_REPEAT_END"
+    ;;
+  masked-3)
+    train_masked_tile 3 "$TILE3_MASKED_EXPERIMENT" \
+      "$TILE3_MASKED_CHECKPOINT" \
+      "$TILE3_REFERENCE_START" "$TILE3_REFERENCE_END" \
+      "$TILE3_REPEAT_START" "$TILE3_REPEAT_END"
     ;;
   seam)
     if [[ ! -f "$TILE2_CONFIG" || ! -f "$TILE2_CHECKPOINT" ||
@@ -256,8 +317,36 @@ case "$MODE" in
       --expected-checkpoint-step 7999 \
       --output-dir "$STATIC_CONTINUOUS_ROOT"
     ;;
+  masked-seam-2000)
+    if [[ ! -f "$TILE2_MASKED_CONFIG" ||
+          ! -f "$TILE2_MASKED_CHECKPOINT" ||
+          ! -f "$TILE3_MASKED_CONFIG" ||
+          ! -f "$TILE3_MASKED_CHECKPOINT" ]]; then
+      echo "both masked 2,000-step configs/checkpoints are required" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_seam.py" \
+      --tile-2-config "$TILE2_MASKED_CONFIG" \
+      --tile-3-config "$TILE3_MASKED_CONFIG" \
+      --expected-checkpoint-step 1999 \
+      --output-dir "$MASKED_ARTIFACT_ROOT"
+    ;;
+  masked-continuous-2000)
+    if [[ ! -f "$TILE2_MASKED_CONFIG" ||
+          ! -f "$TILE2_MASKED_CHECKPOINT" ||
+          ! -f "$TILE3_MASKED_CONFIG" ||
+          ! -f "$TILE3_MASKED_CHECKPOINT" ]]; then
+      echo "both masked 2,000-step configs/checkpoints are required" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_continuous.py" \
+      --tile-2-config "$TILE2_MASKED_CONFIG" \
+      --tile-3-config "$TILE3_MASKED_CONFIG" \
+      --output-dir "$MASKED_CONTINUOUS_ROOT"
+    ;;
   paths)
     echo "data: $DATA_ROOT"
+    echo "vehicle masks: $MASK_ROOT"
     echo "tile 2 config: $TILE2_CONFIG"
     echo "tile 2 checkpoint: $TILE2_CHECKPOINT"
     echo "tile 3 config: $TILE3_CONFIG"
@@ -280,12 +369,19 @@ case "$MODE" in
     echo "tile 3 static checkpoint: $TILE3_STATIC_CHECKPOINT"
     echo "8,000-step seam evidence: $STATIC_ARTIFACT_ROOT"
     echo "8,000-step continuous evidence: $STATIC_CONTINUOUS_ROOT"
+    echo "tile 2 masked config: $TILE2_MASKED_CONFIG"
+    echo "tile 2 masked checkpoint: $TILE2_MASKED_CHECKPOINT"
+    echo "tile 3 masked config: $TILE3_MASKED_CONFIG"
+    echo "tile 3 masked checkpoint: $TILE3_MASKED_CHECKPOINT"
+    echo "masked 2,000-step seam evidence: $MASKED_ARTIFACT_ROOT"
+    echo "masked 2,000-step continuous evidence: $MASKED_CONTINUOUS_ROOT"
     ;;
   *)
     echo "Usage: $0 MODE" >&2
-    echo "Modes: download smoke-2 smoke-3 seam pilot-2 pilot-3 seam-500" >&2
+    echo "Modes: download mask-data smoke-2 smoke-3 seam pilot-2 pilot-3 seam-500" >&2
     echo "       quality-2 quality-3 seam-2000 continuous-2000" >&2
     echo "       static-2 static-3 seam-8000 continuous-8000 paths" >&2
+    echo "       masked-2 masked-3 masked-seam-2000 masked-continuous-2000" >&2
     exit 2
     ;;
 esac

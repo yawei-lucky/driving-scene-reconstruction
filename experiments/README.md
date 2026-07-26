@@ -51,6 +51,9 @@ Recorded experiments:
 - `stage_h3_tbv_adjacent_tile_continuous.md`: 2,000/8,000-step exact-pose and
   12 m/s continuous overlap evidence, `-1/0/+1 m` views, static-background seam
   pass, and unresolved transient-traffic rejection.
+- `stage_h3_tbv_transient_mask_pilot.md`: bounded image-space traffic-mask
+  implementation, two 2,000-step checkpoints, same-pose/continuous comparison,
+  visible obstacle reduction, and rejection of image-only masking before 8k.
 
 Stage H2 connects that H1 checkpoint to the simulator interface. Its design and
 GPU validation record live in `docs/stage_h2_reconstruction_renderer.md`.
