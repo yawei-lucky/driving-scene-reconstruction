@@ -11,10 +11,10 @@ CONFIG="${MTGS_RUN_ROOT}/config.yml"
 CHECKPOINT="${MTGS_RUN_ROOT}/nerfstudio_models/step-000030000.ckpt"
 ROAD_BLOCK_CONFIG="${MTGS_CODE}/nuplan_scripts/configs/mtgs_exp/${BLOCK}.yml"
 PYTHON="${MTGS_ENV}/bin/python"
-CLIENT_HOST="${MTGS_REMOTE_CLIENT_HOST:-127.0.0.1}"
 CONTROL_HOST="${MTGS_REMOTE_CONTROL_HOST:-0.0.0.0}"
 CONTROL_PORT="${MTGS_REMOTE_CONTROL_PORT:-18765}"
 VIDEO_PORT="${MTGS_REMOTE_VIDEO_PORT:-19001}"
+VIDEO_DESTINATION="${MTGS_REMOTE_VIDEO_DESTINATION:-srt://0.0.0.0:${VIDEO_PORT}?mode=listener&latency=80&transtype=live}"
 RECORD_PATH="${MTGS_REMOTE_RECORD:-${H3_ROOT}/artifacts/mtgs_remote_apps_20260726/mtgs_remote_auto_demo.mp4}"
 PPT_OUTPUT_DIR="${MTGS_REMOTE_PPT_OUTPUT_DIR:-${H3_ROOT}/artifacts/mtgs_app_control_ppt_20260727_v2}"
 
@@ -47,8 +47,7 @@ case "$MODE" in
       --road-block-config "$ROAD_BLOCK_CONFIG" \
       --control-host "$CONTROL_HOST" \
       --control-port "$CONTROL_PORT" \
-      --video-destination \
-      "srt://${CLIENT_HOST}:${VIDEO_PORT}?mode=caller&latency=80&transtype=live" \
+      --video-destination "$VIDEO_DESTINATION" \
       "${token_args[@]}"
     ;;
   record-demo)
@@ -72,9 +71,8 @@ case "$MODE" in
   paths)
     echo "simulator app: $REPO_ROOT/apps/mtgs_remote_simulator.py"
     echo "driver app: $REPO_ROOT/apps/mtgs_remote_driver.py"
-    echo "client host: $CLIENT_HOST"
     echo "control listen: ws://${CONTROL_HOST}:${CONTROL_PORT}"
-    echo "video destination: srt://${CLIENT_HOST}:${VIDEO_PORT}"
+    echo "video destination: $VIDEO_DESTINATION"
     echo "record path: $RECORD_PATH"
     echo "PPT demo output: $PPT_OUTPUT_DIR"
     ;;

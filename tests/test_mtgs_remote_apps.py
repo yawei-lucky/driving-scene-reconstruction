@@ -87,6 +87,27 @@ class RemoteAuthorityTests(unittest.TestCase):
 
 
 class DriverInputTests(unittest.TestCase):
+    def test_default_network_topology_is_driver_initiated(self) -> None:
+        with mock.patch.object(DRIVER.sys, "argv", ["mtgs_remote_driver.py"]):
+            args = DRIVER.parse_args()
+
+        self.assertIn("mode=caller", args.video_source)
+        self.assertIn("mode=listener", SERVER.DEFAULT_VIDEO_DESTINATION)
+
+    def test_old_video_listen_option_remains_a_compatibility_alias(self) -> None:
+        source = (
+            "srt://0.0.0.0:19001?"
+            "mode=listener&latency=80&transtype=live"
+        )
+        with mock.patch.object(
+            DRIVER.sys,
+            "argv",
+            ["mtgs_remote_driver.py", "--video-listen", source],
+        ):
+            args = DRIVER.parse_args()
+
+        self.assertEqual(args.video_source, source)
+
     def test_keyboard_input_is_rate_limited_and_left_positive(self) -> None:
         with mock.patch.object(
             DRIVER.time,

@@ -66,7 +66,7 @@ DEFAULT_CRUISE_SPEED_MPS = 12.0
 DEFAULT_LATERAL_AMPLITUDE_METERS = 3.0
 DEFAULT_CONTROL_PORT = 18765
 DEFAULT_VIDEO_DESTINATION = (
-    "srt://127.0.0.1:19001?mode=caller&latency=80&transtype=live"
+    "srt://0.0.0.0:19001?mode=listener&latency=80&transtype=live"
 )
 REMOTE_COCKPIT_WIDTH = 1280
 REMOTE_COCKPIT_VIEW_HEIGHT = 496
@@ -92,8 +92,9 @@ def parse_args() -> argparse.Namespace:
         "--video-destination",
         default=None,
         help=(
-            "FFmpeg output URL; for LAN use "
-            "srt://CLIENT_IP:19001?mode=caller&latency=80&transtype=live"
+            "FFmpeg output URL; when the simulator cannot reach the driver "
+            "computer, listen on "
+            "srt://0.0.0.0:19001?mode=listener&latency=80&transtype=live"
         ),
     )
     destination.add_argument(

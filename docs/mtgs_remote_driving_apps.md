@@ -3,22 +3,42 @@
 这一版只有两个进程：
 
 ```text
-你的电脑：键盘 + 显示 App
-  ├─ WebSocket/TCP  → 方向、油门、刹车、模式、重置、急停
-  └─ SRT/UDP        ← H.264 驾驶画面
+你的电脑：键盘 + 显示 App（两条连接都由这里主动发起）
+  ├─ WebSocket client → 石迪 TCP 18765
+  └─ SRT caller       → 石迪 UDP 19001；连接建立后接收 H.264
 
-石迪电脑：MTGS 模拟 App
+石迪电脑：MTGS 模拟 App（只监听，不反向访问你的电脑）
+  ├─ WebSocket listener：控制输入 + 遥测返回
+  ├─ SRT listener：H.264 视频发送
   ├─ SimpleVehicleModel 和 +/-5 m 路线边界（唯一状态真源）
   ├─ CAM_L0 + CAM_F0 + CAM_R0 → 标定 150° 前向环视
   ├─ 右上角路线几何、可驾驶走廊和运动学车辆
-  └─ RTX 4090 D NVENC → SRT
+  └─ RTX 4090 D NVENC
 ```
 
 控制端丢失超过 250 ms 后，模拟端不再沿用旧指令，而是施加全制动。
 `AUTO` 使用现有拟人路线跟随器；按任一驾驶键自动切到 `REMOTE`。
 右上角是可信的路线/车辆模型视图，不是伪造的俯视 RGB 或深度图。
 
-## 1. 你的电脑
+这里的“监看端”和 SRT 的 `listener` 不是一回事。你的电脑虽然负责监看，
+但因为网络连接由你的电脑主动发起，所以 SRT 参数必须是 `mode=caller`；
+石迪电脑才使用 `mode=listener`。
+
+## 1. 石迪电脑
+
+先在项目机启动两个监听端点：
+
+```bash
+cd /home/yawei/driving-scene-reconstruction
+MTGS_REMOTE_CONTROL_PORT=18765 \
+MTGS_REMOTE_VIDEO_PORT=19001 \
+scripts/run_stage_h3_mtgs_remote.sh server
+```
+
+石迪电脑的防火墙需要允许入站 TCP `18765` 和 UDP `19001`。默认 `8765`
+在当前项目机上已有服务占用，所以这里显式使用 `18765`。
+
+## 2. 你的电脑
 
 需要 Python 3.10+、Tk 和 FFmpeg。首次安装：
 
@@ -28,46 +48,32 @@ python -m venv .venv-mtgs-driver
   -r apps/requirements-mtgs-remote-driver.txt
 ```
 
-先启动本机端，把 `SHIDI_IP` 换成石迪电脑的局域网地址：
+把 `SHIDI_IP` 换成石迪电脑可访问的地址：
 
 ```bash
 .venv-mtgs-driver/bin/python apps/mtgs_remote_driver.py \
   --server ws://SHIDI_IP:18765 \
-  --video-listen \
-  'srt://0.0.0.0:19001?mode=listener&latency=80&transtype=live'
+  --video-source \
+  'srt://SHIDI_IP:19001?mode=caller&latency=80&transtype=live'
 ```
 
-Windows 激活命令和 Python 路径不同，但 App 参数相同。Windows 防火墙
-需要允许 Python/FFmpeg 接收 UDP `19001`。
-
-## 2. 石迪电脑
-
-本机端开始等待后，在项目机执行：
-
-```bash
-cd /home/yawei/driving-scene-reconstruction
-MTGS_REMOTE_CLIENT_HOST=YOUR_IP \
-MTGS_REMOTE_CONTROL_PORT=18765 \
-MTGS_REMOTE_VIDEO_PORT=19001 \
-scripts/run_stage_h3_mtgs_remote.sh server
-```
-
-`YOUR_IP` 是你的电脑局域网地址。石迪电脑需要允许入站 TCP `18765`；
-它会主动向你的电脑 UDP `19001` 发送 SRT 视频。默认 `8765` 在当前项目
-机上已有服务占用，所以示例显式使用 `18765`。
+你的电脑不需要开放入站端口，石迪电脑也不需要知道你的 IP。Windows
+激活命令和 Python 路径不同，但 App 参数相同。
 
 如果不在同一可信局域网，先用 Tailscale/WireGuard 组成私网。不要把未
 加密的 `ws://` 控制口直接暴露到公网。可选共享 token：
 
 ```bash
 # 两边使用同一个临时值；不要提交到 Git
-MTGS_REMOTE_CLIENT_HOST=YOUR_IP \
 MTGS_REMOTE_CONTROL_PORT=18765 \
 MTGS_REMOTE_VIDEO_PORT=19001 \
 MTGS_REMOTE_TOKEN='...' scripts/run_stage_h3_mtgs_remote.sh server
 
 .venv-mtgs-driver/bin/python apps/mtgs_remote_driver.py \
-  --server ws://SHIDI_IP:18765 --token '...'
+  --server ws://SHIDI_IP:18765 \
+  --video-source \
+  'srt://SHIDI_IP:19001?mode=caller&latency=80&transtype=live' \
+  --token '...'
 ```
 
 ## 3. 控制
@@ -93,6 +99,13 @@ MTGS_REMOTE_TOKEN='...' scripts/run_stage_h3_mtgs_remote.sh server
 第一版约 20 Hz 的 1280x544 驾驶流。
 另一轮带断言的短回归实际观察到 `AUTO` 和 `REMOTE` 两种模式及非零
 应用转向，确认 W+A 接管已进入石迪端车辆循环。
+
+2026-07-27 根据“你的电脑可访问石迪、石迪不能反向访问你的电脑”的实际
+网络条件，默认 SRT 建链方向已翻转。独立 FFmpeg 烟测由石迪侧
+`mode=listener`、控制侧 `mode=caller`，完整接收 3 秒、60/60 帧 H.264
+测试流。随后用真实 checkpoint 完成同机双进程复测：远程控制 App 收到
+69 个完整视频帧和 93 条遥测，观察到 `AUTO`、`REMOTE` 以及最大绝对值
+1.0 的实际转向，视频与控制状态均为 connected。
 
 这还不是两台真实电脑的 LAN 时延验收。下一步只需在两端按上述命令各
 运行一次，确认防火墙、按键接管、急停、重置和 5 分钟连续连接。场景仍

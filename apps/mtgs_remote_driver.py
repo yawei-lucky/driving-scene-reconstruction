@@ -29,8 +29,8 @@ from driving_scene_reconstruction.sim.remote_protocol import (  # noqa: E402
 
 
 DEFAULT_SERVER = "ws://127.0.0.1:18765"
-DEFAULT_VIDEO_LISTEN = (
-    "srt://0.0.0.0:19001?mode=listener&latency=80&transtype=live"
+DEFAULT_VIDEO_SOURCE = (
+    "srt://127.0.0.1:19001?mode=caller&latency=80&transtype=live"
 )
 DEFAULT_VIDEO_WIDTH = 1280
 DEFAULT_VIDEO_HEIGHT = 544
@@ -45,9 +45,15 @@ def parse_args() -> argparse.Namespace:
         help="Shidi simulator WebSocket URL, for example ws://192.168.1.20:18765",
     )
     parser.add_argument(
+        "--video-source",
         "--video-listen",
-        default=DEFAULT_VIDEO_LISTEN,
-        help="SRT listener URL used by the Shidi simulator video caller.",
+        dest="video_source",
+        default=DEFAULT_VIDEO_SOURCE,
+        help=(
+            "SRT input URL. Use mode=caller with the Shidi host so this "
+            "computer initiates the video connection. --video-listen remains "
+            "as a compatibility alias."
+        ),
     )
     parser.add_argument("--token", default=None)
     parser.add_argument("--video-width", type=int, default=DEFAULT_VIDEO_WIDTH)
@@ -409,7 +415,7 @@ class DriverApp:
         self.driver_input = DriverInput()
         self.video = VideoReceiver(
             ffmpeg=args.ffmpeg,
-            source=args.video_listen,
+            source=args.video_source,
             width=args.video_width,
             height=args.video_height,
         )
@@ -489,7 +495,7 @@ class DriverApp:
         draw.text((40, 78), detail, fill=(255, 216, 77))
         draw.text(
             (40, 112),
-            "Start this app first, then point the Shidi simulator SRT caller at this computer.",
+            "This app initiates both control and video connections to the Shidi simulator.",
             fill=(145, 166, 178),
         )
         return image
@@ -558,7 +564,7 @@ def run_headless(args: argparse.Namespace) -> None:
     driver_input = DriverInput()
     video = VideoReceiver(
         ffmpeg=args.ffmpeg,
-        source=args.video_listen,
+        source=args.video_source,
         width=args.video_width,
         height=args.video_height,
     )

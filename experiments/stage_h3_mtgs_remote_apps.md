@@ -104,6 +104,47 @@ An earlier attempt is retained as failure evidence:
 - the final client starts its smoke timer after first telemetry and uses a
   2 MB probe window.
 
+## Client-Initiated Network Topology Revision
+
+On 2026-07-27 the deployment constraint was clarified: the remote driving
+computer can reach the Shidi simulator, but the Shidi computer cannot initiate
+a connection back to the driver.
+
+The control path already satisfied that constraint because the driver is the
+WebSocket client. The SRT roles were reversed so the current default is:
+
+```text
+remote driving App
+  ├─ WebSocket client/caller → Shidi TCP 18765 listener
+  └─ SRT caller              → Shidi UDP 19001 listener
+
+video payload on the established SRT connection flows Shidi → remote App
+```
+
+The native driver now exposes `--video-source`; the old `--video-listen`
+spelling remains only as a compatibility alias. The Shidi launcher no longer
+requires or uses the remote computer's address.
+
+An exact-direction local transport smoke used an independent FFmpeg H.264
+sender in `mode=listener` and receiver in `mode=caller`. The caller actively
+connected and decoded all 60/60 frames of a 3-second, 128x72, 20 FPS synthetic
+stream. Dependency-light tests also assert that the driver defaults to
+`mode=caller` and the simulator defaults to `mode=listener`.
+
+A subsequent real-checkpoint localhost two-process run used the revised
+topology on TCP 18768 and UDP 19012. The simulator was the WebSocket and SRT
+listener; the headless remote driving App initiated both connections. Over its
+five-second acceptance interval the App received 69 complete video frames and
+93 telemetry messages, observed both `auto` and `remote`, and observed maximum
+absolute applied steering of 1.0 during W+A takeover. Both final client states
+were connected. The simulator was then stopped normally with a keyboard
+interrupt after the bounded client completed.
+
+This passes SRT connection establishment, real MTGS video decoding, WebSocket
+control/telemetry, and AUTO-to-REMOTE takeover in the required direction on
+one host. It does not test two physical computers, firewall configuration,
+wide-area reachability, or network latency.
+
 ## PPT App-Control Evidence Clip
 
 The reproducible offline presentation entry point is:

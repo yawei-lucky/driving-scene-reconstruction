@@ -1140,6 +1140,12 @@ Completed locally on 2026-07-26 without training:
   20.32/20.97 ms CPU composition p50/p95 on the RTX 4090 D host;
 - added versioned WebSocket control/telemetry, AUTO and REMOTE modes, reset,
   latched estop, latest-sequence handling, and a 250 ms stale-control brake;
+- changed the default network topology for asymmetric reachability: the Shidi
+  simulator listens on TCP 18765 and UDP 19001, while the remote driving App
+  initiates both WebSocket and SRT connections; an exact-direction H.264 smoke
+  received all 60/60 synthetic frames, then a real-checkpoint two-process run
+  received 69 complete video frames and 93 telemetry messages while observing
+  AUTO, REMOTE, and 1.0 maximum absolute applied steer;
 - encoded the cockpit with H.264 NVENC over SRT and decoded it in the native
   client through FFmpeg;
 - passed a real-checkpoint localhost two-process loop: 120/120 telemetry

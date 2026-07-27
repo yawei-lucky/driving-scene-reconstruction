@@ -569,22 +569,26 @@ adapter. `autodrive` closes the loop through a simulated driver, actual vehicle
 dynamics, support checks, and the MTGS renderer. None is a physical-human
 keyboard trial.
 
-For the two-App MTGS LAN cockpit, start the driver computer first, then point
-the simulator host at its LAN address:
+For the two-App MTGS cockpit when the simulator cannot initiate connections
+back to the driver computer, start the listeners on the simulator host and
+then have the driver computer initiate both connections:
 
 ```bash
-# your computer
-python apps/mtgs_remote_driver.py \
-  --server ws://SHIDI_IP:18765 \
-  --video-listen \
-  'srt://0.0.0.0:19001?mode=listener&latency=80&transtype=live'
-
-# Shidi computer
-MTGS_REMOTE_CLIENT_HOST=YOUR_IP \
+# Shidi computer: WebSocket and SRT listeners
 MTGS_REMOTE_CONTROL_PORT=18765 \
 MTGS_REMOTE_VIDEO_PORT=19001 \
 scripts/run_stage_h3_mtgs_remote.sh server
+
+# your computer: both connections are outbound to Shidi
+python apps/mtgs_remote_driver.py \
+  --server ws://SHIDI_IP:18765 \
+  --video-source \
+  'srt://SHIDI_IP:19001?mode=caller&latency=80&transtype=live'
 ```
+
+In SRT terminology the computer watching the video is the `caller`, not the
+`listener`, because it initiates the connection. Only the Shidi host needs
+inbound TCP 18765 and UDP 19001; it does not need the driver's address.
 
 To build the short, explicitly simulated 16:9 App-control evidence clip on the
 MTGS host:
