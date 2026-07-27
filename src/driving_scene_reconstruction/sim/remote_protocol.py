@@ -13,6 +13,8 @@ from .control import HumanControl
 
 REMOTE_PROTOCOL_VERSION = 1
 REMOTE_CONTROL_TIMEOUT_SECONDS = 0.25
+REMOTE_SRT_LATENCY_MICROSECONDS = 300_000
+REMOTE_SRT_PACKET_SIZE_BYTES = 1316
 REMOTE_MODES = frozenset(("auto", "remote"))
 REMOTE_COMMANDS = frozenset(("mode", "reset", "estop"))
 

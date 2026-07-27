@@ -1148,6 +1148,12 @@ Completed locally on 2026-07-26 without training:
   AUTO, REMOTE, and 1.0 maximum absolute applied steer;
 - encoded the cockpit with H.264 NVENC over SRT and decoded it in the native
   client through FFmpeg;
+- corrected the FFmpeg SRT latency unit from an accidental 80 microseconds to
+  300 milliseconds, reduced the default stream from 12 to 8 Mbps, shortened
+  the live GOP to 0.5 seconds, discarded corrupt packets, and made the native
+  client fullscreen with aspect-preserving resize and F11 toggle; an 8-second
+  real-checkpoint regression received 142 complete video frames and 151
+  telemetry messages with AUTO/REMOTE takeover intact;
 - passed a real-checkpoint localhost two-process loop: 120/120 telemetry
   messages and 97 complete latest video frames reached the client; a separate
   asserted run observed both AUTO and REMOTE plus applied W+A steering;
@@ -1160,9 +1166,10 @@ Completed locally on 2026-07-26 without training:
 
 This passes the two-program software and localhost transport boundary. It does
 not pass a physical two-computer LAN run, measured input/display latency,
-the desktop Tk window (the project host is a display-less TTY), Internet
-exposure, dynamic time, collision truth, or a long route. Exact evidence and
-commands are in `experiments/stage_h3_mtgs_remote_apps.md` and
+the desktop Tk fullscreen window (the project host is a display-less TTY),
+packet-loss emulation or Internet exposure, dynamic time, collision truth, or
+a long route. Exact evidence and commands are in
+`experiments/stage_h3_mtgs_remote_apps.md` and
 `docs/mtgs_remote_driving_apps.md`.
 
 ## 3. What The System Can Do Now

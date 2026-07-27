@@ -92,12 +92,19 @@ class DriverInputTests(unittest.TestCase):
             args = DRIVER.parse_args()
 
         self.assertIn("mode=caller", args.video_source)
+        self.assertIn("latency=300000", args.video_source)
+        self.assertIn("pkt_size=1316", args.video_source)
+        self.assertTrue(args.fullscreen)
         self.assertIn("mode=listener", SERVER.DEFAULT_VIDEO_DESTINATION)
+        self.assertIn(
+            "latency=300000",
+            SERVER.DEFAULT_VIDEO_DESTINATION,
+        )
 
     def test_old_video_listen_option_remains_a_compatibility_alias(self) -> None:
         source = (
             "srt://0.0.0.0:19001?"
-            "mode=listener&latency=80&transtype=live"
+            "mode=listener&latency=300000&transtype=live"
         )
         with mock.patch.object(
             DRIVER.sys,
@@ -107,6 +114,44 @@ class DriverInputTests(unittest.TestCase):
             args = DRIVER.parse_args()
 
         self.assertEqual(args.video_source, source)
+
+    def test_windowed_mode_can_be_requested(self) -> None:
+        with mock.patch.object(
+            DRIVER.sys,
+            "argv",
+            ["mtgs_remote_driver.py", "--no-fullscreen"],
+        ):
+            args = DRIVER.parse_args()
+
+        self.assertFalse(args.fullscreen)
+
+    def test_video_fit_preserves_aspect_ratio(self) -> None:
+        self.assertEqual(
+            DRIVER.fit_video_size(1280, 544, 1920, 1030),
+            (1920, 816),
+        )
+        self.assertEqual(
+            DRIVER.fit_video_size(1280, 544, 900, 900),
+            (900, 382),
+        )
+
+    def test_live_encoder_uses_recovery_friendly_settings(self) -> None:
+        with mock.patch.object(SERVER.subprocess, "Popen"):
+            sink = SERVER.FfmpegVideoSink(
+                width=1280,
+                height=544,
+                fps=20,
+                encoder="h264_nvenc",
+                destination=SERVER.DEFAULT_VIDEO_DESTINATION,
+                record=None,
+                bitrate="8M",
+            )
+
+        command = sink._command
+        self.assertEqual(command[command.index("-b:v") + 1], "8M")
+        self.assertEqual(command[command.index("-g") + 1], "10")
+        self.assertIn("-forced-idr", command)
+        self.assertIn("-spatial-aq", command)
 
     def test_keyboard_input_is_rate_limited_and_left_positive(self) -> None:
         with mock.patch.object(

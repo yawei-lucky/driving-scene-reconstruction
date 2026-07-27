@@ -20,6 +20,8 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from driving_scene_reconstruction.sim import HumanControl  # noqa: E402
 from driving_scene_reconstruction.sim.remote_protocol import (  # noqa: E402
     REMOTE_PROTOCOL_VERSION,
+    REMOTE_SRT_LATENCY_MICROSECONDS,
+    REMOTE_SRT_PACKET_SIZE_BYTES,
     RemoteCommandPacket,
     RemoteControlPacket,
     decode_remote_message,
@@ -30,7 +32,9 @@ from driving_scene_reconstruction.sim.remote_protocol import (  # noqa: E402
 
 DEFAULT_SERVER = "ws://127.0.0.1:18765"
 DEFAULT_VIDEO_SOURCE = (
-    "srt://127.0.0.1:19001?mode=caller&latency=80&transtype=live"
+    "srt://127.0.0.1:19001?mode=caller"
+    f"&latency={REMOTE_SRT_LATENCY_MICROSECONDS}"
+    f"&pkt_size={REMOTE_SRT_PACKET_SIZE_BYTES}&transtype=live"
 )
 DEFAULT_VIDEO_WIDTH = 1280
 DEFAULT_VIDEO_HEIGHT = 544
@@ -59,6 +63,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--video-width", type=int, default=DEFAULT_VIDEO_WIDTH)
     parser.add_argument("--video-height", type=int, default=DEFAULT_VIDEO_HEIGHT)
     parser.add_argument("--display-scale", type=float, default=0.8)
+    parser.add_argument(
+        "--fullscreen",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Start in true fullscreen; press F11 to toggle.",
+    )
     parser.add_argument("--control-hz", type=float, default=20.0)
     parser.add_argument("--ffmpeg", default="ffmpeg")
     parser.add_argument(
@@ -77,6 +87,32 @@ def parse_args() -> argparse.Namespace:
     if args.headless_seconds < 0.0:
         raise ValueError("headless duration cannot be negative")
     return args
+
+
+def fit_video_size(
+    source_width: int,
+    source_height: int,
+    available_width: int,
+    available_height: int,
+) -> tuple[int, int]:
+    """Fit one video frame inside the display without changing its aspect."""
+
+    values = (
+        source_width,
+        source_height,
+        available_width,
+        available_height,
+    )
+    if any(value <= 0 for value in values):
+        raise ValueError("video and display dimensions must be positive")
+    scale = min(
+        available_width / source_width,
+        available_height / source_height,
+    )
+    return (
+        max(1, round(source_width * scale)),
+        max(1, round(source_height * scale)),
+    )
 
 
 class LatestValue:
@@ -197,7 +233,7 @@ class VideoReceiver:
                 "-loglevel",
                 "warning",
                 "-fflags",
-                "nobuffer",
+                "+discardcorrupt",
                 "-flags",
                 "low_delay",
                 "-analyzeduration",
@@ -389,17 +425,22 @@ class DriverApp:
         self.root = tk.Tk()
         self.root.title("MTGS Remote Driver")
         self.root.configure(bg="#05080b")
+        self._fullscreen = args.fullscreen
+        self.root.attributes("-fullscreen", self._fullscreen)
+        if not self._fullscreen:
+            self.root.geometry(
+                f"{self.display_width}x{self.display_height + 48}"
+            )
         self.image_label = tk.Label(
             self.root,
             bg="#05080b",
-            width=self.display_width,
-            height=self.display_height,
+            anchor="center",
         )
-        self.image_label.pack()
+        self.image_label.pack(fill="both", expand=True)
         self.help_text = tk.StringVar(
             value=(
                 "W/S/A/D 或方向键驾驶 · P 自动 · M 人工 · R 重置 · "
-                "Space 急停 · Esc 退出"
+                "Space 急停 · F11 全屏 · Esc 退出"
             )
         )
         self.help_label = tk.Label(
@@ -474,6 +515,8 @@ class DriverApp:
             self._requested_mode = target
             if target == "auto":
                 self.driver_input.clear()
+        elif key == "f11":
+            self._toggle_fullscreen()
         elif key == "escape":
             self.close()
 
@@ -500,6 +543,33 @@ class DriverApp:
         )
         return image
 
+    def _toggle_fullscreen(self) -> None:
+        self._fullscreen = not self._fullscreen
+        self.root.attributes("-fullscreen", self._fullscreen)
+        if not self._fullscreen:
+            self.root.geometry(
+                f"{self.display_width}x{self.display_height + 48}"
+            )
+
+    def _fit_for_display(self, image: Any) -> Any:
+        available_width = self.root.winfo_width()
+        available_height = (
+            self.root.winfo_height() - self.help_label.winfo_height()
+        )
+        if available_width <= 1:
+            available_width = self.display_width
+        if available_height <= 1:
+            available_height = self.display_height
+        target = fit_video_size(
+            self.args.video_width,
+            self.args.video_height,
+            available_width,
+            available_height,
+        )
+        if image.size != target:
+            image = image.resize(target, self.Image.Resampling.BILINEAR)
+        return image
+
     def _update(self) -> None:
         if self._closing:
             return
@@ -518,11 +588,7 @@ class DriverApp:
         else:
             image = None
         if image is not None:
-            if self.args.display_scale != 1.0:
-                image = image.resize(
-                    (self.display_width, self.display_height),
-                    self.Image.Resampling.LANCZOS,
-                )
+            image = self._fit_for_display(image)
             self._photo = self.ImageTk.PhotoImage(image)
             self.image_label.configure(image=self._photo)
 
@@ -537,7 +603,8 @@ class DriverApp:
             )
         self.help_text.set(
             f"{control_status} · {video_status}  |  "
-            "W/S/A/D 驾驶 · P 自动 · M 人工 · R 重置 · Space 急停"
+            "W/S/A/D 驾驶 · P 自动 · M 人工 · R 重置 · "
+            "Space 急停 · F11 全屏"
         )
         self.root.after(16, self._update)
 

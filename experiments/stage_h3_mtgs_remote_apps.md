@@ -145,6 +145,46 @@ control/telemetry, and AUTO-to-REMOTE takeover in the required direction on
 one host. It does not test two physical computers, firewall configuration,
 wide-area reachability, or network latency.
 
+## Fullscreen And Remote-Stream Hardening
+
+On 2026-07-27 the first physical PowerShell-side observation reported two
+problems: the native client was not fullscreen and the received video
+frequently showed corrupt blocks.
+
+The display issue was direct: the client used a fixed 0.8 display scale and
+never requested fullscreen. The current client starts in true fullscreen,
+resizes each complete frame to the largest aspect-preserving fit, keeps the
+remaining area black, and uses F11 to toggle fullscreen. `--no-fullscreen`
+retains an explicit windowed startup path.
+
+The stream had one proven configuration defect. The installed FFmpeg SRT
+protocol help defines `latency`, `rcvlatency`, and `peerlatency` in
+microseconds. The earlier URL used `latency=80`, which therefore requested
+0.08 ms rather than the intended 80 ms and left effectively no remote
+retransmission window. The revised transport uses:
+
+- `latency=300000`, or 300 ms, on both peers;
+- a 1,316-byte MPEG-TS-aligned SRT packet size;
+- 8 Mbps rather than 12 Mbps H.264 CBR;
+- NVENC p4/low-latency mode with spatial AQ;
+- a 10-frame/0.5-second live GOP with forced IDR recovery;
+- corrupt-packet discard in the client instead of the earlier no-buffer flag.
+
+The latency and bitrate remain deployment knobs:
+`MTGS_REMOTE_SRT_LATENCY_US=600000` plus
+`MTGS_REMOTE_VIDEO_BITRATE=6M` is the documented conservative fallback.
+
+An eight-second real-checkpoint localhost regression used the revised
+listener/caller topology and exact new encoder/decoder options. The remote App
+received 142 complete video frames and 151 telemetry messages, observed AUTO
+and REMOTE, reached maximum absolute applied steering 1.0, and ended with both
+video and control connected.
+
+This validates option compatibility and the complete real-checkpoint software
+path. It does not visually exercise the Windows Tk fullscreen window and does
+not emulate real WAN jitter or packet loss, so elimination of field corruption
+still requires one run on the actual two-computer path.
+
 ## PPT App-Control Evidence Clip
 
 The reproducible offline presentation entry point is:

@@ -42,38 +42,64 @@ scripts/run_stage_h3_mtgs_remote.sh server
 
 需要 Python 3.10+、Tk 和 FFmpeg。首次安装：
 
-```bash
-python -m venv .venv-mtgs-driver
-.venv-mtgs-driver/bin/pip install \
-  -r apps/requirements-mtgs-remote-driver.txt
+```powershell
+py -3 -m venv .venv-mtgs-driver
+.\.venv-mtgs-driver\Scripts\python.exe -m pip install `
+  -r .\apps\requirements-mtgs-remote-driver.txt
+ffmpeg -protocols | Select-String srt
 ```
 
 把 `SHIDI_IP` 换成石迪电脑可访问的地址：
 
-```bash
-.venv-mtgs-driver/bin/python apps/mtgs_remote_driver.py \
-  --server ws://SHIDI_IP:18765 \
-  --video-source \
-  'srt://SHIDI_IP:19001?mode=caller&latency=80&transtype=live'
+```powershell
+$ShidiIp = "师弟电脑的 IP"
+
+.\.venv-mtgs-driver\Scripts\python.exe .\apps\mtgs_remote_driver.py `
+  --server "ws://${ShidiIp}:18765" `
+  --video-source "srt://${ShidiIp}:19001?mode=caller&latency=300000&pkt_size=1316&transtype=live"
 ```
 
 你的电脑不需要开放入站端口，石迪电脑也不需要知道你的 IP。Windows
-激活命令和 Python 路径不同，但 App 参数相同。
+控制端默认真正全屏并保持 150° 画面的宽高比；`F11` 切换全屏，
+`--no-fullscreen` 可强制窗口启动。
 
 如果不在同一可信局域网，先用 Tailscale/WireGuard 组成私网。不要把未
 加密的 `ws://` 控制口直接暴露到公网。可选共享 token：
 
 ```bash
-# 两边使用同一个临时值；不要提交到 Git
+# 石迪电脑；两边使用同一个临时值，不要提交到 Git
 MTGS_REMOTE_CONTROL_PORT=18765 \
 MTGS_REMOTE_VIDEO_PORT=19001 \
 MTGS_REMOTE_TOKEN='...' scripts/run_stage_h3_mtgs_remote.sh server
+```
 
-.venv-mtgs-driver/bin/python apps/mtgs_remote_driver.py \
-  --server ws://SHIDI_IP:18765 \
-  --video-source \
-  'srt://SHIDI_IP:19001?mode=caller&latency=80&transtype=live' \
-  --token '...'
+```powershell
+# 你的 PowerShell
+$ShidiIp = "师弟电脑的 IP"
+.\.venv-mtgs-driver\Scripts\python.exe .\apps\mtgs_remote_driver.py `
+  --server "ws://${ShidiIp}:18765" `
+  --video-source "srt://${ShidiIp}:19001?mode=caller&latency=300000&pkt_size=1316&transtype=live" `
+  --token "两边相同的临时值"
+```
+
+FFmpeg 的 SRT `latency` 单位是微秒，`300000` 才是 300 ms。旧命令中的
+`latency=80` 实际只有 0.08 ms，不足以覆盖远程网络的丢包重传。当前默认
+视频为 8 Mbps、0.5 秒关键帧间隔。若远端链路仍不稳定，可在两边同时把
+延迟提高到 600 ms，并把师弟端码率降到 6 Mbps：
+
+```bash
+# 石迪电脑
+MTGS_REMOTE_SRT_LATENCY_US=600000 \
+MTGS_REMOTE_VIDEO_BITRATE=6M \
+scripts/run_stage_h3_mtgs_remote.sh server
+```
+
+```powershell
+# 你的 PowerShell
+$ShidiIp = "师弟电脑的 IP"
+.\.venv-mtgs-driver\Scripts\python.exe .\apps\mtgs_remote_driver.py `
+  --server "ws://${ShidiIp}:18765" `
+  --video-source "srt://${ShidiIp}:19001?mode=caller&latency=600000&pkt_size=1316&transtype=live"
 ```
 
 ## 3. 控制
@@ -84,6 +110,7 @@ MTGS_REMOTE_TOKEN='...' scripts/run_stage_h3_mtgs_remote.sh server
 - `M`：切换人工遥控；
 - `R`：重置出生点并解除急停；
 - `Space`：锁存急停；
+- `F11`：切换全屏；
 - `Esc`：退出本机端。
 
 模拟端权威地执行运动学自行车模型、15 m/s 限速、路线终点停车和
@@ -106,6 +133,14 @@ MTGS_REMOTE_TOKEN='...' scripts/run_stage_h3_mtgs_remote.sh server
 测试流。随后用真实 checkpoint 完成同机双进程复测：远程控制 App 收到
 69 个完整视频帧和 93 条遥测，观察到 `AUTO`、`REMOTE` 以及最大绝对值
 1.0 的实际转向，视频与控制状态均为 connected。
+
+同日针对远程端未全屏和频繁花屏继续修正。当前主机的
+`ffmpeg -h protocol=srt` 明确显示 `latency` 单位是微秒，旧值 `80`
+实际只有 0.08 ms。默认值现为 300 ms；直播码率由 12 降至 8 Mbps，
+关键帧间隔由 1 秒缩短至 0.5 秒，并启用损坏包丢弃。新版真实 checkpoint
+同机双进程回归运行 8 秒，客户端收到 142 个完整视频帧和 151 条遥测，
+AUTO/REMOTE 接管正常，视频和控制最终状态均为 connected。全屏窗口本身
+尚未在 Windows 桌面实际打开，环回测试也没有模拟公网丢包。
 
 这还不是两台真实电脑的 LAN 时延验收。下一步只需在两端按上述命令各
 运行一次，确认防火墙、按键接管、急停、重置和 5 分钟连续连接。场景仍

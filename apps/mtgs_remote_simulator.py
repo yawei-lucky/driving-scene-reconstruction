@@ -28,6 +28,8 @@ from driving_scene_reconstruction.sim import HumanControl  # noqa: E402
 from driving_scene_reconstruction.sim.remote_protocol import (  # noqa: E402
     REMOTE_CONTROL_TIMEOUT_SECONDS,
     REMOTE_PROTOCOL_VERSION,
+    REMOTE_SRT_LATENCY_MICROSECONDS,
+    REMOTE_SRT_PACKET_SIZE_BYTES,
     RemoteCommandPacket,
     RemoteControlPacket,
     RemoteControlWatchdog,
@@ -66,8 +68,12 @@ DEFAULT_CRUISE_SPEED_MPS = 12.0
 DEFAULT_LATERAL_AMPLITUDE_METERS = 3.0
 DEFAULT_CONTROL_PORT = 18765
 DEFAULT_VIDEO_DESTINATION = (
-    "srt://0.0.0.0:19001?mode=listener&latency=80&transtype=live"
+    "srt://0.0.0.0:19001?mode=listener"
+    f"&latency={REMOTE_SRT_LATENCY_MICROSECONDS}"
+    f"&pkt_size={REMOTE_SRT_PACKET_SIZE_BYTES}&transtype=live"
 )
+REMOTE_VIDEO_BITRATE = "8M"
+REMOTE_VIDEO_BUFFER_SIZE = "4M"
 REMOTE_COCKPIT_WIDTH = 1280
 REMOTE_COCKPIT_VIEW_HEIGHT = 496
 REMOTE_COCKPIT_STATUS_HEIGHT = 48
@@ -94,7 +100,9 @@ def parse_args() -> argparse.Namespace:
         help=(
             "FFmpeg output URL; when the simulator cannot reach the driver "
             "computer, listen on "
-            "srt://0.0.0.0:19001?mode=listener&latency=80&transtype=live"
+            f"srt://0.0.0.0:19001?mode=listener"
+            f"&latency={REMOTE_SRT_LATENCY_MICROSECONDS}"
+            f"&pkt_size={REMOTE_SRT_PACKET_SIZE_BYTES}&transtype=live"
         ),
     )
     destination.add_argument(
@@ -125,6 +133,11 @@ def parse_args() -> argparse.Namespace:
         default="h264_nvenc",
     )
     parser.add_argument(
+        "--video-bitrate",
+        default=REMOTE_VIDEO_BITRATE,
+        help="FFmpeg target bitrate, for example 8M or 6000K.",
+    )
+    parser.add_argument(
         "--max-frames",
         type=int,
         default=0,
@@ -151,6 +164,14 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise ValueError("control port must be within [1, 65535]")
     if args.max_frames < 0:
         raise ValueError("max frames cannot be negative")
+    bitrate_number = args.video_bitrate[:-1]
+    bitrate_suffix = args.video_bitrate[-1:].upper()
+    if (
+        not bitrate_number.isdigit()
+        or int(bitrate_number) <= 0
+        or bitrate_suffix not in {"K", "M"}
+    ):
+        raise ValueError("video bitrate must be a positive K/M value")
     if (
         not math.isfinite(args.cruise_speed_mps)
         or not 0.0 < args.cruise_speed_mps <= 15.0
@@ -398,6 +419,7 @@ class FfmpegVideoSink:
         encoder: str,
         destination: str | None,
         record: Path | None,
+        bitrate: str = REMOTE_VIDEO_BITRATE,
     ) -> None:
         if (destination is None) == (record is None):
             raise ValueError("exactly one video destination is required")
@@ -429,17 +451,23 @@ class FfmpegVideoSink:
             command.extend(
                 [
                     "-preset",
-                    "p1",
+                    "p4",
                     "-tune",
-                    "ull",
+                    "ll",
                     "-rc",
                     "cbr",
                     "-b:v",
-                    "12M",
+                    bitrate,
                     "-maxrate",
-                    "12M",
+                    bitrate,
                     "-bufsize",
-                    "2M",
+                    REMOTE_VIDEO_BUFFER_SIZE,
+                    "-spatial-aq",
+                    "1",
+                    "-aq-strength",
+                    "8",
+                    "-forced-idr",
+                    "1",
                     "-zerolatency",
                     "1",
                 ]
@@ -448,10 +476,11 @@ class FfmpegVideoSink:
             command.extend(
                 ["-preset", "ultrafast", "-tune", "zerolatency", "-crf", "18"]
             )
+        gop_frames = max(1, fps // 2) if self.is_live else fps
         command.extend(
             [
                 "-g",
-                str(fps),
+                str(gop_frames),
                 "-bf",
                 "0",
                 "-pix_fmt",
@@ -1087,6 +1116,7 @@ def main() -> None:
         encoder=args.encoder,
         destination=args.video_destination,
         record=args.record,
+        bitrate=args.video_bitrate,
     )
     print(f"video: {sink.output}", flush=True)
     print(
@@ -1243,6 +1273,7 @@ def main() -> None:
                 runtime.torch.cuda.max_memory_reserved(runtime.device) / 1024**3
             ),
             "video_encoder_restarts": sink.restart_count,
+            "video_bitrate": args.video_bitrate,
             "frames": frame_records,
             "limitations": [
                 "scene time is fixed",

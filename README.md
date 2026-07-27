@@ -583,12 +583,15 @@ scripts/run_stage_h3_mtgs_remote.sh server
 python apps/mtgs_remote_driver.py \
   --server ws://SHIDI_IP:18765 \
   --video-source \
-  'srt://SHIDI_IP:19001?mode=caller&latency=80&transtype=live'
+  'srt://SHIDI_IP:19001?mode=caller&latency=300000&pkt_size=1316&transtype=live'
 ```
 
 In SRT terminology the computer watching the video is the `caller`, not the
 `listener`, because it initiates the connection. Only the Shidi host needs
 inbound TCP 18765 and UDP 19001; it does not need the driver's address.
+The SRT latency value is in microseconds, so `300000` means 300 ms. The driver
+starts fullscreen by default and preserves the cockpit aspect ratio; F11
+toggles fullscreen.
 
 To build the short, explicitly simulated 16:9 App-control evidence clip on the
 MTGS host:
