@@ -1151,9 +1151,11 @@ Completed locally on 2026-07-26 without training:
 - corrected the FFmpeg SRT latency unit from an accidental 80 microseconds to
   300 milliseconds, reduced the default stream from 12 to 8 Mbps, shortened
   the live GOP to 0.5 seconds, discarded corrupt packets, and made the native
-  client fullscreen with aspect-preserving resize and F11 toggle; an 8-second
-  real-checkpoint regression received 142 complete video frames and 151
-  telemetry messages with AUTO/REMOTE takeover intact;
+  client fullscreen with aspect-preserving resize; Ctrl+Enter now toggles
+  fullscreen, Escape only leaves fullscreen without disconnecting, and Ctrl+Q
+  explicitly exits; an 8-second real-checkpoint regression received 142
+  complete video frames and 151 telemetry messages with AUTO/REMOTE takeover
+  intact;
 - passed a real-checkpoint localhost two-process loop: 120/120 telemetry
   messages and 97 complete latest video frames reached the client; a separate
   asserted run observed both AUTO and REMOTE plus applied W+A steering;

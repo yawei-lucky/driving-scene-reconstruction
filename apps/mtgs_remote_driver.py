@@ -67,7 +67,7 @@ def parse_args() -> argparse.Namespace:
         "--fullscreen",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Start in true fullscreen; press F11 to toggle.",
+        help="Start in true fullscreen; press Ctrl+Enter to toggle.",
     )
     parser.add_argument("--control-hz", type=float, default=20.0)
     parser.add_argument("--ffmpeg", default="ffmpeg")
@@ -440,7 +440,8 @@ class DriverApp:
         self.help_text = tk.StringVar(
             value=(
                 "W/S/A/D 或方向键驾驶 · P 自动 · M 人工 · R 重置 · "
-                "Space 急停 · F11 全屏 · Esc 退出"
+                "Space 急停 · Ctrl+Enter 全屏 · Esc 退出全屏 · "
+                "Ctrl+Q 退出"
             )
         )
         self.help_label = tk.Label(
@@ -487,6 +488,7 @@ class DriverApp:
 
     def _key_press(self, event: Any) -> None:
         key = self._normal_key(event)
+        control_modifier = bool(int(getattr(event, "state", 0)) & 0x0004)
         first_press = key not in self._discrete_pressed
         self._discrete_pressed.add(key)
         if key in DRIVE_KEYS:
@@ -496,7 +498,11 @@ class DriverApp:
                 self._requested_mode = "remote"
         if not first_press:
             return
-        if key == "p":
+        if control_modifier and key in {"return", "enter"}:
+            self._toggle_fullscreen()
+        elif control_modifier and key == "q":
+            self.close()
+        elif key == "p":
             self.control.command("mode", "auto")
             self._requested_mode = "auto"
             self.driver_input.clear()
@@ -515,10 +521,9 @@ class DriverApp:
             self._requested_mode = target
             if target == "auto":
                 self.driver_input.clear()
-        elif key == "f11":
-            self._toggle_fullscreen()
         elif key == "escape":
-            self.close()
+            if self._fullscreen:
+                self._toggle_fullscreen()
 
     def _key_release(self, event: Any) -> None:
         key = self._normal_key(event)
@@ -604,7 +609,7 @@ class DriverApp:
         self.help_text.set(
             f"{control_status} · {video_status}  |  "
             "W/S/A/D 驾驶 · P 自动 · M 人工 · R 重置 · "
-            "Space 急停 · F11 全屏"
+            "Space 急停 · Ctrl+Enter 全屏 · Esc 退出全屏 · Ctrl+Q 退出"
         )
         self.root.after(16, self._update)
 

@@ -154,8 +154,11 @@ frequently showed corrupt blocks.
 The display issue was direct: the client used a fixed 0.8 display scale and
 never requested fullscreen. The current client starts in true fullscreen,
 resizes each complete frame to the largest aspect-preserving fit, keeps the
-remaining area black, and uses F11 to toggle fullscreen. `--no-fullscreen`
-retains an explicit windowed startup path.
+remaining area black, and uses Ctrl+Enter to toggle fullscreen.
+`--no-fullscreen` retains an explicit windowed startup path. A subsequent
+physical-client correction removed Escape as an application-exit shortcut:
+Escape now only leaves fullscreen, while Ctrl+Q explicitly closes the App and
+triggers its safety estop.
 
 The stream had one proven configuration defect. The installed FFmpeg SRT
 protocol help defines `latency`, `rcvlatency`, and `peerlatency` in

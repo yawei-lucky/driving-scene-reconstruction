@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -87,6 +88,17 @@ class RemoteAuthorityTests(unittest.TestCase):
 
 
 class DriverInputTests(unittest.TestCase):
+    def _key_test_app(self, *, fullscreen: bool = True):
+        app = object.__new__(DRIVER.DriverApp)
+        app._discrete_pressed = set()
+        app.driver_input = mock.Mock()
+        app.control = mock.Mock()
+        app._requested_mode = "auto"
+        app._fullscreen = fullscreen
+        app._toggle_fullscreen = mock.Mock()
+        app.close = mock.Mock()
+        return app
+
     def test_default_network_topology_is_driver_initiated(self) -> None:
         with mock.patch.object(DRIVER.sys, "argv", ["mtgs_remote_driver.py"]):
             args = DRIVER.parse_args()
@@ -124,6 +136,32 @@ class DriverInputTests(unittest.TestCase):
             args = DRIVER.parse_args()
 
         self.assertFalse(args.fullscreen)
+
+    def test_escape_leaves_fullscreen_without_closing(self) -> None:
+        app = self._key_test_app(fullscreen=True)
+        app._key_press(SimpleNamespace(keysym="Escape", state=0))
+
+        app._toggle_fullscreen.assert_called_once_with()
+        app.close.assert_not_called()
+
+    def test_escape_in_windowed_mode_does_not_close(self) -> None:
+        app = self._key_test_app(fullscreen=False)
+        app._key_press(SimpleNamespace(keysym="Escape", state=0))
+
+        app._toggle_fullscreen.assert_not_called()
+        app.close.assert_not_called()
+
+    def test_ctrl_enter_toggles_and_ctrl_q_closes(self) -> None:
+        fullscreen_app = self._key_test_app()
+        fullscreen_app._key_press(
+            SimpleNamespace(keysym="Return", state=0x0004)
+        )
+        fullscreen_app._toggle_fullscreen.assert_called_once_with()
+        fullscreen_app.close.assert_not_called()
+
+        closing_app = self._key_test_app()
+        closing_app._key_press(SimpleNamespace(keysym="q", state=0x0004))
+        closing_app.close.assert_called_once_with()
 
     def test_video_fit_preserves_aspect_ratio(self) -> None:
         self.assertEqual(
