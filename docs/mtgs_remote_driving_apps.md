@@ -99,3 +99,25 @@ MTGS_REMOTE_TOKEN='...' scripts/run_stage_h3_mtgs_remote.sh server
 只有约 84 m，动态时间固定，且没有碰撞真值；网络通路不会扩大重建覆盖。
 项目机是无图形界面的 TTY，因此本次只运行了客户端的无界面接收/控制
 路径；Tk 窗口本身需要在你的桌面电脑上完成第一次实机打开。
+
+## 5. PPT 演示视频
+
+在石迪电脑的项目目录执行：
+
+```bash
+scripts/run_stage_h3_mtgs_remote.sh ppt-demo
+```
+
+它生成一条 1280x720、20 FPS、11 秒的演示视频：上方是真实 MTGS
+checkpoint 的 150° 驾驶舱，下方是控制端 App 面板。时序固定为
+`AUTO → REMOTE(W/A/D) → E-STOP → RESET → AUTO`。REMOTE 指令会以
+`RemoteControlPacket` 进入同一个控制权、看门狗和车辆模型，再驱动
+MTGS 位姿渲染，不是后期伪造按键动画。
+
+视频会明确标注 `SIMULATED OPERATOR`。它适合说明两端 App 的交互方式，
+但不代表真人键盘、真实 WebSocket/SRT 网络或两机时延已测试。默认输出
+目录是：
+
+```text
+/home/yawei/stage3_external/artifacts/mtgs_app_control_ppt_20260727_v2
+```

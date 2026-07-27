@@ -586,6 +586,16 @@ MTGS_REMOTE_VIDEO_PORT=19001 \
 scripts/run_stage_h3_mtgs_remote.sh server
 ```
 
+To build the short, explicitly simulated 16:9 App-control evidence clip on the
+MTGS host:
+
+```bash
+scripts/run_stage_h3_mtgs_remote.sh ppt-demo
+```
+
+That clip exercises the same control authority and vehicle model in-process,
+but it is not evidence of a physical operator or a two-computer LAN run.
+
 The simulator remains the only owner of vehicle/world state. Its main view is
 a calibrated 150-degree `CAM_L0/F0/R0` panorama; the top-right 3D panel is
 route geometry plus the kinematic vehicle, not synthetic overhead RGB. See

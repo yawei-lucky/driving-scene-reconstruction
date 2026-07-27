@@ -1,6 +1,6 @@
 # Project State — Driving Scene Reconstruction
 
-Last updated: 2026-07-25
+Last updated: 2026-07-27
 
 ## 1. Product Goal
 
@@ -1145,6 +1145,10 @@ Completed locally on 2026-07-26 without training:
 - passed a real-checkpoint localhost two-process loop: 120/120 telemetry
   messages and 97 complete latest video frames reached the client; a separate
   asserted run observed both AUTO and REMOTE plus applied W+A steering;
+- generated a PPT-ready 1280x720, 11-second evidence clip through the same
+  control authority and vehicle model: AUTO, 100 REMOTE packets with visible
+  W/A/D, latched full-brake estop to rest, reset, and AUTO restart all passed
+  with zero support-boundary hits;
 - preserved failed attempts showing the existing 8765 port conflict and the
   initially insufficient video-probe/startup timing instead of hiding them.
 

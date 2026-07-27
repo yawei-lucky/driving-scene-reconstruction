@@ -16,6 +16,7 @@ CONTROL_HOST="${MTGS_REMOTE_CONTROL_HOST:-0.0.0.0}"
 CONTROL_PORT="${MTGS_REMOTE_CONTROL_PORT:-18765}"
 VIDEO_PORT="${MTGS_REMOTE_VIDEO_PORT:-19001}"
 RECORD_PATH="${MTGS_REMOTE_RECORD:-${H3_ROOT}/artifacts/mtgs_remote_apps_20260726/mtgs_remote_auto_demo.mp4}"
+PPT_OUTPUT_DIR="${MTGS_REMOTE_PPT_OUTPUT_DIR:-${H3_ROOT}/artifacts/mtgs_app_control_ppt_20260727_v2}"
 
 export PYTHONPATH="${MTGS_CODE}:${PYTHONPATH:-}"
 export CUDA_HOME="${CUDA_HOME:-${H3_ROOT}/envs/h3_splatad}"
@@ -60,6 +61,14 @@ case "$MODE" in
       --max-frames 183 \
       --no-control-server
     ;;
+  ppt-demo)
+    cd "$MTGS_CODE"
+    exec "$PYTHON" "$REPO_ROOT/scripts/build_stage_h3_mtgs_app_control_demo.py" \
+      --config "$CONFIG" \
+      --checkpoint "$CHECKPOINT" \
+      --road-block-config "$ROAD_BLOCK_CONFIG" \
+      --output-dir "$PPT_OUTPUT_DIR"
+    ;;
   paths)
     echo "simulator app: $REPO_ROOT/apps/mtgs_remote_simulator.py"
     echo "driver app: $REPO_ROOT/apps/mtgs_remote_driver.py"
@@ -67,9 +76,10 @@ case "$MODE" in
     echo "control listen: ws://${CONTROL_HOST}:${CONTROL_PORT}"
     echo "video destination: srt://${CLIENT_HOST}:${VIDEO_PORT}"
     echo "record path: $RECORD_PATH"
+    echo "PPT demo output: $PPT_OUTPUT_DIR"
     ;;
   *)
-    echo "Usage: $0 {server|record-demo|paths}" >&2
+    echo "Usage: $0 {server|record-demo|ppt-demo|paths}" >&2
     exit 2
     ;;
 esac

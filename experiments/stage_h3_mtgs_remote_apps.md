@@ -104,6 +104,51 @@ An earlier attempt is retained as failure evidence:
 - the final client starts its smoke timer after first telemetry and uses a
   2 MB probe window.
 
+## PPT App-Control Evidence Clip
+
+The reproducible offline presentation entry point is:
+
+```bash
+scripts/run_stage_h3_mtgs_remote.sh ppt-demo
+```
+
+It preserves the 1280x544 cockpit and adds a control-App panel below it,
+producing a 1280x720, 20 FPS H.264 clip. The accepted final v2 contains 220
+frames over 11.0 encoded seconds and presents:
+
+```text
+AUTO
+→ REMOTE simulated operator through RemoteControlPacket
+→ latched E-STOP
+→ RESET
+→ AUTO restart
+```
+
+All 100 scheduled remote packets were accepted. The panel derived its key
+highlights from the actually applied control, yielding W/A/D on 100/45/36
+frames. The estop applied full brake from frame 130 through 164, reducing
+11.982 m/s to rest before reset. The run reached 2.671 m maximum absolute
+lateral displacement, retained 2.329 m minimum support margin, and had zero
+boundary hits. The three-camera render measured 25.66/28.05 ms p50/p95 and
+panorama composition measured 20.36/21.66 ms p50/p95; peak reserved CUDA
+memory was 1.455 GiB.
+
+The final video decoded as 220/220 frames, has SHA-256
+`82c55af63e0315aba5d4a081c6bbf12564008e99b7ebf714a247bae708a76222`,
+and is retained with its machine-readable report and visual review images:
+
+- `/home/yawei/stage3_external/artifacts/mtgs_app_control_ppt_20260727_v2/mtgs_app_control_ppt_demo.mp4`;
+- `/home/yawei/stage3_external/artifacts/mtgs_app_control_ppt_20260727_v2/mtgs_app_control_ppt_demo.json`;
+- `/home/yawei/stage3_external/artifacts/mtgs_app_control_ppt_20260727_v2/mtgs_app_control_ppt_preview.jpg`;
+- `/home/yawei/stage3_external/artifacts/mtgs_app_control_ppt_20260727_v2/mtgs_app_control_ppt_contact_sheet.jpg`.
+
+The operator is explicitly labelled as simulated. This clip exercises the
+protocol objects, control authority, safety state, vehicle model, and real
+checkpoint renderer in-process; it does not claim a physical keyboard,
+WebSocket/SRT transport, two-computer LAN run, or network latency. The first
+non-v2 render is retained separately as preliminary evidence because visual
+inspection found one overlapping small-text row before the final layout fix.
+
 ## Verdict And Next Gate
 
 Pass the two-application software boundary, three-camera cockpit, safety
