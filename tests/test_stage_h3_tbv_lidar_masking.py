@@ -65,6 +65,16 @@ class TbVLidarMaskingTests(unittest.TestCase):
                 np.ones((2, 2), dtype=np.uint8),
             )
 
+    @unittest.skipIf(np is None, "NumPy is available in the H3 environment")
+    def test_persistence_rescues_recurrent_masked_geometry(self) -> None:
+        assert np is not None
+        result = MODULE.persistence_gated_exclusion(
+            np.asarray((True, True, False, False)),
+            np.asarray((True, False, True, False)),
+        )
+
+        np.testing.assert_array_equal(result, (False, True, False, False))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -19,6 +19,7 @@ import json
 import math
 from pathlib import Path
 from typing import Any
+import warnings
 
 import torch
 import yaml
@@ -38,6 +39,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--steps-per-save", type=int, default=2000)
     parser.add_argument("--steps-per-eval-image", type=int, default=1000)
     parser.add_argument("--keep-all-checkpoints", action="store_true")
+    parser.add_argument("--rgb-root", type=Path)
+    parser.add_argument("--image-mask-root", type=Path)
+    parser.add_argument("--lidar-mask-root", type=Path)
+    parser.add_argument("--lidar-persistence-root", type=Path)
+    parser.add_argument("--downsample-factor", type=float)
+    parser.add_argument("--use-mask-aligned-model", action="store_true")
     return parser.parse_args()
 
 
@@ -205,10 +212,45 @@ def load_config(args: argparse.Namespace) -> TrainerConfig:
     config.load_step = None
     config.load_optimizer = True
     config.load_scheduler = True
+    dataparser = config.pipeline.datamanager.dataparser
+    if args.rgb_root is not None:
+        dataparser.rgb_root = args.rgb_root
+    if args.image_mask_root is not None:
+        dataparser.image_mask_root = args.image_mask_root
+        dataparser.load_image_masks = True
+    if args.lidar_mask_root is not None:
+        dataparser.mask_root = args.lidar_mask_root
+        dataparser.mask_lidar_points = True
+    if args.lidar_persistence_root is not None:
+        if args.lidar_mask_root is None and not dataparser.mask_lidar_points:
+            raise ValueError(
+                "LiDAR persistence requires an enabled LiDAR mask root"
+            )
+        dataparser.lidar_persistence_root = args.lidar_persistence_root
+    if args.downsample_factor is not None:
+        if (
+            not math.isfinite(args.downsample_factor)
+            or args.downsample_factor <= 0.0
+        ):
+            raise ValueError(
+                "downsample factor must be positive and finite"
+            )
+        config.pipeline.datamanager.downsample_factor = (
+            args.downsample_factor
+        )
+    if args.use_mask_aligned_model:
+        from stage_h3_mask_aligned_splatad import MaskAlignedSplatADModel
+
+        config.pipeline.model._target = MaskAlignedSplatADModel
     return config
 
 
 def main() -> None:
+    warnings.filterwarnings(
+        "ignore",
+        category=FutureWarning,
+        module=r"av2\.utils\.io",
+    )
     args = parse_args()
     config = load_config(args)
     config.set_timestamp()

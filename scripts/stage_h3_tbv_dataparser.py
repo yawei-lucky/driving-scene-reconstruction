@@ -31,7 +31,12 @@ from nerfstudio.data.dataparsers.ad_dataparser import (
 
 from stage_h3_tbv_lidar_masking import (
     closest_timestamp_index,
+    persistence_gated_exclusion,
     projected_mask_exclusion,
+)
+from stage_h3_tbv_persistence import (
+    load_persistence_mask,
+    persistence_mask_path,
 )
 
 
@@ -61,6 +66,36 @@ DEFAULT_WINDOW_STARTS = (315972566.15, 315968138.15)
 MAX_REFLECTANCE_VALUE = 255.0
 HORIZONTAL_BEAM_DIVERGENCE = 3e-3
 VERTICAL_BEAM_DIVERGENCE = 1.5e-3
+
+
+def remap_rgb_path(
+    source_path: Path,
+    *,
+    data_root: Path,
+    rgb_root: Path | None,
+) -> Path:
+    """Map one source image to an optional parallel RGB tree."""
+
+    if rgb_root is None:
+        return source_path
+    relative = source_path.absolute().relative_to(data_root.absolute())
+    return rgb_root.expanduser().absolute() / relative
+
+
+def relative_rgb_path(
+    image_path: Path,
+    *,
+    data_root: Path,
+    rgb_root: Path | None,
+) -> Path:
+    """Return a camera image's layout under its active RGB source root."""
+
+    active_root = (
+        rgb_root.expanduser().absolute()
+        if rgb_root is not None
+        else data_root.expanduser().absolute()
+    )
+    return image_path.absolute().relative_to(active_root)
 
 
 @dataclass
@@ -93,14 +128,25 @@ class TbVDataParserConfig(ADDataParserConfig):
     add_missing_points: bool = False
     allow_per_point_times: bool = False
     min_lidar_dist: Tuple[float, float, float] = (1.0, 2.0, 2.0)
+    rgb_root: Path | None = None
     mask_root: Path | None = None
+    image_mask_root: Path | None = None
+    load_image_masks: bool = True
     mask_lidar_points: bool = False
     lidar_mask_max_camera_delta_ms: float = 50.0
+    lidar_persistence_root: Path | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
         if self.mask_lidar_points and self.mask_root is None:
             raise ValueError("mask_lidar_points requires mask_root")
+        if (
+            self.lidar_persistence_root is not None
+            and not self.mask_lidar_points
+        ):
+            raise ValueError(
+                "lidar_persistence_root requires mask_lidar_points"
+            )
         if (
             not math.isfinite(self.lidar_mask_max_camera_delta_ms)
             or self.lidar_mask_max_camera_delta_ms <= 0.0
@@ -165,6 +211,7 @@ class TbV(ADDataParser):
         heights: list[int] = []
         widths: list[int] = []
         camera_names = self._camera_names()
+        data_root = self.config.data.expanduser().absolute()
 
         for traversal_idx, sequence in enumerate(self.config.sequences):
             for camera_idx, camera_name in enumerate(camera_names):
@@ -185,7 +232,16 @@ class TbV(ADDataParser):
                     camera_to_ego[:3, :3] = (
                         camera_to_ego[:3, :3] @ OPENCV_TO_NERFSTUDIO
                     )
-                    filenames.append(path)
+                    rgb_path = remap_rgb_path(
+                        path,
+                        data_root=data_root,
+                        rgb_root=self.config.rgb_root,
+                    )
+                    if not rgb_path.is_file():
+                        raise FileNotFoundError(
+                            f"TbV RGB override is missing: {rgb_path}"
+                        )
+                    filenames.append(rgb_path)
                     times.append(self._local_time(traversal_idx, timestamp_ns))
                     intrinsics.append(camera.intrinsics.K)
                     poses.append(ego_to_world.transform_matrix @ camera_to_ego)
@@ -262,10 +318,20 @@ class TbV(ADDataParser):
         camera_images_used: Counter[str] = Counter()
         camera_images_missing: Counter[str] = Counter()
         camera_delta_ms: list[float] = []
+        persistence_input_points = 0
+        persistence_supported_points = 0
+        persistence_masked_candidates = 0
+        persistence_rescued_points = 0
+        persistence_files_used = 0
         data_root = self.config.data.expanduser().resolve()
         mask_root = (
             self.config.mask_root.expanduser().resolve()
             if self.config.mask_root is not None
+            else None
+        )
+        persistence_root = (
+            self.config.lidar_persistence_root.expanduser().resolve()
+            if self.config.lidar_persistence_root is not None
             else None
         )
         camera_paths: dict[tuple[str, str], tuple[Path, ...]] = {}
@@ -354,6 +420,31 @@ class TbV(ADDataParser):
                         camera_excluded.sum()
                     )
                 removed = int(excluded.sum())
+                if persistence_root is not None:
+                    persistence_path = persistence_mask_path(
+                        data_root=data_root,
+                        persistence_root=persistence_root,
+                        lidar_path=path,
+                    )
+                    persistent = load_persistence_mask(
+                        persistence_path,
+                        len(point_cloud),
+                    )
+                    projected_candidates = excluded
+                    excluded = persistence_gated_exclusion(
+                        projected_candidates,
+                        persistent,
+                    )
+                    persistence_input_points += len(persistent)
+                    persistence_supported_points += int(persistent.sum())
+                    persistence_masked_candidates += int(
+                        projected_candidates.sum()
+                    )
+                    persistence_rescued_points += int(
+                        (projected_candidates & persistent).sum()
+                    )
+                    persistence_files_used += 1
+                    removed = int(excluded.sum())
                 if removed:
                     frames_with_removals += 1
                 removed_points += removed
@@ -401,8 +492,40 @@ class TbV(ADDataParser):
             "configured_max_camera_delta_ms": (
                 self.config.lidar_mask_max_camera_delta_ms
             ),
+            "persistence_gate": {
+                "enabled": persistence_root is not None,
+                "root": (
+                    str(persistence_root)
+                    if persistence_root is not None
+                    else None
+                ),
+                "files_used": persistence_files_used,
+                "input_point_count": persistence_input_points,
+                "persistent_point_count": persistence_supported_points,
+                "persistent_point_fraction": (
+                    persistence_supported_points / persistence_input_points
+                    if persistence_input_points
+                    else 0.0
+                ),
+                "projected_mask_candidate_count": (
+                    persistence_masked_candidates
+                ),
+                "persistent_candidate_rescued_count": (
+                    persistence_rescued_points
+                ),
+                "persistent_candidate_rescued_fraction": (
+                    persistence_rescued_points
+                    / persistence_masked_candidates
+                    if persistence_masked_candidates
+                    else 0.0
+                ),
+            },
             "policy": (
-                "exclude a return if any closest synchronized camera "
+                "exclude a return only when a closest synchronized camera "
+                "projects it onto a zero-valued traffic-mask pixel and the "
+                "other visit does not support its city-frame voxel"
+                if persistence_root is not None
+                else "exclude a return if any closest synchronized camera "
                 "projects it onto a zero-valued traffic-mask pixel"
             ),
         }
@@ -445,12 +568,28 @@ class TbV(ADDataParser):
             len(point_cloud)
             for point_cloud in outputs.metadata["point_clouds"]
         )
-        if self.config.mask_root is not None:
+        outputs.metadata["rgb_root"] = (
+            str(self.config.rgb_root.expanduser().absolute())
+            if self.config.rgb_root is not None
+            else None
+        )
+        image_mask_root = (
+            self.config.image_mask_root
+            if self.config.image_mask_root is not None
+            else self.config.mask_root
+        )
+        if image_mask_root is not None and self.config.load_image_masks:
             data_root = self.config.data.expanduser().resolve()
-            mask_root = self.config.mask_root.expanduser().resolve()
+            resolved_image_mask_root = (
+                image_mask_root.expanduser().resolve()
+            )
             mask_filenames = [
-                mask_root
-                / path.resolve().relative_to(data_root).with_suffix(".png")
+                resolved_image_mask_root
+                / relative_rgb_path(
+                    path,
+                    data_root=data_root,
+                    rgb_root=self.config.rgb_root,
+                ).with_suffix(".png")
                 for path in outputs.image_filenames
             ]
             missing_masks = [
@@ -462,6 +601,13 @@ class TbV(ADDataParser):
                     f"{len(missing_masks)} TbV masks are missing: {preview}"
                 )
             outputs.mask_filenames = mask_filenames
-            outputs.metadata["mask_root"] = str(mask_root)
+            outputs.metadata["image_mask_root"] = str(
+                resolved_image_mask_root
+            )
+        outputs.metadata["lidar_mask_root"] = (
+            str(self.config.mask_root.expanduser().resolve())
+            if self.config.mask_root is not None
+            else None
+        )
         del self.av2
         return outputs

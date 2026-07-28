@@ -375,8 +375,19 @@ Stage H3 Level 9T
   and 12 m/s continuous-overlap probes
 → cross-tile RGB MAE worsened again: 13.77 / 255 at matched poses and
   13.58 / 255 continuously, versus 9.84/9.98 for the unmasked 2k pair
-→ rejected broad 2D-silhouette point deletion before 8k; one cross-traversal
-  3D-persistence filter is the next small gate
+→ rejected broad 2D-silhouette point deletion before 8k; the subsequent
+  cross-traversal persistence-only 8k candidate also failed the raw-RGB gate
+
+Stage H3 Level 9T2
+→ generated per-return cross-visit persistence plus 1,570 conservative
+  observed-background RGB/mask pairs for TbV tile 2
+→ exact-resumed static-8k to a step-9,999 candidate using donor-supported
+  background only; raw-RGB evaluation never uses reconstructed training RGB
+→ on donor-supported fill pixels, mean MAE improved 28.4%, PSNR improved
+  2.74 dB, and gradient MAE improved 8.8%; ordinary static-background MAE
+  improved 4.81%
+→ vegetation remains mixed and the full-frame raw-RGB PSNR is 0.39 dB lower;
+  static-8k stays default pending one continuous-route A/B
 
 Stage H3 Level 9U
 → split the accepted MTGS loop into an authoritative simulator/video App and
@@ -826,12 +837,14 @@ simulated-human driver completed their 260 m union in 24.65 s at 12 m/s with
 +0.578/-0.544 m excursions, 0.422 m minimum support reserve, endpoint braking,
 zero boundary hits, and 494/494 decoded video frames.
 
-This is not yet a complete trustworthy driving scene. Image-only and projected
-LiDAR transient masks both worsened cross-tile consistency, and the unmasked
-route retains dark vehicle ghosts and foliage smear. Keep all three unmasked
-8k checkpoints fixed; train neither more route tiles nor another mask
-treatment until the usability gate shows whether false obstacles actually
-block driving decisions. Do not claim the full 610 m route.
+This is not yet a complete trustworthy driving scene. Image-only, projected
+LiDAR, and persistence-only variants all failed as unconditional replacements.
+The tile-2 cross-visit RGB candidate now reduces evidence-backed
+vehicle/background mismatch without the earlier black-road smears, but foliage
+remains mixed and a full-frame raw-RGB score is slightly lower. Keep all three
+unmasked 8k checkpoints as the default regression and keep the new tile-2 10k
+checkpoint optional until one continuous-route A/B passes. Do not claim the
+full 610 m route.
 
 The current second phase uses held-out real traversals and matched poses to
 test road/free-space geometry, false
@@ -929,6 +942,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_tbv_rgb_lidar_mask_pilot.md` records the synchronized
   seven-camera projection audit, bounded RGB+LiDAR-mask 2k pair, three-way
   comparison, direct point-deletion rejection, and 3D-persistence next gate.
+- `experiments/stage_h3_tbv_cross_visit_quality_repair.md` records the
+  persistence-only rejection, conservative observed-background transfer,
+  exact-resumed tile-2 10k candidate, and full-frame versus regional decision.
 - `experiments/stage_h3_tbv_splatad_pilot.md` records the bounded TbV download,
   multi-traversal parser, LiDAR alignment, and 100/2,000-step reload renders.
 - `experiments/stage_h3_tbv_world_pose_corridor_probe.md` records the 2k/8k

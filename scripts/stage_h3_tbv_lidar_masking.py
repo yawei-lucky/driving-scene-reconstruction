@@ -84,3 +84,20 @@ def projected_mask_exclusion(
         valid_pixel_mask[inside_pixels[:, 1], inside_pixels[:, 0]] == 0
     )
     return excluded
+
+
+def persistence_gated_exclusion(
+    projected_excluded: Any,
+    persistent: Any,
+) -> Any:
+    """Remove only projected traffic candidates lacking cross-visit support."""
+
+    import numpy as np
+
+    projected = np.asarray(projected_excluded, dtype=bool)
+    supported = np.asarray(persistent, dtype=bool)
+    if projected.ndim != 1 or supported.shape != projected.shape:
+        raise ValueError(
+            "projected exclusion and persistence masks must have equal 1D shape"
+        )
+    return projected & ~supported

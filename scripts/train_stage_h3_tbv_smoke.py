@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from copy import deepcopy
 from pathlib import Path
+import warnings
 
 from nerfstudio.configs.method_configs import method_configs
 from nerfstudio.scripts.train import main as train_main
@@ -38,21 +39,44 @@ def build_config(args: argparse.Namespace):
         )
     if args.mask_root is not None:
         dataparser_kwargs["mask_root"] = args.mask_root
+    if args.image_mask_root is not None:
+        dataparser_kwargs["image_mask_root"] = args.image_mask_root
+    if args.rgb_root is not None:
+        dataparser_kwargs["rgb_root"] = args.rgb_root
+    if args.disable_image_masks:
+        dataparser_kwargs["load_image_masks"] = False
     if args.mask_lidar_points:
         dataparser_kwargs["mask_lidar_points"] = True
+    if args.lidar_persistence_root is not None:
+        dataparser_kwargs["lidar_persistence_root"] = (
+            args.lidar_persistence_root
+        )
     config.pipeline.datamanager.dataparser = TbVDataParserConfig(
         **dataparser_kwargs
     )
-    if args.mask_root is not None:
+    if (
+        args.mask_root is not None or args.image_mask_root is not None
+    ) and not args.disable_image_masks:
         from stage_h3_mask_aligned_splatad import MaskAlignedSplatADModel
 
         config.pipeline.model._target = MaskAlignedSplatADModel
     config.pipeline.model.max_steps = args.iterations
     config.pipeline.model.max_num_seed_points = args.max_num_seed_points
+    if args.num_downscales is not None:
+        config.pipeline.model.num_downscales = args.num_downscales
+    if args.resolution_schedule is not None:
+        config.pipeline.model.resolution_schedule = args.resolution_schedule
+    if args.steps_per_eval_image is not None:
+        config.steps_per_eval_image = args.steps_per_eval_image
     return config
 
 
 def main() -> None:
+    warnings.filterwarnings(
+        "ignore",
+        category=FutureWarning,
+        module=r"av2\.utils\.io",
+    )
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--data",
@@ -73,8 +97,15 @@ def main() -> None:
     parser.add_argument("--downsample-factor", type=float, default=0.25)
     parser.add_argument("--train-split-fraction", type=float, default=0.9)
     parser.add_argument("--max-num-seed-points", type=int, default=250_000)
+    parser.add_argument("--rgb-root", type=Path)
     parser.add_argument("--mask-root", type=Path)
+    parser.add_argument("--image-mask-root", type=Path)
+    parser.add_argument("--disable-image-masks", action="store_true")
     parser.add_argument("--mask-lidar-points", action="store_true")
+    parser.add_argument("--lidar-persistence-root", type=Path)
+    parser.add_argument("--num-downscales", type=int)
+    parser.add_argument("--resolution-schedule", type=int)
+    parser.add_argument("--steps-per-eval-image", type=int)
     parser.add_argument("--sequence", dest="sequences", action="append")
     parser.add_argument(
         "--window-start-seconds", action="append", type=float
@@ -100,6 +131,33 @@ def main() -> None:
         )
     if args.mask_lidar_points and args.mask_root is None:
         parser.error("--mask-lidar-points requires --mask-root")
+    if (
+        args.disable_image_masks
+        and args.mask_root is None
+        and args.image_mask_root is None
+    ):
+        parser.error(
+            "--disable-image-masks requires a mask root to disable"
+        )
+    if (
+        args.lidar_persistence_root is not None
+        and not args.mask_lidar_points
+    ):
+        parser.error(
+            "--lidar-persistence-root requires --mask-lidar-points"
+        )
+    if args.num_downscales is not None and args.num_downscales < 0:
+        parser.error("--num-downscales cannot be negative")
+    if (
+        args.resolution_schedule is not None
+        and args.resolution_schedule <= 0
+    ):
+        parser.error("--resolution-schedule must be positive")
+    if (
+        args.steps_per_eval_image is not None
+        and args.steps_per_eval_image <= 0
+    ):
+        parser.error("--steps-per-eval-image must be positive")
     train_main(build_config(args))
 
 

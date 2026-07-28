@@ -115,10 +115,22 @@ def render_tile(
 
     def update_config(config: Any) -> Any:
         config = streamline_ad_config(config)
+        dataparser = config.pipeline.datamanager.dataparser
         if data_root is not None:
-            config.pipeline.datamanager.dataparser.data = (
-                data_root.expanduser().resolve()
-            )
+            dataparser.data = data_root.expanduser().resolve()
+        # Quality probes always compare against the original observed JPEGs,
+        # never a training-only RGB override or its residual loss masks.
+        if getattr(dataparser, "rgb_root", None) is not None:
+            dataparser.rgb_root = None
+        if getattr(dataparser, "image_mask_root", None) is not None:
+            dataparser.image_mask_root = None
+        dataparser.load_image_masks = False
+        # The checkpoint already contains the result of training-time point
+        # filtering. Reprojecting every LiDAR return during RGB-only probing is
+        # both expensive and capable of changing the evidence path.
+        if getattr(dataparser, "mask_lidar_points", False):
+            dataparser._checkpoint_trained_with_lidar_mask_filter = True
+            dataparser.mask_lidar_points = False
         return config
 
     config, pipeline, checkpoint_path, checkpoint_step = eval_setup(

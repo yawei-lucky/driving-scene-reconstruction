@@ -6,14 +6,21 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import warnings
 
 from stage_h3_tbv_dataparser import TbVDataParserConfig
 
 
 def main() -> None:
+    warnings.filterwarnings(
+        "ignore",
+        category=FutureWarning,
+        module=r"av2\.utils\.io",
+    )
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--mask-root", type=Path, required=True)
+    parser.add_argument("--lidar-persistence-root", type=Path)
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--sequence", dest="sequences", action="append")
     parser.add_argument(
@@ -44,6 +51,7 @@ def main() -> None:
         data=args.data,
         mask_root=args.mask_root,
         mask_lidar_points=True,
+        lidar_persistence_root=args.lidar_persistence_root,
         sequences=tuple(args.sequences),
         window_start_seconds=tuple(args.window_start_seconds),
         window_end_seconds=tuple(args.window_end_seconds),
@@ -60,6 +68,11 @@ def main() -> None:
         ),
         "data": str(args.data.expanduser().resolve()),
         "mask_root": str(args.mask_root.expanduser().resolve()),
+        "lidar_persistence_root": (
+            str(args.lidar_persistence_root.expanduser().resolve())
+            if args.lidar_persistence_root is not None
+            else None
+        ),
         "sequences": args.sequences,
         "window_start_seconds": args.window_start_seconds,
         "window_end_seconds": args.window_end_seconds,

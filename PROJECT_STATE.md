@@ -1115,14 +1115,23 @@ discard static returns behind traffic regions while the masked RGB pixels
 provide no replacement appearance supervision; that mechanism is an
 inference, not a separately isolated causal measurement.
 
-The next bounded treatment is one cross-traversal 3D-persistence filter:
-transform both visits to the common city frame, retain points supported within
-a small radius or voxel by the other visit, and treat non-recurrent points as
-transient candidates. If that 2,000-step pair does not recover unmasked road
-sharpness/consistency while reducing false obstacles, stop refining static TbV
-masks and pivot the long-route renderer/data choice toward actor-aware
-reconstruction. Exact evidence is in
-`experiments/stage_h3_tbv_rgb_lidar_mask_pilot.md`.
+The subsequent cross-traversal 3D-persistence gate is now complete. A 0.20 m
+voxel plus one-voxel neighborhood rescued 82.14% of projected deletion
+candidates and reduced the tile-2 removal fraction from 7.66% to 1.37%, but
+the persistence-only 8k candidate still worsened mean raw-RGB PSNR from
+23.641 to 21.061 dB and produced dark smears. It is rejected.
+
+A second, appearance-aware tile-2 pilot conservatively transferred only
+donor-observed, unmasked background from the other traversal and exact-resumed
+static-8k to step 9,999. On donor-supported fill pixels it improved mean MAE
+by 28.4%, PSNR by 2.743 dB, and gradient MAE by 8.8%. Ordinary observed static
+pixels improved 4.81% in MAE and 0.284 dB in PSNR, with effectively flat
+gradient error. Full-frame raw-RGB PSNR is 0.39 dB lower because the reference
+still contains source vehicles, and transferred regions are smoother.
+Static-8k therefore remains default; the 10k checkpoint is an optional
+candidate pending a short continuous-route visual A/B. Vegetation blur is not
+fixed. Exact evidence is in
+`experiments/stage_h3_tbv_cross_visit_quality_repair.md`.
 
 ### Stage H3 Level 9U — MTGS two-App remote cockpit
 
@@ -1487,15 +1496,17 @@ UniSim are not integrated into the common simulator; MTGS now has the isolated
 inference probe, fixed-time videos, standalone support adapter, and local
 experimental simulated control/render loop described above.
 
-Both minimal transient treatments are now measured. Image-space masks remove
-visible vehicle bodies but reduce road sharpness and cross-tile consistency.
-Directly projecting those masks onto synchronized LiDAR removes 7.66%/9.41%
-of tile-2/3 returns yet worsens matched-pose cross-tile RGB MAE to
-13.769 / 255, versus 9.835 unmasked and 11.880 with image masks alone. Do not
-resume either masked pair to 8,000 steps.
+Four bounded transient treatments are now measured. Image-space masks remove
+vehicle bodies but reduce road sharpness and cross-tile consistency. Direct
+projected-LiDAR deletion and persistence-gated deletion do not restore missing
+appearance. Naive local inpainting creates visible blobs. Conservative
+cross-visit RGB transfer is the first partial pass: it improves
+donor-supported background substantially without degrading ordinary static
+pixels as a class, but it is not yet promoted and does not solve vegetation.
 
-Stop adding route tiles and stop static-mask refinement for now. The current
-action is the agreed usability phase over the complete coverage pack:
+Stop adding route tiles and stop threshold-level static-mask refinement. First
+run one short continuous tile-2 A/B between static-8k and cross-visit 10k,
+then continue the agreed usability phase over the complete coverage pack:
 
 1. select a small fixed station set spanning MTGS, the TbV branch, both
    long-route overlaps, and ordinary non-overlap road;
@@ -1507,12 +1518,15 @@ action is the agreed usability phase over the complete coverage pack:
    renderer to report its honest pose boundary;
 5. promote, restrict, or reject each asset before doing more reconstruction.
 
-Cross-traversal 3D persistence remains a candidate only if false vehicle
-obstacles make the unmasked 260 m route fail this gate. Do not train tiles
-0/1/5/6 or claim the full 610 m route before the usability evidence justifies
-it. The third phase begins only for assets that pass: automate connected-block
-selection, distributed reconstruction, portable export, scene registration,
-live prefetch/eviction, and route-scale streaming.
+Promote cross-visit 10k only if the continuous A/B removes false vehicle
+obstacles without introducing flicker, dark patches, false road boundaries, or
+vegetation instability. Otherwise retain static-8k and pivot the relevant
+scene to actor-annotated data or the existing MTGS path; the released TbV tile
+has no official actor annotations to recover hidden background. Do not train
+tiles 0/1/5/6 or claim the full 610 m route before the usability evidence
+justifies it. The third phase begins only for assets that pass: automate
+connected-block selection, distributed reconstruction, portable export, scene
+registration, live prefetch/eviction, and route-scale streaming.
 
 The completed MTGS two-App path still needs one five-minute physical
 Shidi-to-operator LAN regression covering AUTO-to-REMOTE takeover, W/S/A/D,
@@ -1540,10 +1554,10 @@ plan. The short version is:
    the direct no-browser A/D/recovery trial as the +/-1 m regression gate;
 8. retain the successful isolated MTGS checkpoint, +/-5 m pose grid, 12 m/s
    prescribed-path video, minimal adapter, and simulated-driver render loop;
-   retain the rejected image-only and direct projected-LiDAR 2k mask pilots,
-   and retain the completed three-tile 260 m TbV drive as the long-route
-   coverage regression; run the cross-traversal 3D-persistence gate only if
-   false obstacles fail the next usability evaluation;
+   retain the rejected image-only, direct projected-LiDAR, persistence-only,
+   and naive-inpainting evidence; retain the optional cross-visit tile-2 10k
+   candidate and run its continuous A/B before promotion; retain the completed
+   three-tile 260 m TbV drive as the long-route coverage regression;
 9. keep the implemented provisional scene-040 world browser and operator trial
    as regression/acceptance work rather than coupling them to this new scene;
 10. return dynamic actors to the main line when they obscure the road, create a
@@ -1555,8 +1569,10 @@ In this plan, camera images remain the source of visual appearance. LiDAR
 anchors depth, metric scale, and ground geometry; fused ego pose/IMU anchors
 time-varying sensor placement and gravity; 3D cuboids drive the initial actor
 trajectories. Point-cloud semantics are supplemental and do not substitute for
-image masks. Cross-visit persistence is the next static/transient cue; a
-single-camera silhouette is not sufficient evidence to delete 3D geometry.
+image masks. Cross-visit persistence is useful as a geometry rescue but did
+not recover hidden appearance. Conservative donor-observed RGB is the only
+partial repair so far; a single-camera silhouette is not sufficient evidence
+to delete 3D geometry or invent occluded background.
 
 ### H3-0A environment result
 

@@ -64,6 +64,9 @@ Recorded experiments:
   image-guided LiDAR exclusion audit, bounded two-checkpoint comparison,
   rejection of direct 2D-silhouette point deletion, and the cross-traversal
   3D-persistence next gate.
+- `stage_h3_tbv_cross_visit_quality_repair.md`: cross-visit LiDAR-persistence
+  and observed-background repair, rejected persistence-only and naive-inpaint
+  variants, optional tile-2 10k candidate, and the regional quality decision.
 
 Stage H2 connects that H1 checkpoint to the simulator interface. Its design and
 GPU validation record live in `docs/stage_h2_reconstruction_renderer.md`.

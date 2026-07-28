@@ -8,6 +8,8 @@ H3_CODE="${H3_CODE:-${H3_ROOT}/code/neurad-studio}"
 DATA_ROOT="${H3_TBV_LONG_DATA_ROOT:-${H3_ROOT}/data/tbv_long_route_tiles_2_3}"
 TILE23_DATA_ROOT="${H3_TBV_LONG_TILE23_DATA_ROOT:-${H3_ROOT}/data/tbv_long_route_tiles_2_3_frozen_20260725}"
 MASK_ROOT="${H3_TBV_LONG_MASK_ROOT:-${H3_ROOT}/data/tbv_long_route_tiles_2_3_vehicle_masks}"
+CROSS_VISIT_ROOT="${H3_TBV_LONG_CROSS_VISIT_ROOT:-${H3_ROOT}/data/tbv_long_route_tile_2_cross_visit_rgb_20260728}"
+PERSISTENCE_ROOT="${H3_TBV_LONG_PERSISTENCE_ROOT:-${H3_ROOT}/data/tbv_long_route_tile_2_persistence_020_n1_20260728}"
 TRAIN_ROOT="${H3_TBV_LONG_TRAIN_ROOT:-${H3_ROOT}/outputs/tbv_long_route_tiles}"
 ARTIFACT_ROOT="${H3_TBV_LONG_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_seam_20260725}"
 PILOT_ARTIFACT_ROOT="${H3_TBV_LONG_PILOT_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_seam_500_20260725}"
@@ -23,6 +25,7 @@ JOINT_MASKED_CONTINUOUS_ROOT="${H3_TBV_LONG_JOINT_MASKED_CONTINUOUS_ROOT:-${H3_R
 TILE34_QUALITY_ARTIFACT_ROOT="${H3_TBV_LONG_TILE34_QUALITY_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_3_4_seam_2000_isolated_20260728}"
 TILE34_STATIC_ARTIFACT_ROOT="${H3_TBV_LONG_TILE34_STATIC_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_3_4_seam_8000_isolated_20260728}"
 THREE_TILE_DRIVE_ROOT="${H3_TBV_LONG_THREE_TILE_DRIVE_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_three_tile_drive_8000_20260728}"
+CROSS_VISIT_AB_ROOT="${H3_TBV_LONG_CROSS_VISIT_AB_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_2_quality_ab_cross_visit_hires_10k_20260728}"
 PYTHON="${H3_ENV}/bin/python"
 
 REFERENCE="V17LgyVPyrd2yjWS4oEuipUBJQN5X0wZ__Spring_2020"
@@ -80,6 +83,11 @@ TILE3_STATIC_RUN="${TRAIN_ROOT}/${TILE3_STATIC_EXPERIMENT}/splatad/${STATIC_TIME
 TILE2_STATIC_CONFIG="${TILE2_STATIC_RUN}/config.yml"
 TILE3_STATIC_CONFIG="${TILE3_STATIC_RUN}/config.yml"
 TILE2_STATIC_CHECKPOINT="${TILE2_STATIC_RUN}/nerfstudio_models/step-000007999.ckpt"
+CROSS_VISIT_TIMESTAMP="2026-07-28_resume_static8k_cross_visit_hires_retry"
+CROSS_VISIT_EXPERIMENT="tbv_long_route_tile_2_cross_visit_hires_10000"
+CROSS_VISIT_RUN="${TRAIN_ROOT}/${CROSS_VISIT_EXPERIMENT}/splatad/${CROSS_VISIT_TIMESTAMP}"
+CROSS_VISIT_CONFIG="${CROSS_VISIT_RUN}/config.yml"
+CROSS_VISIT_CHECKPOINT="${CROSS_VISIT_RUN}/nerfstudio_models/step-000009999.ckpt"
 TILE3_STATIC_CHECKPOINT="${TILE3_STATIC_RUN}/nerfstudio_models/step-000007999.ckpt"
 TILE4_STATIC_TIMESTAMP="2026-07-28_resume_2k_to_8k_no_eval"
 TILE4_STATIC_EXPERIMENT="tbv_long_route_tile_4_static_8000"
@@ -300,6 +308,56 @@ case "$MODE" in
     resume_tile 4 "$TILE4_QUALITY_CONFIG" "$TILE4_QUALITY_CHECKPOINT" \
       "$TILE4_STATIC_EXPERIMENT" "$TILE4_STATIC_CHECKPOINT" \
       "$TILE4_STATIC_TIMESTAMP" 999999
+    ;;
+  cross-visit-quality-2)
+    if [[ -f "$CROSS_VISIT_CHECKPOINT" &&
+          "${H3_ALLOW_RETRAIN:-0}" != "1" ]]; then
+      echo "PASS: reusing cross-visit checkpoint: $CROSS_VISIT_CHECKPOINT"
+      exit 0
+    fi
+    if [[ ! -f "$TILE2_STATIC_CONFIG" ||
+          ! -f "$TILE2_STATIC_CHECKPOINT" ||
+          ! -f "$CROSS_VISIT_ROOT/cross_visit_manifest.json" ||
+          ! -f "$PERSISTENCE_ROOT/persistence_manifest.json" ]]; then
+      echo "cross-visit resume inputs are incomplete" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/resume_stage_h3_exact.py" \
+      --source-config "$TILE2_STATIC_CONFIG" \
+      --checkpoint "$TILE2_STATIC_CHECKPOINT" \
+      --output-dir "$TRAIN_ROOT" \
+      --experiment-name "$CROSS_VISIT_EXPERIMENT" \
+      --timestamp "$CROSS_VISIT_TIMESTAMP" \
+      --additional-iterations 2000 \
+      --model-max-steps 10000 \
+      --steps-per-save 2000 \
+      --steps-per-eval-image 999999 \
+      --rgb-root "$CROSS_VISIT_ROOT/rgb" \
+      --image-mask-root "$CROSS_VISIT_ROOT/valid_masks" \
+      --lidar-mask-root "$MASK_ROOT" \
+      --lidar-persistence-root "$PERSISTENCE_ROOT" \
+      --downsample-factor 0.5 \
+      --use-mask-aligned-model
+    ;;
+  cross-visit-quality-ab-2)
+    if [[ ! -f "$CROSS_VISIT_CONFIG" ||
+          ! -f "$CROSS_VISIT_CHECKPOINT" ]]; then
+      echo "cross-visit 10k config/checkpoint is incomplete" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_quality_ab.py" \
+      --baseline-config "$TILE2_STATIC_CONFIG" \
+      --candidate-config "$CROSS_VISIT_CONFIG" \
+      --baseline-data-root "$DATA_ROOT" \
+      --candidate-data-root "$DATA_ROOT" \
+      --baseline-label static_8k \
+      --candidate-label cross_visit_hires_10k \
+      --window-start-seconds "$TILE2_REFERENCE_START" \
+      --window-end-seconds "$TILE2_REFERENCE_END" \
+      --sample-count 7 \
+      --expected-baseline-step 7999 \
+      --expected-candidate-step 9999 \
+      --output-dir "$CROSS_VISIT_AB_ROOT"
     ;;
   masked-2)
     train_masked_tile 2 "$TILE2_MASKED_EXPERIMENT" \
@@ -564,6 +622,9 @@ case "$MODE" in
     echo "continuous seam evidence: $CONTINUOUS_ARTIFACT_ROOT"
     echo "tile 2 static config: $TILE2_STATIC_CONFIG"
     echo "tile 2 static checkpoint: $TILE2_STATIC_CHECKPOINT"
+    echo "cross-visit config: $CROSS_VISIT_CONFIG"
+    echo "cross-visit checkpoint: $CROSS_VISIT_CHECKPOINT"
+    echo "cross-visit A/B evidence: $CROSS_VISIT_AB_ROOT"
     echo "tile 3 static config: $TILE3_STATIC_CONFIG"
     echo "tile 3 static checkpoint: $TILE3_STATIC_CHECKPOINT"
     echo "tile 4 static config: $TILE4_STATIC_CONFIG"
@@ -594,6 +655,8 @@ case "$MODE" in
     echo "       pilot-2 pilot-3 seam-500" >&2
     echo "       quality-2 quality-3 quality-4 seam-2000 seam-3-4-2000" >&2
     echo "       continuous-2000 static-2 static-3 static-4" >&2
+    echo "       cross-visit-quality-2" >&2
+    echo "       cross-visit-quality-ab-2" >&2
     echo "       seam-8000 seam-3-4-8000 continuous-8000" >&2
     echo "       three-tile-drive-8000 paths" >&2
     echo "       masked-2 masked-3 masked-seam-2000 masked-continuous-2000" >&2
