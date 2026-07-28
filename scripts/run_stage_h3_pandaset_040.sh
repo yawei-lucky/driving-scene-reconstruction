@@ -55,29 +55,18 @@ TIMED_TIMESTAMP="${H3_TIMED_TIMESTAMP:-2026-07-20_actor_bounds_and_time_v2}"
 TIMED_RUN_ROOT="${TRAIN_ROOT}/${TIMED_EXPERIMENT}/splatad/${TIMED_TIMESTAMP}"
 TIMED_CONFIG="${TIMED_RUN_ROOT}/config.yml"
 TIMED_CHECKPOINT="${TIMED_RUN_ROOT}/nerfstudio_models/step-000001999.ckpt"
-PYTHON="${H3_ENV}/bin/python"
-
 usage() {
   echo "Usage: $0 {data-gate|smoke|render-smoke|pilot|render-pilot|static-8k|logged-renderer-smoke|world-pose-probe|corridor-sweep|drivability-preflight|logged-browser|world-browser|trial-rehearsal|trial-check|vehicle-8k|moving-8k|moving-constrained-2k|moving-constrained-timed-2k|paths}" >&2
 }
 
-if [[ ! -x "$PYTHON" ]]; then
-  echo "Stage H3 Python interpreter not found: $PYTHON" >&2
-  echo "Run scripts/setup_stage_h3_environment.sh first." >&2
-  exit 1
-fi
 if [[ ! -d "${DATA_ROOT}/${SCENE}" ]]; then
   echo "PandaSet scene not found: ${DATA_ROOT}/${SCENE}" >&2
   exit 1
 fi
 
-export CUDA_HOME="$H3_ENV"
-export PATH="${H3_ENV}/bin:${PATH}"
-export LD_LIBRARY_PATH="${H3_ENV}/lib:${LD_LIBRARY_PATH:-}"
-export TCNN_CUDA_ARCHITECTURES="${TCNN_CUDA_ARCHITECTURES:-89}"
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.9}"
-export TORCH_EXTENSIONS_DIR="${TORCH_EXTENSIONS_DIR:-${H3_ROOT}/cache/torch_extensions}"
-export MPLCONFIGDIR="${MPLCONFIGDIR:-${H3_ROOT}/cache/matplotlib}"
+# shellcheck source=stage_h3_cuda_environment.sh
+source "$REPO_ROOT/scripts/stage_h3_cuda_environment.sh"
+PYTHON="$STAGE_H3_PYTHON"
 export PYTHONPATH="${REPO_ROOT}/src:${PYTHONPATH:-}"
 
 mkdir -p "$TORCH_EXTENSIONS_DIR" "$MPLCONFIGDIR"

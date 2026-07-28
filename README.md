@@ -841,10 +841,18 @@ This is not yet a complete trustworthy driving scene. Image-only, projected
 LiDAR, and persistence-only variants all failed as unconditional replacements.
 The tile-2 cross-visit RGB candidate now reduces evidence-backed
 vehicle/background mismatch without the earlier black-road smears, but foliage
-remains mixed and a full-frame raw-RGB score is slightly lower. Keep all three
-unmasked 8k checkpoints as the default regression and keep the new tile-2 10k
-checkpoint optional until one continuous-route A/B passes. Do not claim the
-full 610 m route.
+remains mixed and a full-frame raw-RGB score is slightly lower. A 32-frame
+ProPainter smoke can visually remove the remaining traffic shapes, with zero
+changes outside its dilated masks and lower naive masked temporal difference,
+but it replaces hidden road with soft, unverified pixels and does not improve
+foliage. Keep all three unmasked 8k checkpoints as the default regression.
+Cross-visit 10k and ProPainter remain research evidence, not candidates for the
+live renderer. Do not claim the full 610 m route.
+
+HUGSIM is now recorded as a possible new structured reconstruction path, not a
+generative SplatAD cleanup pass. A bounded TbV trial would need an AV2/TbV
+adapter plus predicted semantics and 3D tracks before ground/scene training.
+The local HUGSIM environment already exists; setup is not the next bottleneck.
 
 The current second phase uses held-out real traversals and matched poses to
 test road/free-space geometry, false
@@ -945,6 +953,10 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_tbv_cross_visit_quality_repair.md` records the
   persistence-only rejection, conservative observed-background transfer,
   exact-resumed tile-2 10k candidate, and full-frame versus regional decision.
+- `experiments/stage_h3_hugsim_generative_repair_gate.md` distinguishes
+  HUGSIM's structured reconstruction from generative postprocessing and records
+  the 32-frame ProPainter temporal-removal smoke, artifacts, limits, and
+  non-promotion decision.
 - `experiments/stage_h3_tbv_splatad_pilot.md` records the bounded TbV download,
   multi-traversal parser, LiDAR alignment, and 100/2,000-step reload renders.
 - `experiments/stage_h3_tbv_world_pose_corridor_probe.md` records the 2k/8k
@@ -973,6 +985,7 @@ See also `docs/stage_h3_stable_drivable_reconstruction_plan.md`.
 Environment acceptance can be regenerated without PandaSet:
 
 ```bash
+scripts/run_stage_h3_environment.sh --check
 scripts/check_stage_h3_environment.sh
 scripts/run_stage_h3_pandaset_040.sh data-gate
 scripts/run_stage_h3_pandaset_040.sh static-8k
@@ -987,6 +1000,11 @@ scripts/run_stage_h3_tbv_pilot.sh world-pose-probe-8k
 scripts/run_stage_h3_tbv_pilot.sh driving-adapter
 scripts/run_stage_h3_tbv_pilot.sh paths
 ```
+
+For one-off SplatAD/NeuRAD commands, use
+`scripts/run_stage_h3_environment.sh python ...`. Directly invoking the H3
+Python does not activate its CUDA compiler and can otherwise fall back to the
+host's incompatible CUDA 11.5 `nvcc`.
 
 The static 8k run is reused when its checkpoint exists; it is not retrained by
 default. Detailed results and rejected actor ablations are in

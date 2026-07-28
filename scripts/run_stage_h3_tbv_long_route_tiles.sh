@@ -26,8 +26,6 @@ TILE34_QUALITY_ARTIFACT_ROOT="${H3_TBV_LONG_TILE34_QUALITY_ARTIFACT_ROOT:-${H3_R
 TILE34_STATIC_ARTIFACT_ROOT="${H3_TBV_LONG_TILE34_STATIC_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_3_4_seam_8000_isolated_20260728}"
 THREE_TILE_DRIVE_ROOT="${H3_TBV_LONG_THREE_TILE_DRIVE_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_three_tile_drive_8000_20260728}"
 CROSS_VISIT_AB_ROOT="${H3_TBV_LONG_CROSS_VISIT_AB_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_2_quality_ab_cross_visit_hires_10k_20260728}"
-PYTHON="${H3_ENV}/bin/python"
-
 REFERENCE="V17LgyVPyrd2yjWS4oEuipUBJQN5X0wZ__Spring_2020"
 REPEAT="cTrSOEc1gW3XqELP562UlUFJYCmlRoa9__Spring_2020"
 TILE2_REFERENCE_START="315970596.3874255"
@@ -114,13 +112,9 @@ TILE2_JOINT_MASKED_CHECKPOINT="${TILE2_JOINT_MASKED_RUN}/nerfstudio_models/step-
 TILE3_JOINT_MASKED_CHECKPOINT="${TILE3_JOINT_MASKED_RUN}/nerfstudio_models/step-000001999.ckpt"
 
 export PYTHONPATH="${REPO_ROOT}/scripts:${H3_CODE}:${REPO_ROOT}/src:${PYTHONPATH:-}"
-export CUDA_HOME="$H3_ENV"
-export PATH="${H3_ENV}/bin:${PATH}"
-export LD_LIBRARY_PATH="${H3_ENV}/lib:${LD_LIBRARY_PATH:-}"
-export TCNN_CUDA_ARCHITECTURES="${TCNN_CUDA_ARCHITECTURES:-89}"
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.9}"
-export TORCH_EXTENSIONS_DIR="${TORCH_EXTENSIONS_DIR:-${H3_ROOT}/cache/torch_extensions}"
-export MPLCONFIGDIR="${MPLCONFIGDIR:-${H3_ROOT}/cache/matplotlib}"
+# shellcheck source=stage_h3_cuda_environment.sh
+source "$REPO_ROOT/scripts/stage_h3_cuda_environment.sh"
+PYTHON="$STAGE_H3_PYTHON"
 export PYTHONWARNINGS="${PYTHONWARNINGS:-ignore::FutureWarning}"
 
 train_tile() {

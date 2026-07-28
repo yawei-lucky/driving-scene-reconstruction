@@ -26,6 +26,23 @@ config uses a relative data root. Full two-machine setup is in
 
 ## Stage H3
 
+The Stage H3 interpreter does not activate its CUDA toolkit by itself. The
+host's `/usr/bin/nvcc` is CUDA 11.5, while SplatAD/NeuRAD H3 requires the
+compiler bundled with the accepted CUDA 11.8 environment. Use the project
+launcher for every one-off H3 command that can import or compile CUDA code:
+
+```bash
+scripts/run_stage_h3_environment.sh --check
+scripts/run_stage_h3_environment.sh python scripts/your_h3_command.py ...
+scripts/run_stage_h3_environment.sh ns-train ...
+```
+
+The launcher fails before Python starts if `nvcc`, `torch.version.cuda`, or
+PyTorch's extension `CUDA_HOME` does not match the H3 CUDA 11.8 contract.
+Do not replace it with a direct
+`/home/yawei/stage3_external/envs/h3_splatad/bin/python` invocation. MTGS and
+HUGSIM have separate environments and are not routed through this launcher.
+
 Before extracting another sequence, scan the existing verified PandaSet ZIP
 for repeat, offset, and multi-direction trajectories:
 
@@ -39,7 +56,7 @@ payloads. The optional front-camera contact sheet uses Pillow from the H3
 environment:
 
 ```bash
-/home/yawei/stage3_external/envs/h3_splatad/bin/python \
+scripts/run_stage_h3_environment.sh python \
   scripts/analyze_stage_h3_pandaset_trajectories.py \
   --contact-sheet /home/yawei/stage3_external/artifacts/pandaset_multi_trajectory_inventory/front_contact_sheet.jpg
 ```
@@ -50,7 +67,7 @@ downloading it:
 
 ```bash
 env MPLCONFIGDIR=/tmp \
-  /home/yawei/stage3_external/envs/h3_splatad/bin/python \
+  scripts/run_stage_h3_environment.sh python \
   scripts/audit_stage_h3_tbv_long_route_tiles.py \
   --download-source-images \
   --plan-tile-payload
@@ -113,8 +130,16 @@ exclude a LiDAR return when any valid projection lands in a traffic-mask
 pixel. `joint-mask-audit-2` verifies coverage/removal before training. The
 joint 2,000-step pair removed 7.66%/9.41% of tile-2/3 returns but worsened
 matched-pose cross-tile RGB MAE to 13.77 / 255, so it is rejected before 8,000
-steps. The next experiment is cross-traversal city-frame 3D persistence, not
-more direct 2D-silhouette deletion.
+steps. That result motivated the recorded cross-traversal city-frame
+persistence experiment; it is not the current next action.
+
+`prepare_stage_h3_tbv_generative_repair.py` and
+`audit_stage_h3_generative_repair.py` reproduce the later bounded learned
+video-inpainting gate. They prepare observed-pose renders/masks and build
+preservation/temporal evidence; they deliberately do not install or invoke a
+third-party model. Exact ProPainter provenance, command, license boundary, and
+the non-promotion decision are in
+`experiments/stage_h3_hugsim_generative_repair_gate.md`.
 
 Prepare or verify the separate H3 environment:
 
@@ -152,7 +177,7 @@ artifacts by default.
 Compact progress images can be rebuilt with the H3 Python environment:
 
 ```bash
-/home/yawei/stage3_external/envs/h3_splatad/bin/python \
+scripts/run_stage_h3_environment.sh python \
   scripts/build_stage_h3_render_summary.py \
   --smoke-root /home/yawei/stage3_external/artifacts/scene_040_smoke_100_render \
   --pilot-root /home/yawei/stage3_external/artifacts/scene_040_pilot_2000_render \

@@ -61,6 +61,14 @@ Verify the active Python/Conda environment, GPU visibility, CUDA compatibility,
 available disk space, checkpoint path, and output path before expensive work.
 Do not infer machine capability from a sandbox-only failure.
 
+For Stage H3 SplatAD/NeuRAD commands, selecting
+`/home/yawei/stage3_external/envs/h3_splatad/bin/python` is not sufficient:
+that interpreter can still discover `/usr/bin/nvcc`, which is CUDA 11.5 on
+this host. Never invoke the H3 Python directly for a command that may import or
+compile CUDA extensions. Use an existing project launcher or
+`scripts/run_stage_h3_environment.sh`; its preflight must select the H3 CUDA
+11.8 compiler and reject a mixed toolchain before Python starts.
+
 ## Current Project Scope
 
 Always reread `README.md` and `PROJECT_STATE.md` before choosing the next

@@ -1496,17 +1496,24 @@ UniSim are not integrated into the common simulator; MTGS now has the isolated
 inference probe, fixed-time videos, standalone support adapter, and local
 experimental simulated control/render loop described above.
 
-Four bounded transient treatments are now measured. Image-space masks remove
+Six bounded transient treatments are now measured. Image-space masks remove
 vehicle bodies but reduce road sharpness and cross-tile consistency. Direct
 projected-LiDAR deletion and persistence-gated deletion do not restore missing
 appearance. Naive local inpainting creates visible blobs. Conservative
 cross-visit RGB transfer is the first partial pass: it improves
 donor-supported background substantially without degrading ordinary static
-pixels as a class, but it is not yet promoted and does not solve vegetation.
+pixels as a class, but it is not promoted and does not solve vegetation.
+The new ProPainter smoke removes prominent traffic shapes in a 32-frame
+observed-pose sequence, preserves every pixel outside its dilated masks, and
+reduces a naive masked temporal-difference screen. It also fills large hidden
+road regions with soft, unverified pixels and leaves foliage blur unchanged.
+It passes only as offline learned-inpainting evidence, not as a live or
+geometry-consistent simulator repair. Exact evidence is in
+`experiments/stage_h3_hugsim_generative_repair_gate.md`.
 
-Stop adding route tiles and stop threshold-level static-mask refinement. First
-run one short continuous tile-2 A/B between static-8k and cross-visit 10k,
-then continue the agreed usability phase over the complete coverage pack:
+Stop adding route tiles, stop threshold-level static-mask refinement, and stop
+the cross-visit continuation path. Keep static-8k as the default and continue
+the agreed usability phase over the complete coverage pack:
 
 1. select a small fixed station set spanning MTGS, the TbV branch, both
    long-route overlaps, and ordinary non-overlap road;
@@ -1518,15 +1525,19 @@ then continue the agreed usability phase over the complete coverage pack:
    renderer to report its honest pose boundary;
 5. promote, restrict, or reject each asset before doing more reconstruction.
 
-Promote cross-visit 10k only if the continuous A/B removes false vehicle
-obstacles without introducing flicker, dark patches, false road boundaries, or
-vegetation instability. Otherwise retain static-8k and pivot the relevant
-scene to actor-annotated data or the existing MTGS path; the released TbV tile
-has no official actor annotations to recover hidden background. Do not train
-tiles 0/1/5/6 or claim the full 610 m route before the usability evidence
-justifies it. The third phase begins only for assets that pass: automate
-connected-block selection, distributed reconstruction, portable export, scene
-registration, live prefetch/eviction, and route-scale streaming.
+Do not put ProPainter after the live renderer: its completion is tied to one
+camera sequence and supplies no reusable 3D geometry. The next reconstruction
+discriminator, if vehicle ghosts remain a driving blocker, is one bounded
+HUGSIM-style structured pilot that separates predicted dynamic tracks from
+ground and non-ground static background. HUGSIM is not a SplatAD postprocessor
+and TbV is not an official HUGSIM input, so this requires a small AV2/TbV data
+adapter rather than more environment work. Diffusion-prior 3DGS remains later
+research because it requires model fine-tuning and reconstruction retraining
+and introduces a multi-view-consistency risk. Do not train tiles 0/1/5/6 or
+claim the full 610 m route before the usability evidence justifies it. The
+third phase begins only for assets that pass: automate connected-block
+selection, distributed reconstruction, portable export, scene registration,
+live prefetch/eviction, and route-scale streaming.
 
 The completed MTGS two-App path still needs one five-minute physical
 Shidi-to-operator LAN regression covering AUTO-to-REMOTE takeover, W/S/A/D,
@@ -1555,9 +1566,9 @@ plan. The short version is:
 8. retain the successful isolated MTGS checkpoint, +/-5 m pose grid, 12 m/s
    prescribed-path video, minimal adapter, and simulated-driver render loop;
    retain the rejected image-only, direct projected-LiDAR, persistence-only,
-   and naive-inpainting evidence; retain the optional cross-visit tile-2 10k
-   candidate and run its continuous A/B before promotion; retain the completed
-   three-tile 260 m TbV drive as the long-route coverage regression;
+   and naive-inpainting evidence; retain cross-visit tile-2 10k and ProPainter
+   only as partial research evidence, not promotion candidates; retain the
+   completed three-tile 260 m TbV drive as the long-route coverage regression;
 9. keep the implemented provisional scene-040 world browser and operator trial
    as regression/acceptance work rather than coupling them to this new scene;
 10. return dynamic actors to the main line when they obscure the road, create a

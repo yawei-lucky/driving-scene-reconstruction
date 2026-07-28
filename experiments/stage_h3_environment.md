@@ -77,11 +77,51 @@ Recreate or check the environment with:
 ```bash
 scripts/setup_stage_h3_environment.sh
 scripts/check_stage_h3_environment.sh
+scripts/run_stage_h3_environment.sh --check
 ```
 
 The setup command does not acquire PandaSet. An existing complete environment
 is checked rather than reinstalled; `--repair` explicitly reapplies the pinned
 packages.
+
+### 2026-07-28 direct-invocation guardrail
+
+A later direct invocation reproduced an important activation trap. Calling
+
+```text
+/home/yawei/stage3_external/envs/h3_splatad/bin/python ...
+```
+
+selected the correct PyTorch build but did not activate the environment's
+compiler: `CUDA_HOME` was unset and `nvcc` resolved to `/usr/bin/nvcc`
+(CUDA 11.5). A CUDA extension then failed before the requested experiment
+started. This is an entrypoint failure, not a GPU, data, or model failure.
+
+The canonical one-off entrypoint is now:
+
+```bash
+scripts/run_stage_h3_environment.sh python SCRIPT.py ...
+```
+
+`scripts/stage_h3_cuda_environment.sh` is the shared sourceable contract used
+by the PandaSet, TbV pilot, long-route, and environment-check launchers. It
+sets `CUDA_HOME`, prepends the H3 toolchain to `PATH`, pins sm_89 and the
+extension cache, and rejects anything except the environment's CUDA 11.8
+compiler before Python starts. The host check on 2026-07-28 reported:
+
+```text
+python: /home/yawei/stage3_external/envs/h3_splatad/bin/python
+nvcc: /home/yawei/stage3_external/envs/h3_splatad/bin/nvcc
+nvcc version: Cuda compilation tools, release 11.8, V11.8.89
+torch: 2.0.1+cu118
+torch CUDA: 11.8
+torch extension CUDA_HOME: /home/yawei/stage3_external/envs/h3_splatad
+GPU visible to torch: True
+GPU: NVIDIA GeForce RTX 4090 D
+```
+
+The lightweight launcher test also injects a fake CUDA 11.5 compiler and
+requires rejection before Python runs.
 
 ## Acceptance Evidence
 

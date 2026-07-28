@@ -3,28 +3,9 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 H3_ROOT="${H3_ROOT:-/home/yawei/stage3_external}"
-H3_ENV="${H3_ENV:-${H3_ROOT}/envs/h3_splatad}"
-PYTHON="${H3_ENV}/bin/python"
-
-if [[ ! -x "$PYTHON" ]]; then
-  echo "Stage H3 Python interpreter not found: $PYTHON" >&2
-  echo "Run scripts/setup_stage_h3_environment.sh first." >&2
-  exit 1
-fi
-if [[ ! -x "${H3_ENV}/bin/nvcc" ]]; then
-  echo "Stage H3 CUDA compiler not found: ${H3_ENV}/bin/nvcc" >&2
-  exit 1
-fi
-
-export H3_ROOT
-export CUDA_HOME="$H3_ENV"
-export PATH="${H3_ENV}/bin:${PATH}"
-export LD_LIBRARY_PATH="${H3_ENV}/lib:${LD_LIBRARY_PATH:-}"
-export TCNN_CUDA_ARCHITECTURES="${TCNN_CUDA_ARCHITECTURES:-89}"
-export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.9}"
-export TORCH_EXTENSIONS_DIR="${TORCH_EXTENSIONS_DIR:-${H3_ROOT}/cache/torch_extensions}"
-export PIP_CACHE_DIR="${PIP_CACHE_DIR:-${H3_ROOT}/cache/pip}"
-export MPLCONFIGDIR="${MPLCONFIGDIR:-${H3_ROOT}/cache/matplotlib}"
+# shellcheck source=stage_h3_cuda_environment.sh
+source "$REPO_ROOT/scripts/stage_h3_cuda_environment.sh"
+PYTHON="$STAGE_H3_PYTHON"
 
 mkdir -p "$TORCH_EXTENSIONS_DIR" "$PIP_CACHE_DIR" "$MPLCONFIGDIR"
 
