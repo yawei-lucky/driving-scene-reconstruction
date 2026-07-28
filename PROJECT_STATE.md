@@ -1174,6 +1174,43 @@ a long route. Exact evidence and commands are in
 `experiments/stage_h3_mtgs_remote_apps.md` and
 `docs/mtgs_remote_driving_apps.md`.
 
+### Stage H3 Level 9V — TbV three-tile 260 m drive pilot
+
+Completed on the RTX 4090 D host on 2026-07-28:
+
+- extended the real repeated Miami route from tiles 2/3 to tiles 2/3/4,
+  covering route progress 160–420 m with two real 20 m overlaps;
+- detected that per-window camera stride had added opposite-phase frames to
+  the old shared raw-data root, froze the original 2/3 payload as a 2,805-file
+  hard-linked view, and made probe data roots explicit so old checkpoints
+  retain their original 1,359 camera indices;
+- trained tile 4 unmasked to step 1,999 and exact-resumed it to step 7,999;
+  the first resume preserved a real step-6,000 LiDAR-evaluation OOM after the
+  model reached 5,000,000 Gaussians, while the same exact resume with only
+  periodic LiDAR evaluation disabled completed and saved a 1.650 GB checkpoint;
+- passed five matched tile-3/tile-4 RGB poses at 2k and 8k; tile-4 PSNR p50
+  improved from 23.124 to 24.272 dB, but model-to-model RGB MAE p50 worsened
+  from 10.513 to 11.969 / 255, so longer training is not treated as a seam
+  consistency fix;
+- added a common `SceneTile` route manifest with exact data/checkpoint/source
+  provenance, dataparser transform, supported route interval, overlaps,
+  appearance profile, and deterministic smoothstep weights;
+- ran a 494-frame, 24.65 s kinematic simulated-human drive over the full
+  260.0 m at 12.0 m/s with +0.578/-0.544 m excursions, 0.422 m minimum
+  support reserve, 1.771 degree maximum heading error, endpoint braking, and
+  zero support-boundary hits;
+- sequentially rendered all three step-7,999 checkpoints and decoded 494/494
+  H.264 frames; warm front-camera render p50 was 35.90/32.57/33.32 ms for
+  tiles 2/3/4;
+- manually retained road and static topology through both transitions, while
+  retaining vehicle ghosts, foliage smear, front-only output, offline
+  checkpoint loading, +/-1 m support, and missing collision truth as explicit
+  rejection boundaries.
+
+This passes the long-route coverage/control slot, not equivalent realism or
+live tile streaming. Exact evidence is in
+`experiments/stage_h3_tbv_three_tile_drive.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -1261,6 +1298,23 @@ video, simulated-driver loop, and remote-App smoke remove the prior
 environment, 24 GB inference, high-speed spatial-continuity, first
 control/render, and basic transport uncertainties. They do not prove a real
 two-computer operator loop, trustworthy dynamic actor motion, or a long route.
+
+The Level-9V TbV long-route path now supports:
+
+```text
+one 610 m repeated real route
+→ three selected 100 m SplatAD tiles with two 20 m overlaps
+→ frozen per-checkpoint data views plus one common SceneTile manifest
+→ one 260 m data-supported centreline and +/-1 m support tube
+→ SimpleVehicleModel plus simulated-human pure-pursuit controls at 12 m/s
+→ logged source-time progression and counterfactual lateral/yaw pose
+→ sequential 8k checkpoint rendering and smooth overlap composition
+→ a 494-frame front-camera H.264 video plus JSON evidence
+```
+
+This is an offline coverage/runtime pilot. It does not yet keep adjacent
+checkpoints resident, prefetch/evict them live, render the full cockpit, or
+establish free-space/collision truth.
 
 This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint. The logged browser loop now
@@ -1400,21 +1454,20 @@ The agreed execution order changed on 2026-07-28:
 2. decide equivalent usability on that broader pack;
 3. scale the reconstruction factory only after the usability gate passes.
 
-The coverage pack contains three complementary assets: the existing 84 m MTGS
-wide-corridor/gentle-curve block, the existing TbV shared-approach
-straight/right branch, and one new approximately 180 m continuous
-tile-2/tile-3 TbV route. A common `SceneTile` manifest will describe world
-transform, checkpoint, supported pose region, route geometry, overlap,
-appearance/profile identity, and evidence provenance. The first phase ends
-when these scene types can be selected and the adjacent pair can be
-prefetched, transitioned only inside its real overlap, and continuously driven
-by the local simulated driver. It is not yet an equivalent-realism claim.
+The bounded coverage pack now contains three complementary assets: the
+existing 84 m MTGS wide-corridor/gentle-curve block, the existing TbV
+shared-approach straight/right branch, and a real 260 m continuous TbV route
+made from tiles 2/3/4. The long route now has a common `SceneTile` manifest
+covering exact data/checkpoint/source provenance, transforms, supported route
+regions, overlaps, appearance profile, and evidence path. It passes the
+offline coverage/control slot, not equivalent realism or live streaming.
 
-Stage H3 now has a real long-route data candidate and one quality-bearing
-static-background seam. The 610.072 m repeated Miami route partitions into
-seven 100 m tiles with 20 m overlaps. Tiles 2 and 3 have exact downloaded data,
-independent 2k checkpoints, exact-resumed 8k checkpoints, a five-pose overlap
-comparison, and a 12 m/s continuous overlap render.
+Stage H3 now has a real long-route result rather than only a candidate. The
+610.072 m repeated Miami route still partitions into seven 100 m tiles with
+20 m overlaps, but only tiles 2/3/4 are promoted. All three have step-7,999
+checkpoints, both adjacent seams have matched-pose evidence, and a kinematic
+simulated driver completed their 260 m union at 12 m/s with two bounded
+overlap transitions and zero support-boundary hits.
 The prescribed-path smoke, control/support adapter, and simulated-driver MTGS
 render loop remain complete for the released 84 m Singapore block. The MTGS
 path now also has two separable LAN applications and a passed localhost
@@ -1422,9 +1475,9 @@ SRT/WebSocket loop. TbV Miami
 `OCa... + QMn...` remains the cheap restricted branch regression, and PandaSet
 scene-040 remains fixed world-coordinate regression evidence.
 
-Both PandaSet scene-040 static-8k and the new TbV static-8k candidate remain
-fixed; they have different data and acceptance boundaries. The agreed
-technical direction is recorded in
+PandaSet scene-040 and the three promoted TbV static-8k checkpoints are now
+fixed regressions; they have different data and acceptance boundaries. The
+agreed technical direction is recorded in
 `docs/drivable_reconstruction_model_strategy.md`: retain SplatAD as the primary
 interactive renderer, use NeuRAD only for a matched quality comparison, use
 MTGS-style multi-traversal reconstruction when spatial coverage is the
@@ -1441,26 +1494,25 @@ of tile-2/3 returns yet worsens matched-pose cross-tile RGB MAE to
 13.769 / 255, versus 9.835 unmasked and 11.880 with image masks alone. Do not
 resume either masked pair to 8,000 steps.
 
-The only new reconstruction treatment inside the first phase remains this
-tile pair: build a cross-traversal city-frame persistence filter, retain
-points supported by both visits within a small radius or voxel, train tiles 2
-and 3 to 2,000 steps, and repeat the same five-pose and 18.75 m transition
-probes. It must retain obstacle reduction while recovering the unmasked road
-sharpness and cross-tile error. If it passes, build the approximately 180 m
-tile-2/tile-3 auto-drive with both checkpoints resident and a bounded overlap
-transition. If it fails, stop static-mask refinement and pivot this coverage
-slot toward actor-aware reconstruction or connected MTGS/nuPlan blocks. Do
-not train tiles 0/1/4/5/6 or claim the 610 m route before that two-tile drive
-passes. Keep dynamic-time, collision, wider-lateral, and presentation work
-outside this phase.
+Stop adding route tiles and stop static-mask refinement for now. The current
+action is the agreed usability phase over the complete coverage pack:
 
-The second phase will evaluate the complete coverage pack rather than define
-trust from one 84 m block. It will use held-out real traversals and matched
-poses to test road/free-space geometry, false obstacles, downstream driving
-decisions, control response, and supported-pose boundaries. The third phase
-begins only for assets that pass: automate connected-block selection,
-distributed reconstruction, portable export, scene registration, prefetch,
-and route-scale streaming.
+1. select a small fixed station set spanning MTGS, the TbV branch, both
+   long-route overlaps, and ordinary non-overlap road;
+2. compare matched held-out real views and LiDAR-supported road/free-space
+   geometry at those stations;
+3. score false-obstacle and lane/road decision stability separately from
+   photorealism;
+4. exercise centreline plus supported lateral perturbations and require every
+   renderer to report its honest pose boundary;
+5. promote, restrict, or reject each asset before doing more reconstruction.
+
+Cross-traversal 3D persistence remains a candidate only if false vehicle
+obstacles make the unmasked 260 m route fail this gate. Do not train tiles
+0/1/5/6 or claim the full 610 m route before the usability evidence justifies
+it. The third phase begins only for assets that pass: automate connected-block
+selection, distributed reconstruction, portable export, scene registration,
+live prefetch/eviction, and route-scale streaming.
 
 The completed MTGS two-App path still needs one five-minute physical
 Shidi-to-operator LAN regression covering AUTO-to-REMOTE takeover, W/S/A/D,
@@ -1488,10 +1540,10 @@ plan. The short version is:
    the direct no-browser A/D/recovery trial as the +/-1 m regression gate;
 8. retain the successful isolated MTGS checkpoint, +/-5 m pose grid, 12 m/s
    prescribed-path video, minimal adapter, and simulated-driver render loop;
-   retain the selected TbV pair's completed 8k static-background seam and the
-   rejected image-only and direct projected-LiDAR 2k mask pilots; try one
-   cross-traversal 3D-persistence gate before the approximately 180 m
-   two-tile auto-drive;
+   retain the rejected image-only and direct projected-LiDAR 2k mask pilots,
+   and retain the completed three-tile 260 m TbV drive as the long-route
+   coverage regression; run the cross-traversal 3D-persistence gate only if
+   false obstacles fail the next usability evaluation;
 9. keep the implemented provisional scene-040 world browser and operator trial
    as regression/acceptance work rather than coupling them to this new scene;
 10. return dynamic actors to the main line when they obscure the road, create a

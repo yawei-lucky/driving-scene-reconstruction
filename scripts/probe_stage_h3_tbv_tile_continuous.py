@@ -100,13 +100,19 @@ def frame_count_for_speed(
     return max(round(path_length_meters / speed_mps * fps) + 1, 2)
 
 
-def streamline_tbv_probe_config(config: Any) -> Any:
+def streamline_tbv_probe_config(
+    config: Any,
+    *,
+    data_root: Path | None = None,
+) -> Any:
     """Avoid repeating training-only point filtering during RGB evaluation."""
 
     from nerfstudio.scripts.render import streamline_ad_config
 
     config = streamline_ad_config(config)
     dataparser = config.pipeline.datamanager.dataparser
+    if data_root is not None:
+        dataparser.data = data_root.expanduser().resolve()
     if getattr(dataparser, "mask_lidar_points", False):
         dataparser._checkpoint_trained_with_lidar_mask_filter = True
         dataparser.mask_lidar_points = False
@@ -219,6 +225,7 @@ def render_tile(
     config_path: Path,
     output_dir: Path,
     *,
+    data_root: Path | None,
     label: str,
     target_source_timestamps_ns: tuple[int, ...] | None,
     query_timestamps_ns: tuple[float, ...] | None,
@@ -230,10 +237,13 @@ def render_tile(
     from nerfstudio.utils.eval_utils import eval_setup
     from PIL import Image
 
+    def update_config(config: Any) -> Any:
+        return streamline_tbv_probe_config(config, data_root=data_root)
+
     _, pipeline, checkpoint_path, checkpoint_step = eval_setup(
         config_path,
         test_mode="test",
-        update_config_callback=streamline_tbv_probe_config,
+        update_config_callback=update_config,
     )
     pipeline.model.eval()
     records = _source_records(pipeline.datamanager)
@@ -638,6 +648,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tile-2-config", type=Path, required=True)
     parser.add_argument("--tile-3-config", type=Path, required=True)
+    parser.add_argument("--tile-2-data-root", type=Path)
+    parser.add_argument("--tile-3-data-root", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--speed-mps", type=float, default=12.0)
     parser.add_argument("--fps", type=int, default=20)
@@ -658,6 +670,7 @@ def main() -> None:
     tile_2 = render_tile(
         args.tile_2_config,
         output_dir,
+        data_root=args.tile_2_data_root,
         label="tile_2",
         target_source_timestamps_ns=None,
         query_timestamps_ns=None,
@@ -667,6 +680,7 @@ def main() -> None:
     tile_3 = render_tile(
         args.tile_3_config,
         output_dir,
+        data_root=args.tile_3_data_root,
         label="tile_3",
         target_source_timestamps_ns=tuple(tile_2["source_timestamps_ns"]),
         query_timestamps_ns=tuple(tile_2["query_timestamps_ns"]),

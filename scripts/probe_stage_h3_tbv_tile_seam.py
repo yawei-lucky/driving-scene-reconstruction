@@ -53,7 +53,12 @@ def distribution(values: Sequence[float]) -> dict[str, float]:
     }
 
 
-def _source_records(datamanager: Any) -> dict[int, tuple[Any, Path]]:
+def _source_records(
+    datamanager: Any,
+    *,
+    overlap_start_seconds: float,
+    overlap_end_seconds: float,
+) -> dict[int, tuple[Any, Path]]:
     records: dict[int, tuple[Any, Path]] = {}
     for dataset in (datamanager.train_dataset, datamanager.eval_dataset):
         for index, raw_filename in enumerate(dataset.image_filenames):
@@ -66,9 +71,9 @@ def _source_records(datamanager: Any) -> dict[int, tuple[Any, Path]]:
             timestamp_ns = int(path.stem)
             timestamp_seconds = timestamp_ns / 1e9
             if not (
-                OVERLAP_START_SECONDS
+                overlap_start_seconds
                 <= timestamp_seconds
-                <= OVERLAP_END_SECONDS
+                <= overlap_end_seconds
             ):
                 continue
             records[timestamp_ns] = (
@@ -95,9 +100,12 @@ def render_tile(
     config_path: Path,
     output_dir: Path,
     *,
+    data_root: Path | None,
     label: str,
     target_timestamps_ns: tuple[int, ...] | None,
     sample_count: int,
+    overlap_start_seconds: float,
+    overlap_end_seconds: float,
 ) -> dict[str, Any]:
     import numpy as np
     import torch
@@ -105,15 +113,27 @@ def render_tile(
     from nerfstudio.utils.eval_utils import eval_setup
     from PIL import Image
 
+    def update_config(config: Any) -> Any:
+        config = streamline_ad_config(config)
+        if data_root is not None:
+            config.pipeline.datamanager.dataparser.data = (
+                data_root.expanduser().resolve()
+            )
+        return config
+
     config, pipeline, checkpoint_path, checkpoint_step = eval_setup(
         config_path,
         test_mode="test",
-        update_config_callback=streamline_ad_config,
+        update_config_callback=update_config,
     )
     del config
     pipeline.model.eval()
     datamanager = pipeline.datamanager
-    records = _source_records(datamanager)
+    records = _source_records(
+        datamanager,
+        overlap_start_seconds=overlap_start_seconds,
+        overlap_end_seconds=overlap_end_seconds,
+    )
     available = tuple(sorted(records))
     if target_timestamps_ns is None:
         selected = tuple(
@@ -226,13 +246,21 @@ def build_contact_sheet(
     output_path: Path,
     tile_2: dict[str, Any],
     tile_3: dict[str, Any],
+    *,
+    first_label: str,
+    second_label: str,
 ) -> None:
     import numpy as np
     from PIL import Image, ImageDraw
 
     timestamps = tuple(tile_2["target_timestamps_ns"])
     cell_width, cell_height = 512, 350
-    labels = ("source GT", "tile 2", "tile 3", "|tile 2 - tile 3|")
+    labels = (
+        "source GT",
+        first_label,
+        second_label,
+        f"|{first_label} - {second_label}|",
+    )
     sheet = Image.new(
         "RGB",
         (cell_width * len(labels), cell_height * len(timestamps)),
@@ -273,6 +301,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tile-2-config", type=Path, required=True)
     parser.add_argument("--tile-3-config", type=Path, required=True)
+    parser.add_argument("--tile-2-data-root", type=Path)
+    parser.add_argument("--tile-3-data-root", type=Path)
+    parser.add_argument("--first-label", default="tile_2")
+    parser.add_argument("--second-label", default="tile_3")
+    parser.add_argument(
+        "--overlap-start-seconds",
+        type=float,
+        default=OVERLAP_START_SECONDS,
+    )
+    parser.add_argument(
+        "--overlap-end-seconds",
+        type=float,
+        default=OVERLAP_END_SECONDS,
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--sample-count", type=int, default=5)
     parser.add_argument(
@@ -281,6 +323,14 @@ def main() -> None:
     args = parser.parse_args()
     if args.sample_count < 1:
         parser.error("--sample-count must be positive")
+    if not args.first_label.strip() or not args.second_label.strip():
+        parser.error("tile labels must be non-empty")
+    if (
+        not math.isfinite(args.overlap_start_seconds)
+        or not math.isfinite(args.overlap_end_seconds)
+        or args.overlap_end_seconds <= args.overlap_start_seconds
+    ):
+        parser.error("overlap end must be finite and greater than start")
     output_dir = args.output_dir.expanduser().resolve()
     if output_dir.exists() and any(output_dir.iterdir()):
         raise RuntimeError(f"refusing to overwrite non-empty {output_dir}")
@@ -289,16 +339,22 @@ def main() -> None:
     tile_2 = render_tile(
         args.tile_2_config,
         output_dir,
-        label="tile_2",
+        data_root=args.tile_2_data_root,
+        label=args.first_label,
         target_timestamps_ns=None,
         sample_count=args.sample_count,
+        overlap_start_seconds=args.overlap_start_seconds,
+        overlap_end_seconds=args.overlap_end_seconds,
     )
     tile_3 = render_tile(
         args.tile_3_config,
         output_dir,
-        label="tile_3",
+        data_root=args.tile_3_data_root,
+        label=args.second_label,
         target_timestamps_ns=tuple(tile_2["target_timestamps_ns"]),
         sample_count=args.sample_count,
+        overlap_start_seconds=args.overlap_start_seconds,
+        overlap_end_seconds=args.overlap_end_seconds,
     )
 
     import numpy as np
@@ -313,8 +369,16 @@ def main() -> None:
         pairwise_mae.append(float(np.mean(difference)))
         pairwise_p95.append(float(np.percentile(difference, 95)))
 
-    contact_sheet = output_dir / "tile_2_3_overlap_contact_sheet.jpg"
-    build_contact_sheet(contact_sheet, tile_2, tile_3)
+    contact_sheet = output_dir / (
+        f"{args.first_label}_{args.second_label}_overlap_contact_sheet.jpg"
+    )
+    build_contact_sheet(
+        contact_sheet,
+        tile_2,
+        tile_3,
+        first_label=args.first_label,
+        second_label=args.second_label,
+    )
     report = {
         "format": "driving_scene_reconstruction.tbv_tile_seam.v0",
         "scope": (
@@ -325,16 +389,16 @@ def main() -> None:
         "reference_log": REFERENCE_LOG,
         "camera": CAMERA_NAME,
         "overlap_absolute_seconds": [
-            OVERLAP_START_SECONDS,
-            OVERLAP_END_SECONDS,
+            args.overlap_start_seconds,
+            args.overlap_end_seconds,
         ],
         "target_timestamps_ns": list(tile_2["target_timestamps_ns"]),
-        "tile_2": {
+        args.first_label: {
             key: value
             for key, value in tile_2.items()
             if key not in ("images", "ground_truth")
         },
-        "tile_3": {
+        args.second_label: {
             key: value
             for key, value in tile_3.items()
             if key not in ("images", "ground_truth")

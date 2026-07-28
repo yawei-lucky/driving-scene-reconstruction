@@ -21,6 +21,7 @@ from .logged_offset_controller import (
 from .renderer_interface import CameraRig, CameraSpec, RenderedObservation, Renderer
 from .route_driving_evidence import RouteDrivingEvidenceRecorder
 from .scene_coordinates import NearbyPoseLimits, SceneReferenceFrame
+from .scene_tiles import SceneTile, SceneTileRoute, SceneTileWeight
 from .splatad_logged_renderer import SplatADLoggedRenderer
 from .splatad_world_renderer import (
     H3_WORLD_POSE_PROBE_LIMITS,
@@ -64,6 +65,9 @@ __all__ = [
     "RouteSupportEvidence",
     "Renderer",
     "SceneReferenceFrame",
+    "SceneTile",
+    "SceneTileRoute",
+    "SceneTileWeight",
     "SimpleVehicleModel",
     "SplatADLoggedRenderer",
     "SplatADWorldRenderer",

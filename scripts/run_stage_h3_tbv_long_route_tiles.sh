@@ -6,6 +6,7 @@ H3_ROOT="${H3_ROOT:-/home/yawei/stage3_external}"
 H3_ENV="${H3_ENV:-${H3_ROOT}/envs/h3_splatad}"
 H3_CODE="${H3_CODE:-${H3_ROOT}/code/neurad-studio}"
 DATA_ROOT="${H3_TBV_LONG_DATA_ROOT:-${H3_ROOT}/data/tbv_long_route_tiles_2_3}"
+TILE23_DATA_ROOT="${H3_TBV_LONG_TILE23_DATA_ROOT:-${H3_ROOT}/data/tbv_long_route_tiles_2_3_frozen_20260725}"
 MASK_ROOT="${H3_TBV_LONG_MASK_ROOT:-${H3_ROOT}/data/tbv_long_route_tiles_2_3_vehicle_masks}"
 TRAIN_ROOT="${H3_TBV_LONG_TRAIN_ROOT:-${H3_ROOT}/outputs/tbv_long_route_tiles}"
 ARTIFACT_ROOT="${H3_TBV_LONG_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_seam_20260725}"
@@ -19,6 +20,9 @@ MASKED_CONTINUOUS_ROOT="${H3_TBV_LONG_MASKED_CONTINUOUS_ROOT:-${H3_ROOT}/artifac
 JOINT_MASK_AUDIT_ROOT="${H3_TBV_LONG_JOINT_MASK_AUDIT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_rgb_lidar_mask_audit_20260726}"
 JOINT_MASKED_ARTIFACT_ROOT="${H3_TBV_LONG_JOINT_MASKED_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_seam_rgb_lidar_masked_2000_20260726}"
 JOINT_MASKED_CONTINUOUS_ROOT="${H3_TBV_LONG_JOINT_MASKED_CONTINUOUS_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_continuous_rgb_lidar_masked_2000_20260726}"
+TILE34_QUALITY_ARTIFACT_ROOT="${H3_TBV_LONG_TILE34_QUALITY_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_3_4_seam_2000_isolated_20260728}"
+TILE34_STATIC_ARTIFACT_ROOT="${H3_TBV_LONG_TILE34_STATIC_ARTIFACT_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_3_4_seam_8000_isolated_20260728}"
+THREE_TILE_DRIVE_ROOT="${H3_TBV_LONG_THREE_TILE_DRIVE_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_three_tile_drive_8000_20260728}"
 PYTHON="${H3_ENV}/bin/python"
 
 REFERENCE="V17LgyVPyrd2yjWS4oEuipUBJQN5X0wZ__Spring_2020"
@@ -31,6 +35,10 @@ TILE3_REFERENCE_START="315970604.760172"
 TILE3_REFERENCE_END="315970613.7774825"
 TILE3_REPEAT_START="315976192.6224129"
 TILE3_REPEAT_END="315976200.16045"
+TILE4_REFERENCE_START="315970612.43742543"
+TILE4_REFERENCE_END="315970620.28742546"
+TILE4_REPEAT_START="315976198.81245124"
+TILE4_REPEAT_END="315976206.459454"
 
 TILE2_EXPERIMENT="tbv_long_route_tile_2_smoke_100"
 TILE3_EXPERIMENT="tbv_long_route_tile_3_smoke_100"
@@ -59,6 +67,11 @@ TILE2_QUALITY_CONFIG="${TILE2_QUALITY_RUN}/config.yml"
 TILE3_QUALITY_CONFIG="${TILE3_QUALITY_RUN}/config.yml"
 TILE2_QUALITY_CHECKPOINT="${TILE2_QUALITY_RUN}/nerfstudio_models/step-000001999.ckpt"
 TILE3_QUALITY_CHECKPOINT="${TILE3_QUALITY_RUN}/nerfstudio_models/step-000001999.ckpt"
+TILE4_QUALITY_TIMESTAMP="2026-07-28_2000step"
+TILE4_QUALITY_EXPERIMENT="tbv_long_route_tile_4_seam_2000"
+TILE4_QUALITY_RUN="${TRAIN_ROOT}/${TILE4_QUALITY_EXPERIMENT}/splatad/${TILE4_QUALITY_TIMESTAMP}"
+TILE4_QUALITY_CONFIG="${TILE4_QUALITY_RUN}/config.yml"
+TILE4_QUALITY_CHECKPOINT="${TILE4_QUALITY_RUN}/nerfstudio_models/step-000001999.ckpt"
 STATIC_TIMESTAMP="2026-07-25_resume_2k_to_8k"
 TILE2_STATIC_EXPERIMENT="tbv_long_route_tile_2_static_8000"
 TILE3_STATIC_EXPERIMENT="tbv_long_route_tile_3_static_8000"
@@ -68,6 +81,11 @@ TILE2_STATIC_CONFIG="${TILE2_STATIC_RUN}/config.yml"
 TILE3_STATIC_CONFIG="${TILE3_STATIC_RUN}/config.yml"
 TILE2_STATIC_CHECKPOINT="${TILE2_STATIC_RUN}/nerfstudio_models/step-000007999.ckpt"
 TILE3_STATIC_CHECKPOINT="${TILE3_STATIC_RUN}/nerfstudio_models/step-000007999.ckpt"
+TILE4_STATIC_TIMESTAMP="2026-07-28_resume_2k_to_8k_no_eval"
+TILE4_STATIC_EXPERIMENT="tbv_long_route_tile_4_static_8000"
+TILE4_STATIC_RUN="${TRAIN_ROOT}/${TILE4_STATIC_EXPERIMENT}/splatad/${TILE4_STATIC_TIMESTAMP}"
+TILE4_STATIC_CONFIG="${TILE4_STATIC_RUN}/config.yml"
+TILE4_STATIC_CHECKPOINT="${TILE4_STATIC_RUN}/nerfstudio_models/step-000007999.ckpt"
 MASKED_TIMESTAMP="2026-07-26_masked_2000step"
 TILE2_MASKED_EXPERIMENT="tbv_long_route_tile_2_masked_2000"
 TILE3_MASKED_EXPERIMENT="tbv_long_route_tile_3_masked_2000"
@@ -107,12 +125,13 @@ train_tile() {
   local repeat_end="$7"
   local iterations="$8"
   local timestamp="$9"
+  local data_root="${10:-$TILE23_DATA_ROOT}"
   if [[ -f "$checkpoint" && "${H3_ALLOW_RETRAIN:-0}" != "1" ]]; then
     echo "PASS: reusing tile ${tile} checkpoint: $checkpoint"
     return
   fi
   "$PYTHON" "$REPO_ROOT/scripts/train_stage_h3_tbv_smoke.py" \
-    --data "$DATA_ROOT" \
+    --data "$data_root" \
     --output-dir "$TRAIN_ROOT" \
     --experiment-name "$experiment" \
     --timestamp "$timestamp" \
@@ -131,6 +150,8 @@ resume_tile() {
   local source_checkpoint="$3"
   local experiment="$4"
   local checkpoint="$5"
+  local timestamp="${6:-$STATIC_TIMESTAMP}"
+  local eval_interval="${7:-3000}"
   if [[ -f "$checkpoint" && "${H3_ALLOW_RETRAIN:-0}" != "1" ]]; then
     echo "PASS: reusing tile ${tile} checkpoint: $checkpoint"
     return
@@ -144,11 +165,11 @@ resume_tile() {
     --checkpoint "$source_checkpoint" \
     --output-dir "$TRAIN_ROOT" \
     --experiment-name "$experiment" \
-    --timestamp "$STATIC_TIMESTAMP" \
+    --timestamp "$timestamp" \
     --additional-iterations 6000 \
     --model-max-steps 8000 \
     --steps-per-save 6000 \
-    --steps-per-eval-image 3000
+    --steps-per-eval-image "$eval_interval"
 }
 
 train_masked_tile() {
@@ -174,7 +195,7 @@ train_masked_tile() {
     lidar_mask_args+=(--mask-lidar-points)
   fi
   "$PYTHON" "$REPO_ROOT/scripts/train_stage_h3_tbv_smoke.py" \
-    --data "$DATA_ROOT" \
+    --data "$TILE23_DATA_ROOT" \
     --mask-root "$MASK_ROOT" \
     "${lidar_mask_args[@]}" \
     --output-dir "$TRAIN_ROOT" \
@@ -198,7 +219,16 @@ case "$MODE" in
       --window "$REFERENCE,$TILE2_REFERENCE_START,$TILE2_REFERENCE_END" \
       --window "$REPEAT,$TILE2_REPEAT_START,$TILE2_REPEAT_END" \
       --window "$REFERENCE,$TILE3_REFERENCE_START,$TILE3_REFERENCE_END" \
-      --window "$REPEAT,$TILE3_REPEAT_START,$TILE3_REPEAT_END"
+      --window "$REPEAT,$TILE3_REPEAT_START,$TILE3_REPEAT_END" \
+      --window "$REFERENCE,$TILE4_REFERENCE_START,$TILE4_REFERENCE_END" \
+      --window "$REPEAT,$TILE4_REPEAT_START,$TILE4_REPEAT_END"
+    ;;
+  freeze-2-3-data)
+    "$PYTHON" \
+      "$REPO_ROOT/scripts/materialize_stage_h3_tbv_manifest_subset.py" \
+      --manifest "$DATA_ROOT/selection_manifest.json" \
+      --window-indices 0,1,2,3 \
+      --output-dir "$TILE23_DATA_ROOT"
     ;;
   mask-data)
     "$PYTHON" "$REPO_ROOT/scripts/generate_stage_h3_tbv_vehicle_masks.py" \
@@ -252,6 +282,12 @@ case "$MODE" in
       "$TILE3_REFERENCE_START" "$TILE3_REFERENCE_END" \
       "$TILE3_REPEAT_START" "$TILE3_REPEAT_END" 2000 "$QUALITY_TIMESTAMP"
     ;;
+  quality-4)
+    train_tile 4 "$TILE4_QUALITY_EXPERIMENT" "$TILE4_QUALITY_CHECKPOINT" \
+      "$TILE4_REFERENCE_START" "$TILE4_REFERENCE_END" \
+      "$TILE4_REPEAT_START" "$TILE4_REPEAT_END" 2000 \
+      "$TILE4_QUALITY_TIMESTAMP" "$DATA_ROOT"
+    ;;
   static-2)
     resume_tile 2 "$TILE2_QUALITY_CONFIG" "$TILE2_QUALITY_CHECKPOINT" \
       "$TILE2_STATIC_EXPERIMENT" "$TILE2_STATIC_CHECKPOINT"
@@ -259,6 +295,11 @@ case "$MODE" in
   static-3)
     resume_tile 3 "$TILE3_QUALITY_CONFIG" "$TILE3_QUALITY_CHECKPOINT" \
       "$TILE3_STATIC_EXPERIMENT" "$TILE3_STATIC_CHECKPOINT"
+    ;;
+  static-4)
+    resume_tile 4 "$TILE4_QUALITY_CONFIG" "$TILE4_QUALITY_CHECKPOINT" \
+      "$TILE4_STATIC_EXPERIMENT" "$TILE4_STATIC_CHECKPOINT" \
+      "$TILE4_STATIC_TIMESTAMP" 999999
     ;;
   masked-2)
     train_masked_tile 2 "$TILE2_MASKED_EXPERIMENT" \
@@ -295,6 +336,8 @@ case "$MODE" in
     "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_seam.py" \
       --tile-2-config "$TILE2_CONFIG" \
       --tile-3-config "$TILE3_CONFIG" \
+      --tile-2-data-root "$TILE23_DATA_ROOT" \
+      --tile-3-data-root "$TILE23_DATA_ROOT" \
       --output-dir "$ARTIFACT_ROOT"
     ;;
   seam-500)
@@ -308,6 +351,8 @@ case "$MODE" in
     "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_seam.py" \
       --tile-2-config "$TILE2_PILOT_CONFIG" \
       --tile-3-config "$TILE3_PILOT_CONFIG" \
+      --tile-2-data-root "$TILE23_DATA_ROOT" \
+      --tile-3-data-root "$TILE23_DATA_ROOT" \
       --expected-checkpoint-step 499 \
       --output-dir "$PILOT_ARTIFACT_ROOT"
     ;;
@@ -322,6 +367,8 @@ case "$MODE" in
     "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_seam.py" \
       --tile-2-config "$TILE2_QUALITY_CONFIG" \
       --tile-3-config "$TILE3_QUALITY_CONFIG" \
+      --tile-2-data-root "$TILE23_DATA_ROOT" \
+      --tile-3-data-root "$TILE23_DATA_ROOT" \
       --expected-checkpoint-step 1999 \
       --output-dir "$QUALITY_ARTIFACT_ROOT"
     ;;
@@ -336,7 +383,29 @@ case "$MODE" in
     "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_continuous.py" \
       --tile-2-config "$TILE2_QUALITY_CONFIG" \
       --tile-3-config "$TILE3_QUALITY_CONFIG" \
+      --tile-2-data-root "$TILE23_DATA_ROOT" \
+      --tile-3-data-root "$TILE23_DATA_ROOT" \
       --output-dir "$CONTINUOUS_ARTIFACT_ROOT"
+    ;;
+  seam-3-4-2000)
+    if [[ ! -f "$TILE3_QUALITY_CONFIG" ||
+          ! -f "$TILE3_QUALITY_CHECKPOINT" ||
+          ! -f "$TILE4_QUALITY_CONFIG" ||
+          ! -f "$TILE4_QUALITY_CHECKPOINT" ]]; then
+      echo "tile 3/4 2,000-step configs/checkpoints are required" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_seam.py" \
+      --tile-2-config "$TILE3_QUALITY_CONFIG" \
+      --tile-3-config "$TILE4_QUALITY_CONFIG" \
+      --tile-2-data-root "$TILE23_DATA_ROOT" \
+      --tile-3-data-root "$DATA_ROOT" \
+      --first-label tile_3 \
+      --second-label tile_4 \
+      --overlap-start-seconds "$TILE4_REFERENCE_START" \
+      --overlap-end-seconds "$TILE3_REFERENCE_END" \
+      --expected-checkpoint-step 1999 \
+      --output-dir "$TILE34_QUALITY_ARTIFACT_ROOT"
     ;;
   seam-8000)
     if [[ ! -f "$TILE2_STATIC_CONFIG" ||
@@ -349,6 +418,8 @@ case "$MODE" in
     "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_seam.py" \
       --tile-2-config "$TILE2_STATIC_CONFIG" \
       --tile-3-config "$TILE3_STATIC_CONFIG" \
+      --tile-2-data-root "$TILE23_DATA_ROOT" \
+      --tile-3-data-root "$TILE23_DATA_ROOT" \
       --expected-checkpoint-step 7999 \
       --output-dir "$STATIC_ARTIFACT_ROOT"
     ;;
@@ -363,8 +434,49 @@ case "$MODE" in
     "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_continuous.py" \
       --tile-2-config "$TILE2_STATIC_CONFIG" \
       --tile-3-config "$TILE3_STATIC_CONFIG" \
+      --tile-2-data-root "$TILE23_DATA_ROOT" \
+      --tile-3-data-root "$TILE23_DATA_ROOT" \
       --expected-checkpoint-step 7999 \
       --output-dir "$STATIC_CONTINUOUS_ROOT"
+    ;;
+  seam-3-4-8000)
+    if [[ ! -f "$TILE3_STATIC_CONFIG" ||
+          ! -f "$TILE3_STATIC_CHECKPOINT" ||
+          ! -f "$TILE4_STATIC_CONFIG" ||
+          ! -f "$TILE4_STATIC_CHECKPOINT" ]]; then
+      echo "tile 3/4 8,000-step configs/checkpoints are required" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_seam.py" \
+      --tile-2-config "$TILE3_STATIC_CONFIG" \
+      --tile-3-config "$TILE4_STATIC_CONFIG" \
+      --tile-2-data-root "$TILE23_DATA_ROOT" \
+      --tile-3-data-root "$DATA_ROOT" \
+      --first-label tile_3 \
+      --second-label tile_4 \
+      --overlap-start-seconds "$TILE4_REFERENCE_START" \
+      --overlap-end-seconds "$TILE3_REFERENCE_END" \
+      --expected-checkpoint-step 7999 \
+      --output-dir "$TILE34_STATIC_ARTIFACT_ROOT"
+    ;;
+  three-tile-drive-8000)
+    if [[ ! -f "$TILE2_STATIC_CONFIG" ||
+          ! -f "$TILE2_STATIC_CHECKPOINT" ||
+          ! -f "$TILE3_STATIC_CONFIG" ||
+          ! -f "$TILE3_STATIC_CHECKPOINT" ||
+          ! -f "$TILE4_STATIC_CONFIG" ||
+          ! -f "$TILE4_STATIC_CHECKPOINT" ]]; then
+      echo "tile 2/3/4 8,000-step configs/checkpoints are required" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/run_stage_h3_tbv_three_tile_drive.py" \
+      --tile-2-config "$TILE2_STATIC_CONFIG" \
+      --tile-2-data-root "$TILE23_DATA_ROOT" \
+      --tile-3-config "$TILE3_STATIC_CONFIG" \
+      --tile-3-data-root "$TILE23_DATA_ROOT" \
+      --tile-4-config "$TILE4_STATIC_CONFIG" \
+      --tile-4-data-root "$DATA_ROOT" \
+      --output-dir "$THREE_TILE_DRIVE_ROOT"
     ;;
   masked-seam-2000)
     if [[ ! -f "$TILE2_MASKED_CONFIG" ||
@@ -377,6 +489,8 @@ case "$MODE" in
     "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_seam.py" \
       --tile-2-config "$TILE2_MASKED_CONFIG" \
       --tile-3-config "$TILE3_MASKED_CONFIG" \
+      --tile-2-data-root "$TILE23_DATA_ROOT" \
+      --tile-3-data-root "$TILE23_DATA_ROOT" \
       --expected-checkpoint-step 1999 \
       --output-dir "$MASKED_ARTIFACT_ROOT"
     ;;
@@ -391,6 +505,8 @@ case "$MODE" in
     "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_continuous.py" \
       --tile-2-config "$TILE2_MASKED_CONFIG" \
       --tile-3-config "$TILE3_MASKED_CONFIG" \
+      --tile-2-data-root "$TILE23_DATA_ROOT" \
+      --tile-3-data-root "$TILE23_DATA_ROOT" \
       --output-dir "$MASKED_CONTINUOUS_ROOT"
     ;;
   joint-masked-seam-2000)
@@ -404,6 +520,8 @@ case "$MODE" in
     "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_seam.py" \
       --tile-2-config "$TILE2_JOINT_MASKED_CONFIG" \
       --tile-3-config "$TILE3_JOINT_MASKED_CONFIG" \
+      --tile-2-data-root "$TILE23_DATA_ROOT" \
+      --tile-3-data-root "$TILE23_DATA_ROOT" \
       --expected-checkpoint-step 1999 \
       --output-dir "$JOINT_MASKED_ARTIFACT_ROOT"
     ;;
@@ -418,10 +536,13 @@ case "$MODE" in
     "$PYTHON" "$REPO_ROOT/scripts/probe_stage_h3_tbv_tile_continuous.py" \
       --tile-2-config "$TILE2_JOINT_MASKED_CONFIG" \
       --tile-3-config "$TILE3_JOINT_MASKED_CONFIG" \
+      --tile-2-data-root "$TILE23_DATA_ROOT" \
+      --tile-3-data-root "$TILE23_DATA_ROOT" \
       --output-dir "$JOINT_MASKED_CONTINUOUS_ROOT"
     ;;
   paths)
     echo "data: $DATA_ROOT"
+    echo "frozen tile 2/3 data: $TILE23_DATA_ROOT"
     echo "vehicle masks: $MASK_ROOT"
     echo "tile 2 config: $TILE2_CONFIG"
     echo "tile 2 checkpoint: $TILE2_CHECKPOINT"
@@ -437,12 +558,16 @@ case "$MODE" in
     echo "tile 2 quality checkpoint: $TILE2_QUALITY_CHECKPOINT"
     echo "tile 3 quality config: $TILE3_QUALITY_CONFIG"
     echo "tile 3 quality checkpoint: $TILE3_QUALITY_CHECKPOINT"
+    echo "tile 4 quality config: $TILE4_QUALITY_CONFIG"
+    echo "tile 4 quality checkpoint: $TILE4_QUALITY_CHECKPOINT"
     echo "2,000-step seam evidence: $QUALITY_ARTIFACT_ROOT"
     echo "continuous seam evidence: $CONTINUOUS_ARTIFACT_ROOT"
     echo "tile 2 static config: $TILE2_STATIC_CONFIG"
     echo "tile 2 static checkpoint: $TILE2_STATIC_CHECKPOINT"
     echo "tile 3 static config: $TILE3_STATIC_CONFIG"
     echo "tile 3 static checkpoint: $TILE3_STATIC_CHECKPOINT"
+    echo "tile 4 static config: $TILE4_STATIC_CONFIG"
+    echo "tile 4 static checkpoint: $TILE4_STATIC_CHECKPOINT"
     echo "8,000-step seam evidence: $STATIC_ARTIFACT_ROOT"
     echo "8,000-step continuous evidence: $STATIC_CONTINUOUS_ROOT"
     echo "tile 2 masked config: $TILE2_MASKED_CONFIG"
@@ -458,13 +583,19 @@ case "$MODE" in
     echo "tile 3 RGB+LiDAR masked checkpoint: $TILE3_JOINT_MASKED_CHECKPOINT"
     echo "RGB+LiDAR masked seam evidence: $JOINT_MASKED_ARTIFACT_ROOT"
     echo "RGB+LiDAR masked continuous evidence: $JOINT_MASKED_CONTINUOUS_ROOT"
+    echo "tile 3/4 2,000-step seam evidence: $TILE34_QUALITY_ARTIFACT_ROOT"
+    echo "tile 3/4 8,000-step seam evidence: $TILE34_STATIC_ARTIFACT_ROOT"
+    echo "three-tile drive evidence: $THREE_TILE_DRIVE_ROOT"
     ;;
   *)
     echo "Usage: $0 MODE" >&2
-    echo "Modes: download mask-data joint-mask-audit-2 smoke-2 smoke-3 seam" >&2
+    echo "Modes: download freeze-2-3-data mask-data joint-mask-audit-2" >&2
+    echo "       smoke-2 smoke-3 seam" >&2
     echo "       pilot-2 pilot-3 seam-500" >&2
-    echo "       quality-2 quality-3 seam-2000 continuous-2000" >&2
-    echo "       static-2 static-3 seam-8000 continuous-8000 paths" >&2
+    echo "       quality-2 quality-3 quality-4 seam-2000 seam-3-4-2000" >&2
+    echo "       continuous-2000 static-2 static-3 static-4" >&2
+    echo "       seam-8000 seam-3-4-8000 continuous-8000" >&2
+    echo "       three-tile-drive-8000 paths" >&2
     echo "       masked-2 masked-3 masked-seam-2000 masked-continuous-2000" >&2
     echo "       joint-masked-2 joint-masked-3 joint-masked-seam-2000" >&2
     echo "       joint-masked-continuous-2000" >&2
