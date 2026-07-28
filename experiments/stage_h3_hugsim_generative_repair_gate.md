@@ -168,3 +168,12 @@ separate traffic from static ground/background, train a ground-constrained
 model, and compare it with static-8k at identical poses. TbV is not an
 official HUGSIM input format, so that step needs a bounded AV2/TbV adapter; it
 is not an environment-install task and was not started in this gate.
+
+## Follow-up Status
+
+Later on 2026-07-28, the official HUGSIM release was found to include an
+exported checkpoint for the project's existing PandaSet scene 040. That
+same-scene inference gate is now complete, so a TbV adapter is no longer the
+smallest HUGSIM discriminator. HUGSIM passed as a structured renderable
+background but did not deliver a decisive foliage or close-vehicle quality
+gain. See `experiments/stage_h3_hugsim_pandaset_official_probe.md`.

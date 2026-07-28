@@ -141,6 +141,28 @@ third-party model. Exact ProPainter provenance, command, license boundary, and
 the non-promotion decision are in
 `experiments/stage_h3_hugsim_generative_repair_gate.md`.
 
+`probe_stage_h3_hugsim_pandaset.py` runs the later official same-scene
+PandaSet-040 HUGSIM gate. It is deliberately **not** routed through
+`run_stage_h3_environment.sh`: HUGSIM uses its existing PyTorch
+`2.4.1+cu121` / CUDA 12.1 pixi environment, while SplatAD H3 uses CUDA 11.8.
+
+```bash
+cd /home/yawei/HUGSIM
+CUDA_VISIBLE_DEVICES=0 \
+  /home/yawei/HUGSIM/.pixi/envs/default/bin/python \
+  /home/yawei/driving-scene-reconstruction/scripts/probe_stage_h3_hugsim_pandaset.py \
+  --video \
+  --output-dir \
+    /home/yawei/stage3_external/artifacts/scene_040_hugsim_official_probe_20260728_v2
+```
+
+The command is inference-only and refuses to overwrite an existing output
+directory. It expects the official exported scene under
+`/home/yawei/HUGSIM_assets/scenes/pandaset/040/040` and keeps all generated
+frames, video, and JSON outside Git. Exact checkpoint provenance and the
+non-promotion decision are in
+`experiments/stage_h3_hugsim_pandaset_official_probe.md`.
+
 Prepare or verify the separate H3 environment:
 
 ```bash

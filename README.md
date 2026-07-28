@@ -849,10 +849,17 @@ foliage. Keep all three unmasked 8k checkpoints as the default regression.
 Cross-visit 10k and ProPainter remain research evidence, not candidates for the
 live renderer. Do not claim the full 610 m route.
 
-HUGSIM is now recorded as a possible new structured reconstruction path, not a
-generative SplatAD cleanup pass. A bounded TbV trial would need an AV2/TbV
-adapter plus predicted semantics and 3D tracks before ground/scene training.
-The local HUGSIM environment already exists; setup is not the next bottleneck.
+The official HUGSIM PandaSet-040 export has now been run on the same raw scene
+as the SplatAD regression. Its 80 logged front views are in the same broad
+quality range, its factual renderer reaches 16.69/18.63 ms p50/p95 after a
+one-frame warm-up, and all twelve selected `+/-1/3 m` views remain finite.
+HUGSIM therefore passes as a structured renderable-background candidate, not
+as a generative SplatAD cleanup pass. It does not replace static-8k: foliage
+and close cars still deform, and the visible front dynamic layer is too small
+to validate difficult moving traffic. Do not build the TbV adapter or repeat
+30k training merely to seek sharper pixels. The next HUGSIM discriminator, if
+continued, is an official-040 controller demo with static-only background and
+one explicit 3DRealCar actor.
 
 The current second phase uses held-out real traversals and matched poses to
 test road/free-space geometry, false
@@ -957,6 +964,9 @@ The success criteria are deliberately separate from generic image metrics:
   HUGSIM's structured reconstruction from generative postprocessing and records
   the 32-frame ProPainter temporal-removal smoke, artifacts, limits, and
   non-promotion decision.
+- `experiments/stage_h3_hugsim_pandaset_official_probe.md` records the official
+  same-scene PandaSet-040 checkpoint, 80-frame factual/static-only comparison,
+  `+/-1/3 m` probe, latency, visual limits, and structured-background decision.
 - `experiments/stage_h3_tbv_splatad_pilot.md` records the bounded TbV download,
   multi-traversal parser, LiDAR alignment, and 100/2,000-step reload renders.
 - `experiments/stage_h3_tbv_world_pose_corridor_probe.md` records the 2k/8k

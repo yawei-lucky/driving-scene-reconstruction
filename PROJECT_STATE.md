@@ -1511,6 +1511,17 @@ It passes only as offline learned-inpainting evidence, not as a live or
 geometry-consistent simulator repair. Exact evidence is in
 `experiments/stage_h3_hugsim_generative_repair_gate.md`.
 
+The follow-up HUGSIM gate did not require a new adapter or training run:
+HUGSIM's official release contains an exported PandaSet-040 checkpoint for the
+same scene as the SplatAD regression. All 80 logged front views and twelve
+`+/-1/3 m` views rendered on the host. Logged factual rendering measured
+16.69/18.63 ms p50/p95 after a one-frame warm-up, and mean exact-pose PSNR was
+27.7007 dB. The static-only render remains a reusable 3D background, but the
+front dynamic layer changes only 0.0841% of pixels on average, while foliage
+and close parked cars still soften and stretch. HUGSIM passes as a structured
+background candidate, not as a quality promotion or TbV repair. Exact evidence
+is in `experiments/stage_h3_hugsim_pandaset_official_probe.md`.
+
 Stop adding route tiles, stop threshold-level static-mask refinement, and stop
 the cross-visit continuation path. Keep static-8k as the default and continue
 the agreed usability phase over the complete coverage pack:
@@ -1526,18 +1537,20 @@ the agreed usability phase over the complete coverage pack:
 5. promote, restrict, or reject each asset before doing more reconstruction.
 
 Do not put ProPainter after the live renderer: its completion is tied to one
-camera sequence and supplies no reusable 3D geometry. The next reconstruction
-discriminator, if vehicle ghosts remain a driving blocker, is one bounded
-HUGSIM-style structured pilot that separates predicted dynamic tracks from
-ground and non-ground static background. HUGSIM is not a SplatAD postprocessor
-and TbV is not an official HUGSIM input, so this requires a small AV2/TbV data
-adapter rather than more environment work. Diffusion-prior 3DGS remains later
-research because it requires model fine-tuning and reconstruction retraining
-and introduces a multi-view-consistency risk. Do not train tiles 0/1/5/6 or
-claim the full 610 m route before the usability evidence justifies it. The
-third phase begins only for assets that pass: automate connected-block
-selection, distributed reconstruction, portable export, scene registration,
-live prefetch/eviction, and route-scale streaming.
+camera sequence and supplies no reusable 3D geometry. The same-scene official
+HUGSIM checkpoint has now answered the cheaper discriminator: structural
+separation is useful, but HUGSIM does not by itself sharpen foliage or close
+cars. Do not start a TbV/HUGSIM adapter or repeat 30k reconstruction merely as
+a quality-repair attempt. If compositional traffic remains important, the
+smallest next HUGSIM demo is the official 040 static-only background plus one
+explicit 3DRealCar actor under the existing simulated controller.
+Diffusion-prior 3DGS remains later research because it requires model
+fine-tuning and reconstruction retraining and introduces a
+multi-view-consistency risk. Do not train tiles 0/1/5/6 or claim the full 610 m
+route before the usability evidence justifies it. The third phase begins only
+for assets that pass: automate connected-block selection, distributed
+reconstruction, portable export, scene registration, live prefetch/eviction,
+and route-scale streaming.
 
 The completed MTGS two-App path still needs one five-minute physical
 Shidi-to-operator LAN regression covering AUTO-to-REMOTE takeover, W/S/A/D,
@@ -1568,7 +1581,9 @@ plan. The short version is:
    retain the rejected image-only, direct projected-LiDAR, persistence-only,
    and naive-inpainting evidence; retain cross-visit tile-2 10k and ProPainter
    only as partial research evidence, not promotion candidates; retain the
-   completed three-tile 260 m TbV drive as the long-route coverage regression;
+   official HUGSIM PandaSet-040 factual/static-only and `+/-1/3 m` probe as
+   structured-background evidence; retain the completed three-tile 260 m TbV
+   drive as the long-route coverage regression;
 9. keep the implemented provisional scene-040 world browser and operator trial
    as regression/acceptance work rather than coupling them to this new scene;
 10. return dynamic actors to the main line when they obscure the road, create a
