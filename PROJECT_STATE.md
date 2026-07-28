@@ -1,6 +1,6 @@
 # Project State — Driving Scene Reconstruction
 
-Last updated: 2026-07-27
+Last updated: 2026-07-28
 
 ## 1. Product Goal
 
@@ -1394,6 +1394,22 @@ failures before that human run. Dynamic traffic remains a later mandatory gate.
 
 ## 5. Current Next Action — Stage H3
 
+The agreed execution order changed on 2026-07-28:
+
+1. increase data volume and scene variety with a bounded coverage pack;
+2. decide equivalent usability on that broader pack;
+3. scale the reconstruction factory only after the usability gate passes.
+
+The coverage pack contains three complementary assets: the existing 84 m MTGS
+wide-corridor/gentle-curve block, the existing TbV shared-approach
+straight/right branch, and one new approximately 180 m continuous
+tile-2/tile-3 TbV route. A common `SceneTile` manifest will describe world
+transform, checkpoint, supported pose region, route geometry, overlap,
+appearance/profile identity, and evidence provenance. The first phase ends
+when these scene types can be selected and the adjacent pair can be
+prefetched, transitioned only inside its real overlap, and continuously driven
+by the local simulated driver. It is not yet an equivalent-realism claim.
+
 Stage H3 now has a real long-route data candidate and one quality-bearing
 static-background seam. The 610.072 m repeated Miami route partitions into
 seven 100 m tiles with 20 m overlaps. Tiles 2 and 3 have exact downloaded data,
@@ -1425,24 +1441,33 @@ of tile-2/3 returns yet worsens matched-pose cross-tile RGB MAE to
 13.769 / 255, versus 9.835 unmasked and 11.880 with image masks alone. Do not
 resume either masked pair to 8,000 steps.
 
-The next action remains only this tile pair: build a cross-traversal
-city-frame persistence filter, retain points supported by both visits within a
-small radius or voxel, train tiles 2 and 3 to 2,000 steps, and repeat the same
-five-pose and 18.75 m transition probes. It must retain obstacle reduction
-while recovering the unmasked road sharpness and cross-tile error. If it
-passes, build the approximately 180 m tile-2/tile-3 auto-drive with both
-checkpoints resident and a bounded overlap transition. If it fails, pivot the
-long-route renderer/data choice toward actor-aware reconstruction. Do not
-train tiles 0/1/4/5/6 or claim the 610 m route before that two-tile drive
-passes. Keep dynamic time, collision work, wider-lateral acceptance, and
-browser presentation outside this gate.
+The only new reconstruction treatment inside the first phase remains this
+tile pair: build a cross-traversal city-frame persistence filter, retain
+points supported by both visits within a small radius or voxel, train tiles 2
+and 3 to 2,000 steps, and repeat the same five-pose and 18.75 m transition
+probes. It must retain obstacle reduction while recovering the unmasked road
+sharpness and cross-tile error. If it passes, build the approximately 180 m
+tile-2/tile-3 auto-drive with both checkpoints resident and a bounded overlap
+transition. If it fails, stop static-mask refinement and pivot this coverage
+slot toward actor-aware reconstruction or connected MTGS/nuPlan blocks. Do
+not train tiles 0/1/4/5/6 or claim the 610 m route before that two-tile drive
+passes. Keep dynamic-time, collision, wider-lateral, and presentation work
+outside this phase.
 
-The separate immediate application action is narrower: run the completed MTGS
-driver App on the operator computer and the simulator App on Shidi for five
-minutes over the real LAN. Exercise AUTO-to-REMOTE takeover, W/S/A/D, reset,
-latched estop, disconnect, and reconnect. Record firewall/port facts and
-received video/telemetry counts. Do not add browser control, a cloud relay, or
-WebRTC before this two-machine SRT/WebSocket gate.
+The second phase will evaluate the complete coverage pack rather than define
+trust from one 84 m block. It will use held-out real traversals and matched
+poses to test road/free-space geometry, false obstacles, downstream driving
+decisions, control response, and supported-pose boundaries. The third phase
+begins only for assets that pass: automate connected-block selection,
+distributed reconstruction, portable export, scene registration, prefetch,
+and route-scale streaming.
+
+The completed MTGS two-App path still needs one five-minute physical
+Shidi-to-operator LAN regression covering AUTO-to-REMOTE takeover, W/S/A/D,
+reset, latched estop, disconnect, and reconnect. This is now an application
+regression rather than the leading reconstruction action. Do not add browser
+control, a cloud relay, WebRTC, or more cockpit polish before the first
+coverage pack is complete.
 
 See `docs/stage_h3_stable_drivable_reconstruction_plan.md` for the detailed
 plan. The short version is:

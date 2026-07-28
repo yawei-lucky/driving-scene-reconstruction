@@ -791,6 +791,25 @@ manual drivability gates as `pass`.
 
 ## Current Next Step
 
+The agreed priority order is now:
+
+1. expand the data volume and scene variety with one bounded multi-scene
+   coverage pack;
+2. evaluate decision-equivalent usability on that broader pack;
+3. automate reconstruction and deployment at scale only after the usability
+   gate is defined and passed.
+
+The first coverage pack deliberately stays small: the existing 84 m MTGS
+wide-corridor/gentle-curve block, the existing TbV shared-approach
+straight/right branch, and one new approximately 180 m continuous TbV
+tile-2/tile-3 route. A common `SceneTile` manifest should record each asset's
+world transform, checkpoint, supported pose region, route geometry, overlap,
+appearance/profile identity, and evidence provenance. This phase is complete
+when the three scene types can be selected and the two adjacent tiles can be
+prefetched, transitioned through their real overlap, and driven continuously
+by the local simulated driver. It is a coverage and runtime gate, not yet a
+claim of equivalent realism.
+
 The PandaSet and TbV static-8k checkpoints remain fixed. The direct TbV
 straight/right regression now passes with useful correction reserve, so it
 remains the cheap restricted-route baseline. The published MTGS checkpoint is
@@ -824,10 +843,20 @@ gate. Build the approximately 180 m auto-drive only if it recovers the
 unmasked road/consistency baseline while reducing false obstacles; otherwise
 pivot the long-route renderer/data choice toward actor-aware reconstruction.
 Do not train the other five tiles or claim 610 m driving yet.
-In parallel, the immediate application gate is only one five-minute Shidi-to-
-operator LAN run of the completed two-App MTGS path, including AUTO-to-REMOTE
-takeover, reset, estop, and reconnect. Do not add browser polish or a third
-relay service before that run.
+
+After the coverage pack exists, the second phase uses held-out real
+traversals and matched poses to test road/free-space geometry, false
+obstacles, downstream driving decisions, control response, and supported-pose
+boundaries across all three scene types. Only scenes that pass this
+decision-equivalence gate are eligible for the third phase: automated block
+selection, distributed reconstruction, portable export, scene registry, and
+route-scale streaming.
+
+The five-minute Shidi-to-operator LAN run remains a small application
+regression for AUTO-to-REMOTE takeover, reset, estop, disconnect, and
+reconnect. It no longer leads the reconstruction plan. Do not add cockpit
+polish, browser control, a third relay service, or WebRTC before the first
+coverage pack is complete.
 The six released MTGS blocks remain geographically separate and only 57-105 m
 long; do not loop the current block or concatenate unrelated blocks to claim a
 long route. Dynamic time, collision, wide lateral support, and responsive
