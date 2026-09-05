@@ -1,6 +1,6 @@
 # Project State — Driving Scene Reconstruction
 
-Last updated: 2026-07-28
+Last updated: 2026-09-05
 
 ## 1. Product Goal
 
@@ -1220,6 +1220,36 @@ This passes the long-route coverage/control slot, not equivalent realism or
 live tile streaming. Exact evidence is in
 `experiments/stage_h3_tbv_three_tile_drive.md`.
 
+### Stage H3 Level 9W — TbV five-tile 420 m drive pilot
+
+Completed on the RTX 4090 D host on 2026-09-05:
+
+- added dedicated tile-5 and tile-6 sensor payloads and trained both unmasked
+  reconstructions to step 1,999, then exact-resumed them to step 7,999 with
+  periodic LiDAR evaluation disabled to stay inside the 24 GB inference and
+  training boundary;
+- generalized the fixed three-tile route driver/compositor to accept an
+  arbitrary ordered list of `SceneTile` specifications while preserving the
+  legacy three-tile command;
+- extended the promoted route from tiles 2/3/4 to tiles 2/3/4/5/6, covering
+  progress 160–580 m and a 420 m union with four real 20 m overlaps;
+- ran a 761-frame, 38.00 s kinematic simulated-human drive at 12.0 m/s with
+  +0.543/-0.565 m excursions, 0.435 m minimum support reserve, 1.301 degree
+  maximum heading error, endpoint braking, and zero support-boundary hits;
+- sequentially rendered all five step-7,999 checkpoints and decoded 761/761
+  H.264 frames; warm front-camera render p50 was 34.87/31.64/32.61/32.15/31.32
+  ms for tiles 2/3/4/5/6;
+- manually retained road, curb, buildings, and route topology through both new
+  seams. The tile-5/6 seam enter/leave RGB deltas were 8.674/9.701, below the
+  full-video p95 temporal RGB MAE of 11.857;
+- retained foliage softness, vehicle and point ghosts, independent-model
+  appearance changes, front-only output, offline checkpoint loading, +/-1 m
+  support, and missing collision truth as explicit rejection boundaries.
+
+This extends the offline coverage/control regression, not equivalent realism
+or live tile streaming. Exact evidence is in
+`experiments/stage_h3_tbv_five_tile_drive.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -1308,17 +1338,17 @@ environment, 24 GB inference, high-speed spatial-continuity, first
 control/render, and basic transport uncertainties. They do not prove a real
 two-computer operator loop, trustworthy dynamic actor motion, or a long route.
 
-The Level-9V TbV long-route path now supports:
+The Level-9W TbV long-route path now supports:
 
 ```text
 one 610 m repeated real route
-→ three selected 100 m SplatAD tiles with two 20 m overlaps
+→ five selected 100 m SplatAD tiles with four 20 m overlaps
 → frozen per-checkpoint data views plus one common SceneTile manifest
-→ one 260 m data-supported centreline and +/-1 m support tube
+→ one 420 m data-supported centreline and +/-1 m support tube
 → SimpleVehicleModel plus simulated-human pure-pursuit controls at 12 m/s
 → logged source-time progression and counterfactual lateral/yaw pose
 → sequential 8k checkpoint rendering and smooth overlap composition
-→ a 494-frame front-camera H.264 video plus JSON evidence
+→ a 761-frame front-camera H.264 video plus JSON evidence
 ```
 
 This is an offline coverage/runtime pilot. It does not yet keep adjacent
@@ -1465,18 +1495,18 @@ The agreed execution order changed on 2026-07-28:
 
 The bounded coverage pack now contains three complementary assets: the
 existing 84 m MTGS wide-corridor/gentle-curve block, the existing TbV
-shared-approach straight/right branch, and a real 260 m continuous TbV route
-made from tiles 2/3/4. The long route now has a common `SceneTile` manifest
+shared-approach straight/right branch, and a real 420 m continuous TbV route
+made from tiles 2/3/4/5/6. The long route now has a common `SceneTile` manifest
 covering exact data/checkpoint/source provenance, transforms, supported route
 regions, overlaps, appearance profile, and evidence path. It passes the
 offline coverage/control slot, not equivalent realism or live streaming.
 
 Stage H3 now has a real long-route result rather than only a candidate. The
 610.072 m repeated Miami route still partitions into seven 100 m tiles with
-20 m overlaps, but only tiles 2/3/4 are promoted. All three have step-7,999
-checkpoints, both adjacent seams have matched-pose evidence, and a kinematic
-simulated driver completed their 260 m union at 12 m/s with two bounded
-overlap transitions and zero support-boundary hits.
+20 m overlaps, but only tiles 2/3/4/5/6 are promoted. All five have step-7,999
+checkpoints, all four adjacent seams have evidence, and a kinematic simulated
+driver completed their 420 m union at 12 m/s with four bounded overlap
+transitions and zero support-boundary hits.
 The prescribed-path smoke, control/support adapter, and simulated-driver MTGS
 render loop remain complete for the released 84 m Singapore block. The MTGS
 path now also has two separable LAN applications and a passed localhost
@@ -1484,7 +1514,7 @@ SRT/WebSocket loop. TbV Miami
 `OCa... + QMn...` remains the cheap restricted branch regression, and PandaSet
 scene-040 remains fixed world-coordinate regression evidence.
 
-PandaSet scene-040 and the three promoted TbV static-8k checkpoints are now
+PandaSet scene-040 and the five promoted TbV static-8k checkpoints are now
 fixed regressions; they have different data and acceptance boundaries. The
 agreed technical direction is recorded in
 `docs/drivable_reconstruction_model_strategy.md`: retain SplatAD as the primary
@@ -1522,9 +1552,9 @@ and close parked cars still soften and stretch. HUGSIM passes as a structured
 background candidate, not as a quality promotion or TbV repair. Exact evidence
 is in `experiments/stage_h3_hugsim_pandaset_official_probe.md`.
 
-Stop adding route tiles, stop threshold-level static-mask refinement, and stop
-the cross-visit continuation path. Keep static-8k as the default and continue
-the agreed usability phase over the complete coverage pack:
+Pause route expansion, threshold-level static-mask refinement, and the
+cross-visit continuation path. Keep static-8k as the default and continue the
+agreed usability phase over the expanded coverage pack:
 
 1. select a small fixed station set spanning MTGS, the TbV branch, both
    long-route overlaps, and ordinary non-overlap road;
@@ -1546,9 +1576,11 @@ smallest next HUGSIM demo is the official 040 static-only background plus one
 explicit 3DRealCar actor under the existing simulated controller.
 Diffusion-prior 3DGS remains later research because it requires model
 fine-tuning and reconstruction retraining and introduces a
-multi-view-consistency risk. Do not train tiles 0/1/5/6 or claim the full 610 m
-route before the usability evidence justifies it. The third phase begins only
-for assets that pass: automate connected-block selection, distributed
+multi-view-consistency risk. The remaining tiles 0/1 would add only about
+160 m, so train them only if closing this particular route is worth more than
+selecting a genuinely longer connected log. Do not claim the full 610 m route.
+The third phase begins only for assets that pass: automate connected-block
+selection, distributed
 reconstruction, portable export, scene registration, live prefetch/eviction,
 and route-scale streaming.
 
@@ -1582,7 +1614,7 @@ plan. The short version is:
    and naive-inpainting evidence; retain cross-visit tile-2 10k and ProPainter
    only as partial research evidence, not promotion candidates; retain the
    official HUGSIM PandaSet-040 factual/static-only and `+/-1/3 m` probe as
-   structured-background evidence; retain the completed three-tile 260 m TbV
+   structured-background evidence; retain the completed five-tile 420 m TbV
    drive as the long-route coverage regression;
 9. keep the implemented provisional scene-040 world browser and operator trial
    as regression/acceptance work rather than coupling them to this new scene;

@@ -398,6 +398,18 @@ Stage H3 Level 9U
   250 ms stale-control brake, and NVENC H.264 over SRT
 → the real-checkpoint localhost loop delivered all 120 telemetry messages and
   97 complete latest video frames; real two-computer LAN latency remains open
+
+Stage H3 Level 9W
+→ promoted two more adjacent 100 m TbV tiles to step 7,999, extending the
+  data-supported route from 260 m to 420 m with four real 20 m overlaps
+→ generalized the offline driver/compositor from a fixed three-tile path to
+  an ordered `SceneTile` list while retaining the old entry points
+→ completed a 761-frame, 38.00 s simulated-human drive at 12 m/s with
+  +0.543/-0.565 m excursions, 0.435 m minimum reserve, endpoint braking, and
+  zero support-boundary hits
+→ decoded all 761 H.264 frames and manually retained road, curb, buildings,
+  and route topology through both new seams; foliage softness, traffic ghosts,
+  front-only output, and offline checkpoint loading remain explicit limits
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -810,11 +822,11 @@ The agreed priority order is now:
 3. automate reconstruction and deployment at scale only after the usability
    gate is defined and passed.
 
-The first coverage pack deliberately stays small: the existing 84 m MTGS
+The first coverage pack deliberately stays bounded: the existing 84 m MTGS
 wide-corridor/gentle-curve block, the existing TbV shared-approach
-straight/right branch, and one real 260 m continuous TbV tile-2/3/4 route.
+straight/right branch, and one real 420 m continuous TbV tile-2/3/4/5/6 route.
 The long route now has a common `SceneTile` manifest recording exact
-data/checkpoint/source provenance, transforms, supported route regions, two
+data/checkpoint/source provenance, transforms, supported route regions, four
 real overlaps, appearance profile, and evidence path. It passes the offline
 coverage/control slot, not equivalent realism or live checkpoint streaming.
 
@@ -830,12 +842,12 @@ the native display/control client's headless path passed a real-checkpoint
 localhost SRT plus WebSocket loop. This is not yet a real two-computer or
 desktop-window result.
 
-The long-route slot now passes on three adjacent tiles of the genuine 610.07 m
-repeated TbV route. Tiles 2/3/4 have step-7,999 checkpoints and the two real
-20 m seams retain aligned static road/building geometry. A kinematic
-simulated-human driver completed their 260 m union in 24.65 s at 12 m/s with
-+0.578/-0.544 m excursions, 0.422 m minimum support reserve, endpoint braking,
-zero boundary hits, and 494/494 decoded video frames.
+The long-route slot now passes on five adjacent tiles of the genuine 610.07 m
+repeated TbV route. Tiles 2/3/4/5/6 have step-7,999 checkpoints and the four
+real 20 m seams retain the static road/building topology. A kinematic
+simulated-human driver completed their 420 m union in 38.00 s at 12 m/s with
++0.543/-0.565 m excursions, 0.435 m minimum support reserve, endpoint braking,
+zero boundary hits, and 761/761 decoded video frames.
 
 This is not yet a complete trustworthy driving scene. Image-only, projected
 LiDAR, and persistence-only variants all failed as unconditional replacements.
@@ -845,7 +857,7 @@ remains mixed and a full-frame raw-RGB score is slightly lower. A 32-frame
 ProPainter smoke can visually remove the remaining traffic shapes, with zero
 changes outside its dilated masks and lower naive masked temporal difference,
 but it replaces hidden road with soft, unverified pixels and does not improve
-foliage. Keep all three unmasked 8k checkpoints as the default regression.
+foliage. Keep all five unmasked 8k checkpoints as the default regression.
 Cross-visit 10k and ProPainter remain research evidence, not candidates for the
 live renderer. Do not claim the full 610 m route.
 
@@ -874,7 +886,7 @@ To reproduce or inspect the promoted long-route pilot:
 ```bash
 scripts/run_stage_h3_tbv_long_route_tiles.sh paths
 scripts/run_stage_h3_tbv_long_route_tiles.sh seam-3-4-8000
-scripts/run_stage_h3_tbv_long_route_tiles.sh three-tile-drive-8000
+scripts/run_stage_h3_tbv_long_route_tiles.sh five-tile-drive-8000
 ```
 
 The five-minute Shidi-to-operator LAN run remains a small application
@@ -951,6 +963,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_tbv_three_tile_drive.md` records checkpoint data-view
   isolation, tile-4 2k/8k reconstruction, the second real seam, the 260 m
   simulated-human drive, and its coverage-versus-truth decision.
+- `experiments/stage_h3_tbv_five_tile_drive.md` records the dedicated tile-5/6
+  payloads and 8k resumes, generic ordered-tile driver, both new seam checks,
+  and the completed 420 m simulated-human drive.
 - `experiments/stage_h3_tbv_transient_mask_pilot.md` records the 2,468-image
   traffic-mask inventory, bounded masked 2k pair, same-pose/continuous
   comparison, visible obstacle reduction, and image-only-mask rejection.

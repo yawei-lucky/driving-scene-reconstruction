@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render a simulated-human 260 m drive through three adjacent TbV tiles."""
+"""Render a simulated-human drive through adjacent TbV reconstruction tiles."""
 
 from __future__ import annotations
 
@@ -70,17 +70,24 @@ def _interpolate(values: Sequence[float], progress: Sequence[float], target: flo
     return values[lower] * (1.0 - fraction) + values[upper] * fraction
 
 
-def build_corridor(track: Any) -> tuple[LoggedCenterlineCorridor, list[float]]:
+def build_corridor(
+    track: Any,
+    *,
+    route_start_meters: float = ROUTE_START_METERS,
+    route_end_meters: float = ROUTE_END_METERS,
+) -> tuple[LoggedCenterlineCorridor, list[float]]:
     progress = cumulative_distances(track.xy_metres)
-    route_progress = [ROUTE_START_METERS]
+    route_progress = [route_start_meters]
     route_progress.extend(
-        value for value in progress if ROUTE_START_METERS < value < ROUTE_END_METERS
+        value
+        for value in progress
+        if route_start_meters < value < route_end_meters
     )
-    route_progress.append(ROUTE_END_METERS)
+    route_progress.append(route_end_meters)
     xs = [point[0] for point in track.xy_metres]
     ys = [point[1] for point in track.xy_metres]
-    origin_x = _interpolate(xs, progress, ROUTE_START_METERS)
-    origin_y = _interpolate(ys, progress, ROUTE_START_METERS)
+    origin_x = _interpolate(xs, progress, route_start_meters)
+    origin_y = _interpolate(ys, progress, route_start_meters)
     samples = []
     for index, value in enumerate(route_progress):
         x = _interpolate(xs, progress, value) - origin_x
@@ -96,7 +103,7 @@ def build_corridor(track: Any) -> tuple[LoggedCenterlineCorridor, list[float]]:
         samples.append(
             LoggedCenterlineSample(
                 logical_frame=index,
-                log_time=value - ROUTE_START_METERS,
+                log_time=value - route_start_meters,
                 x=x,
                 y=y,
                 yaw=yaw,
@@ -118,6 +125,7 @@ def simulate_drive(
     fps: int,
     speed_mps: float,
     lateral_amplitude_meters: float,
+    route_start_meters: float = ROUTE_START_METERS,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     dt = 1.0 / fps
     vehicle = SimpleVehicleModel(
@@ -146,7 +154,8 @@ def simulate_drive(
     samples: list[dict[str, Any]] = []
     boundary_hits = 0
     endpoint_reached = False
-    for frame_index in range(round(40.0 * fps)):
+    maximum_duration_seconds = corridor.length / speed_mps + 15.0
+    for frame_index in range(round(maximum_duration_seconds * fps)):
         measurement = corridor.measure(state)
         decision = driver.decide(state, corridor, dt)
         samples.append(
@@ -156,7 +165,7 @@ def simulate_drive(
                 "measurement": measurement,
                 "decision": decision,
                 "global_progress_meters": (
-                    ROUTE_START_METERS + measurement.progress
+                    route_start_meters + measurement.progress
                 ),
             }
         )
@@ -326,6 +335,8 @@ def _annotate_frame(
     *,
     image_module: Any,
     draw_module: Any,
+    route_start_meters: float,
+    route_length_meters: float,
 ) -> Any:
     canvas = image.copy().convert("RGB")
     draw = draw_module.Draw(canvas)
@@ -339,8 +350,9 @@ def _annotate_frame(
     draw.text(
         (10, 7),
         (
-            f"TbV 260 m simulated drive | {sample['global_progress_meters'] - ROUTE_START_METERS:6.1f}"
-            f"/260.0 m | {state.speed:4.1f} m/s"
+            f"TbV {route_length_meters:.0f} m simulated drive | "
+            f"{sample['global_progress_meters'] - route_start_meters:6.1f}"
+            f"/{route_length_meters:.1f} m | {state.speed:4.1f} m/s"
         ),
         fill=(255, 235, 90),
     )
@@ -361,6 +373,7 @@ def combine_frames(
     output_dir: Path,
     *,
     fps: int,
+    route_start_meters: float,
 ) -> dict[str, Any]:
     import numpy as np
     from PIL import Image, ImageDraw
@@ -424,12 +437,19 @@ def combine_frames(
             weights,
             image_module=Image,
             draw_module=ImageDraw,
+            route_start_meters=route_start_meters,
+            route_length_meters=route.route_length_meters,
         )
         annotated.save(
             frames_dir / f"frame_{frame_index:06d}.jpg",
             quality=94,
         )
-    video = _encode_video(frames_dir, output_dir / "tbv_260m_drive.mp4", fps)
+    route_label = f"{route.route_length_meters:.0f}"
+    video = _encode_video(
+        frames_dir,
+        output_dir / f"tbv_{route_label}m_drive.mp4",
+        fps,
+    )
     return {
         "video": video,
         "near_black_fraction": distribution(near_black),
@@ -439,17 +459,84 @@ def combine_frames(
     }
 
 
+def parse_tile(value: str) -> tuple[str, float, float, Path, Path]:
+    parts = value.split(",", 4)
+    if len(parts) != 5:
+        raise argparse.ArgumentTypeError(
+            "tile must be ID,START_METERS,END_METERS,CONFIG,DATA_ROOT"
+        )
+    tile_id = parts[0].strip()
+    try:
+        start, end = map(float, parts[1:3])
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "tile start/end must be numeric meters"
+        ) from error
+    if (
+        not tile_id
+        or not all(math.isfinite(item) for item in (start, end))
+        or end <= start
+    ):
+        raise argparse.ArgumentTypeError(
+            "tile needs an ID and an end greater than its start"
+        )
+    return tile_id, start, end, Path(parts[3]), Path(parts[4])
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     for tile_id in ("tile-2", "tile-3", "tile-4"):
-        parser.add_argument(f"--{tile_id}-config", type=Path, required=True)
-        parser.add_argument(f"--{tile_id}-data-root", type=Path, required=True)
+        parser.add_argument(f"--{tile_id}-config", type=Path)
+        parser.add_argument(f"--{tile_id}-data-root", type=Path)
+    parser.add_argument(
+        "--tile",
+        action="append",
+        type=parse_tile,
+        help=(
+            "repeatable ID,START_METERS,END_METERS,CONFIG,DATA_ROOT; "
+            "when omitted, the legacy tile-2/3/4 arguments are required"
+        ),
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE)
     parser.add_argument("--fps", type=int, default=20)
     parser.add_argument("--speed-mps", type=float, default=12.0)
     parser.add_argument("--lateral-amplitude-meters", type=float, default=0.55)
     return parser.parse_args()
+
+
+def resolve_tiles(
+    args: argparse.Namespace,
+) -> list[tuple[str, float, float, Path, Path]]:
+    legacy_values = tuple(
+        getattr(args, f"tile_{index}_{kind}")
+        for index in (2, 3, 4)
+        for kind in ("config", "data_root")
+    )
+    if args.tile:
+        if any(value is not None for value in legacy_values):
+            raise ValueError("--tile cannot be mixed with legacy tile arguments")
+        tiles = list(args.tile)
+    else:
+        if any(value is None for value in legacy_values):
+            raise ValueError(
+                "provide repeated --tile values or all tile-2/3/4 arguments"
+            )
+        tiles = [
+            (
+                tile_id,
+                TILE_RANGES[tile_id][0],
+                TILE_RANGES[tile_id][1],
+                getattr(args, f"tile_{index}_config"),
+                getattr(args, f"tile_{index}_data_root"),
+            )
+            for index, tile_id in ((2, "tile_2"), (3, "tile_3"), (4, "tile_4"))
+        ]
+    if len(tiles) < 2:
+        raise ValueError("a tiled drive requires at least two tiles")
+    if len({item[0] for item in tiles}) != len(tiles):
+        raise ValueError("tile IDs must be unique")
+    return sorted(tiles, key=lambda item: item[1])
 
 
 def main() -> None:
@@ -460,6 +547,15 @@ def main() -> None:
         raise ValueError("speed must be finite and positive")
     if not 0.0 < args.lateral_amplitude_meters < 1.0:
         raise ValueError("lateral amplitude must lie inside (0, 1) m")
+    tiles = resolve_tiles(args)
+    route_start_meters = min(item[1] for item in tiles)
+    route_end_meters = max(item[2] for item in tiles)
+    legacy_three_tile = not args.tile
+    report_name = (
+        "tbv_three_tile_drive.json"
+        if legacy_three_tile
+        else "tbv_tiled_drive.json"
+    )
     output_dir = args.output_dir.expanduser().resolve()
     if output_dir.exists() and any(output_dir.iterdir()):
         raise RuntimeError(f"refusing to overwrite non-empty {output_dir}")
@@ -469,12 +565,17 @@ def main() -> None:
     track = load_track(metadata[REFERENCE_LOG])
     if track is None:
         raise RuntimeError("reference route track is missing")
-    corridor, full_progress = build_corridor(track)
+    corridor, full_progress = build_corridor(
+        track,
+        route_start_meters=route_start_meters,
+        route_end_meters=route_end_meters,
+    )
     samples, control_summary = simulate_drive(
         corridor,
         fps=args.fps,
         speed_mps=args.speed_mps,
         lateral_amplitude_meters=args.lateral_amplitude_meters,
+        route_start_meters=route_start_meters,
     )
     target_timestamps_ns = [
         _interpolate(
@@ -487,9 +588,12 @@ def main() -> None:
     ]
 
     inputs = {
-        "tile_2": (args.tile_2_config, args.tile_2_data_root),
-        "tile_3": (args.tile_3_config, args.tile_3_data_root),
-        "tile_4": (args.tile_4_config, args.tile_4_data_root),
+        tile_id: (config_path, data_root)
+        for tile_id, _, _, config_path, data_root in tiles
+    }
+    tile_ranges = {
+        tile_id: (start, end)
+        for tile_id, start, end, _, _ in tiles
     }
     active = {
         tile_id: [
@@ -497,7 +601,7 @@ def main() -> None:
             for index, sample in enumerate(samples)
             if start <= sample["global_progress_meters"] <= end
         ]
-        for tile_id, (start, end) in TILE_RANGES.items()
+        for tile_id, (start, end) in tile_ranges.items()
     }
     tile_results = {}
     for tile_id, (config_path, data_root) in inputs.items():
@@ -533,16 +637,26 @@ def main() -> None:
             ),
             support_half_width_meters=1.0,
             renderer_profile="tbv_reference_front_static_8k",
-            evidence_path=str(output_dir / "tbv_three_tile_drive.json"),
+            evidence_path=str(output_dir / report_name),
         )
-        for tile_id, (start, end) in TILE_RANGES.items()
+        for tile_id, (start, end) in tile_ranges.items()
     )
     route = SceneTileRoute(scene_tiles)
-    composite = combine_frames(route, samples, output_dir, fps=args.fps)
+    composite = combine_frames(
+        route,
+        samples,
+        output_dir,
+        fps=args.fps,
+        route_start_meters=route_start_meters,
+    )
     report = {
-        "format": "driving_scene_reconstruction.tbv_three_tile_drive.v0",
+        "format": (
+            "driving_scene_reconstruction.tbv_three_tile_drive.v0"
+            if legacy_three_tile
+            else "driving_scene_reconstruction.tbv_tiled_drive.v1"
+        ),
         "scope": (
-            "Sequential offline loading of three independently reconstructed "
+            f"Sequential offline loading of {len(tiles)} independently reconstructed "
             "static checkpoints with a real kinematic bicycle model, bounded "
             "simulated-human controls, logged source-time progression, and "
             "smooth image-space overlap blending. This is a coverage/runtime "
@@ -588,7 +702,7 @@ def main() -> None:
     report["technical_status"] = (
         "pass" if all(report["technical_gates"].values()) else "fail"
     )
-    report_path = output_dir / "tbv_three_tile_drive.json"
+    report_path = output_dir / report_name
     report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))
 

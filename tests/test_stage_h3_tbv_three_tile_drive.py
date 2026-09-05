@@ -6,6 +6,7 @@ import importlib.util
 import math
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 import unittest
 
 
@@ -63,6 +64,55 @@ class TbVThreeTileDriveTests(unittest.TestCase):
         self.assertEqual(result["boundary_hits"], 0)
         self.assertGreater(len(drive), 400)
         self.assertGreater(result["minimum_support_margin_meters"], 0.25)
+
+    def test_generic_tile_arguments_are_sorted_by_route_progress(self) -> None:
+        args = SimpleNamespace(
+            tile=[
+                MODULE.parse_tile("tile_5,400,500,/tmp/5.yml,/tmp/data5"),
+                MODULE.parse_tile("tile_4,320,420,/tmp/4.yml,/tmp/data4"),
+            ],
+            tile_2_config=None,
+            tile_2_data_root=None,
+            tile_3_config=None,
+            tile_3_data_root=None,
+            tile_4_config=None,
+            tile_4_data_root=None,
+        )
+
+        tiles = MODULE.resolve_tiles(args)
+
+        self.assertEqual([item[0] for item in tiles], ["tile_4", "tile_5"])
+        self.assertEqual(tiles[0][1:3], (320.0, 420.0))
+
+    def test_vehicle_completes_420_meter_generic_drive(self) -> None:
+        samples = tuple(
+            MODULE.LoggedCenterlineSample(
+                logical_frame=index,
+                log_time=float(index),
+                x=20.0 * index,
+                y=1.5 * math.sin(index / 5.0),
+                yaw=0.0,
+            )
+            for index in range(22)
+        )
+        corridor = MODULE.LoggedCenterlineCorridor(
+            samples=samples,
+            half_width=1.0,
+            max_heading_error=math.radians(20.0),
+        )
+
+        drive, result = MODULE.simulate_drive(
+            corridor,
+            fps=20,
+            speed_mps=12.0,
+            lateral_amplitude_meters=0.55,
+            route_start_meters=160.0,
+        )
+
+        self.assertTrue(result["control_gate"])
+        self.assertTrue(result["endpoint_reached"])
+        self.assertEqual(result["boundary_hits"], 0)
+        self.assertGreater(len(drive), 650)
 
 
 if __name__ == "__main__":
