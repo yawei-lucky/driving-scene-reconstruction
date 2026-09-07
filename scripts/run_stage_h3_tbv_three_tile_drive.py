@@ -53,6 +53,7 @@ REFERENCE_LOG = "V17LgyVPyrd2yjWS4oEuipUBJQN5X0wZ__Spring_2020"
 CAMERA_NAME = "ring_front_center"
 ROUTE_START_METERS = 160.0
 ROUTE_END_METERS = 420.0
+TRUSTED_HALF_WIDTH_METERS = 1.0
 TILE_RANGES = {
     "tile_2": (160.0, 260.0),
     "tile_3": (240.0, 340.0),
@@ -75,6 +76,7 @@ def build_corridor(
     *,
     route_start_meters: float = ROUTE_START_METERS,
     route_end_meters: float = ROUTE_END_METERS,
+    half_width_meters: float = TRUSTED_HALF_WIDTH_METERS,
 ) -> tuple[LoggedCenterlineCorridor, list[float]]:
     progress = cumulative_distances(track.xy_metres)
     route_progress = [route_start_meters]
@@ -112,7 +114,7 @@ def build_corridor(
     return (
         LoggedCenterlineCorridor(
             samples=tuple(samples),
-            half_width=1.0,
+            half_width=half_width_meters,
             max_heading_error=math.radians(20.0),
         ),
         progress,
@@ -126,6 +128,7 @@ def simulate_drive(
     speed_mps: float,
     lateral_amplitude_meters: float,
     route_start_meters: float = ROUTE_START_METERS,
+    trusted_half_width_meters: float = TRUSTED_HALF_WIDTH_METERS,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     dt = 1.0 / fps
     vehicle = SimpleVehicleModel(
@@ -205,7 +208,21 @@ def simulate_drive(
         "maximum_brake": max(
             item["decision"].control.brake for item in samples
         ),
+        "trusted_support_half_width_meters": trusted_half_width_meters,
+        "frames_outside_trusted_support": sum(
+            abs(value) > trusted_half_width_meters for value in offsets
+        ),
+        "maximum_trusted_support_exceedance_meters": max(
+            max(0.0, abs(value) - trusted_half_width_meters)
+            for value in offsets
+        ),
     }
+    summary["fraction_outside_trusted_support"] = (
+        summary["frames_outside_trusted_support"] / len(samples)
+    )
+    summary["within_trusted_support"] = (
+        summary["frames_outside_trusted_support"] == 0
+    )
     summary["control_gate"] = (
         endpoint_reached
         and boundary_hits == 0
@@ -337,10 +354,12 @@ def _annotate_frame(
     draw_module: Any,
     route_start_meters: float,
     route_length_meters: float,
+    diagnostic_half_width_meters: float | None,
 ) -> Any:
     canvas = image.copy().convert("RGB")
     draw = draw_module.Draw(canvas)
-    draw.rectangle((0, 0, canvas.width, 58), fill=(0, 0, 0))
+    header_height = 82 if diagnostic_half_width_meters is not None else 58
+    draw.rectangle((0, 0, canvas.width, header_height), fill=(0, 0, 0))
     state = sample["state"]
     measurement = sample["measurement"]
     decision = sample["decision"]
@@ -364,6 +383,25 @@ def _annotate_frame(
         ),
         fill=(235, 240, 245),
     )
+    if diagnostic_half_width_meters is not None:
+        exceedance = max(
+            0.0,
+            abs(measurement.lateral_offset) - TRUSTED_HALF_WIDTH_METERS,
+        )
+        if exceedance > 0.0:
+            support_text = (
+                f"OUTSIDE trusted +/-{TRUSTED_HALF_WIDTH_METERS:.0f} m tube "
+                f"by {exceedance:.2f} m | diagnostic envelope "
+                f"+/-{diagnostic_half_width_meters:g} m"
+            )
+            support_colour = (255, 105, 90)
+        else:
+            support_text = (
+                f"inside trusted +/-{TRUSTED_HALF_WIDTH_METERS:.0f} m tube | "
+                f"diagnostic envelope +/-{diagnostic_half_width_meters:g} m"
+            )
+            support_colour = (130, 255, 160)
+        draw.text((10, 55), support_text, fill=support_colour)
     return canvas
 
 
@@ -374,6 +412,8 @@ def combine_frames(
     *,
     fps: int,
     route_start_meters: float,
+    diagnostic_half_width_meters: float | None,
+    lateral_amplitude_meters: float,
 ) -> dict[str, Any]:
     import numpy as np
     from PIL import Image, ImageDraw
@@ -439,15 +479,23 @@ def combine_frames(
             draw_module=ImageDraw,
             route_start_meters=route_start_meters,
             route_length_meters=route.route_length_meters,
+            diagnostic_half_width_meters=diagnostic_half_width_meters,
         )
         annotated.save(
             frames_dir / f"frame_{frame_index:06d}.jpg",
             quality=94,
         )
     route_label = f"{route.route_length_meters:.0f}"
+    if diagnostic_half_width_meters is None:
+        video_name = f"tbv_{route_label}m_drive.mp4"
+    else:
+        amplitude_label = f"{lateral_amplitude_meters:g}".replace(".", "p")
+        video_name = (
+            f"tbv_{route_label}m_lateral_{amplitude_label}m_probe.mp4"
+        )
     video = _encode_video(
         frames_dir,
-        output_dir / f"tbv_{route_label}m_drive.mp4",
+        output_dir / video_name,
         fps,
     )
     return {
@@ -502,6 +550,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fps", type=int, default=20)
     parser.add_argument("--speed-mps", type=float, default=12.0)
     parser.add_argument("--lateral-amplitude-meters", type=float, default=0.55)
+    parser.add_argument(
+        "--diagnostic-half-width-meters",
+        type=float,
+        help=(
+            "mechanical envelope for an intentional out-of-support lateral "
+            "probe; this does not enlarge the trusted +/-1 m data boundary"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -545,17 +601,40 @@ def main() -> None:
         raise ValueError("fps must be positive")
     if not math.isfinite(args.speed_mps) or args.speed_mps <= 0.0:
         raise ValueError("speed must be finite and positive")
-    if not 0.0 < args.lateral_amplitude_meters < 1.0:
-        raise ValueError("lateral amplitude must lie inside (0, 1) m")
+    diagnostic_half_width_meters = args.diagnostic_half_width_meters
+    if diagnostic_half_width_meters is None:
+        if not 0.0 < args.lateral_amplitude_meters < TRUSTED_HALF_WIDTH_METERS:
+            raise ValueError("lateral amplitude must lie inside (0, 1) m")
+        simulation_half_width_meters = TRUSTED_HALF_WIDTH_METERS
+    else:
+        if (
+            not math.isfinite(diagnostic_half_width_meters)
+            or diagnostic_half_width_meters <= TRUSTED_HALF_WIDTH_METERS
+        ):
+            raise ValueError("diagnostic half width must exceed the trusted 1 m")
+        if (
+            not math.isfinite(args.lateral_amplitude_meters)
+            or args.lateral_amplitude_meters <= TRUSTED_HALF_WIDTH_METERS
+            or args.lateral_amplitude_meters
+            >= diagnostic_half_width_meters - 0.25
+        ):
+            raise ValueError(
+                "diagnostic amplitude must exceed 1 m and retain 0.25 m "
+                "inside the mechanical envelope"
+            )
+        simulation_half_width_meters = diagnostic_half_width_meters
     tiles = resolve_tiles(args)
     route_start_meters = min(item[1] for item in tiles)
     route_end_meters = max(item[2] for item in tiles)
     legacy_three_tile = not args.tile
-    report_name = (
-        "tbv_three_tile_drive.json"
-        if legacy_three_tile
-        else "tbv_tiled_drive.json"
-    )
+    if diagnostic_half_width_meters is not None:
+        report_name = "tbv_tiled_lateral_probe.json"
+    else:
+        report_name = (
+            "tbv_three_tile_drive.json"
+            if legacy_three_tile
+            else "tbv_tiled_drive.json"
+        )
     output_dir = args.output_dir.expanduser().resolve()
     if output_dir.exists() and any(output_dir.iterdir()):
         raise RuntimeError(f"refusing to overwrite non-empty {output_dir}")
@@ -569,6 +648,7 @@ def main() -> None:
         track,
         route_start_meters=route_start_meters,
         route_end_meters=route_end_meters,
+        half_width_meters=simulation_half_width_meters,
     )
     samples, control_summary = simulate_drive(
         corridor,
@@ -576,6 +656,7 @@ def main() -> None:
         speed_mps=args.speed_mps,
         lateral_amplitude_meters=args.lateral_amplitude_meters,
         route_start_meters=route_start_meters,
+        trusted_half_width_meters=TRUSTED_HALF_WIDTH_METERS,
     )
     target_timestamps_ns = [
         _interpolate(
@@ -648,6 +729,8 @@ def main() -> None:
         output_dir,
         fps=args.fps,
         route_start_meters=route_start_meters,
+        diagnostic_half_width_meters=diagnostic_half_width_meters,
+        lateral_amplitude_meters=args.lateral_amplitude_meters,
     )
     report = {
         "format": (
@@ -660,12 +743,28 @@ def main() -> None:
             "static checkpoints with a real kinematic bicycle model, bounded "
             "simulated-human controls, logged source-time progression, and "
             "smooth image-space overlap blending. This is a coverage/runtime "
-            "pilot, not equivalent-realism or live-streaming acceptance."
+            "pilot, not equivalent-realism or live-streaming acceptance. "
+            + (
+                "The camera path intentionally exceeds the trusted +/-1 m "
+                "data boundary and is diagnostic only."
+                if diagnostic_half_width_meters is not None
+                else ""
+            )
         ),
         "reference_log": REFERENCE_LOG,
         "camera": CAMERA_NAME,
         "fps": args.fps,
         "requested_cruise_speed_mps": args.speed_mps,
+        "lateral_probe": {
+            "requested_amplitude_meters": args.lateral_amplitude_meters,
+            "trusted_half_width_meters": TRUSTED_HALF_WIDTH_METERS,
+            "diagnostic_half_width_meters": diagnostic_half_width_meters,
+            "driving_acceptance_status": (
+                "out_of_support_diagnostic_only"
+                if diagnostic_half_width_meters is not None
+                else "within_declared_support"
+            ),
+        },
         "route": route.manifest(),
         "control": control_summary,
         "tiles": tile_results,
@@ -699,6 +798,14 @@ def main() -> None:
             "The supported lateral tube remains +/-1 m for this data.",
         ],
     }
+    if diagnostic_half_width_meters is not None:
+        report["technical_gates"]["out_of_support_motion_exercised"] = (
+            control_summary["maximum_trusted_support_exceedance_meters"] >= 1.5
+        )
+        report["limitations"].append(
+            "Out-of-support images are extrapolation diagnostics and cannot "
+            "be used as evidence that the route is safely drivable."
+        )
     report["technical_status"] = (
         "pass" if all(report["technical_gates"].values()) else "fail"
     )

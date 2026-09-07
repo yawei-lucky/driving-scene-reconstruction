@@ -114,6 +114,44 @@ class TbVThreeTileDriveTests(unittest.TestCase):
         self.assertEqual(result["boundary_hits"], 0)
         self.assertGreater(len(drive), 650)
 
+    def test_out_of_support_probe_reaches_both_sides_without_relabeling_support(
+        self,
+    ) -> None:
+        samples = tuple(
+            MODULE.LoggedCenterlineSample(
+                logical_frame=index,
+                log_time=float(index),
+                x=20.0 * index,
+                y=1.5 * math.sin(index / 5.0),
+                yaw=0.0,
+            )
+            for index in range(22)
+        )
+        corridor = MODULE.LoggedCenterlineCorridor(
+            samples=samples,
+            half_width=4.0,
+            max_heading_error=math.radians(20.0),
+        )
+
+        drive, result = MODULE.simulate_drive(
+            corridor,
+            fps=20,
+            speed_mps=12.0,
+            lateral_amplitude_meters=3.0,
+            route_start_meters=160.0,
+            trusted_half_width_meters=1.0,
+        )
+
+        self.assertTrue(result["control_gate"])
+        self.assertTrue(result["endpoint_reached"])
+        self.assertGreater(result["maximum_left_meters"], 2.5)
+        self.assertLess(result["maximum_right_meters"], -2.5)
+        self.assertFalse(result["within_trusted_support"])
+        self.assertGreater(result["frames_outside_trusted_support"], 0)
+        self.assertGreater(
+            result["maximum_trusted_support_exceedance_meters"], 1.5
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

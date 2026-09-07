@@ -410,6 +410,17 @@ Stage H3 Level 9W
 → decoded all 761 H.264 frames and manually retained road, curb, buildings,
   and route topology through both new seams; foliage softness, traffic ghosts,
   front-only output, and offline checkpoint loading remain explicit limits
+
+Stage H3 Level 9X
+→ added an explicit out-of-support diagnostic that preserves every tile's
+  truthful +/-1 m support declaration while exercising a +/-3 m camera path
+→ completed the same 420 m route at 12 m/s with +2.984/-2.985 m excursions,
+  264/761 frames outside support, and 761/761 decoded frames
+→ motion remains continuous at 20 fps, but a malformed dark foreground
+  occluder, floating sign, road/vehicle stretch, and foliage morphing become
+  conspicuous near the right peak and tile-4/tile-5 transition
+→ retain +/-1 m as the TbV acceptance boundary; wide driving needs real
+  lateral observation coverage rather than renderer extrapolation
 ```
 
 The H2 renderer clones the dataset cameras' full intrinsics, fisheye distortion,
@@ -849,6 +860,13 @@ simulated-human driver completed their 420 m union in 38.00 s at 12 m/s with
 +0.543/-0.565 m excursions, 0.435 m minimum support reserve, endpoint braking,
 zero boundary hits, and 761/761 decoded video frames.
 
+The separate +/-3 m stress video answers the wide-lateral question without
+changing that acceptance claim. Control and playback remain smooth, but
+content does not: the right sweep exposes a large malformed foreground region
+and a floating sign, and the tile-4/tile-5 handoff becomes visibly stronger.
+Treat it as a useful failure showing that more lateral observations are the
+next requirement; do not widen the TbV support tube from this render alone.
+
 This is not yet a complete trustworthy driving scene. Image-only, projected
 LiDAR, and persistence-only variants all failed as unconditional replacements.
 The tile-2 cross-visit RGB candidate now reduces evidence-backed
@@ -887,6 +905,7 @@ To reproduce or inspect the promoted long-route pilot:
 scripts/run_stage_h3_tbv_long_route_tiles.sh paths
 scripts/run_stage_h3_tbv_long_route_tiles.sh seam-3-4-8000
 scripts/run_stage_h3_tbv_long_route_tiles.sh five-tile-drive-8000
+scripts/run_stage_h3_tbv_long_route_tiles.sh five-tile-lateral-probe-8000
 ```
 
 The five-minute Shidi-to-operator LAN run remains a small application
@@ -966,6 +985,9 @@ The success criteria are deliberately separate from generic image metrics:
 - `experiments/stage_h3_tbv_five_tile_drive.md` records the dedicated tile-5/6
   payloads and 8k resumes, generic ordered-tile driver, both new seam checks,
   and the completed 420 m simulated-human drive.
+- `experiments/stage_h3_tbv_lateral_3m_probe.md` records the explicit +/-3 m
+  out-of-support drive, smoothness comparison, characteristic failures, full
+  comparison video, and three representative clips.
 - `experiments/stage_h3_tbv_transient_mask_pilot.md` records the 2,468-image
   traffic-mask inventory, bounded masked 2k pair, same-pose/continuous
   comparison, visible obstacle reduction, and image-only-mask rejection.

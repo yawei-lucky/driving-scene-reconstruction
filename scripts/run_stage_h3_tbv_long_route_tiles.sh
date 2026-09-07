@@ -29,6 +29,7 @@ TILE34_STATIC_ARTIFACT_ROOT="${H3_TBV_LONG_TILE34_STATIC_ARTIFACT_ROOT:-${H3_ROO
 THREE_TILE_DRIVE_ROOT="${H3_TBV_LONG_THREE_TILE_DRIVE_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_three_tile_drive_8000_20260728}"
 FOUR_TILE_DRIVE_ROOT="${H3_TBV_LONG_FOUR_TILE_DRIVE_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_four_tile_drive_8000_20260905}"
 FIVE_TILE_DRIVE_ROOT="${H3_TBV_LONG_FIVE_TILE_DRIVE_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_five_tile_drive_8000_20260905}"
+FIVE_TILE_LATERAL_PROBE_ROOT="${H3_TBV_LONG_FIVE_TILE_LATERAL_PROBE_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_five_tile_lateral_3m_20260907}"
 CROSS_VISIT_AB_ROOT="${H3_TBV_LONG_CROSS_VISIT_AB_ROOT:-${H3_ROOT}/artifacts/tbv_long_route_tile_2_quality_ab_cross_visit_hires_10k_20260728}"
 REFERENCE="V17LgyVPyrd2yjWS4oEuipUBJQN5X0wZ__Spring_2020"
 REPEAT="cTrSOEc1gW3XqELP562UlUFJYCmlRoa9__Spring_2020"
@@ -628,6 +629,25 @@ case "$MODE" in
       --tile "tile_6,480,580,$TILE6_STATIC_CONFIG,$TILE6_DATA_ROOT" \
       --output-dir "$FIVE_TILE_DRIVE_ROOT"
     ;;
+  five-tile-lateral-probe-8000)
+    if [[ ! -f "$TILE2_STATIC_CHECKPOINT" ||
+          ! -f "$TILE3_STATIC_CHECKPOINT" ||
+          ! -f "$TILE4_STATIC_CHECKPOINT" ||
+          ! -f "$TILE5_STATIC_CHECKPOINT" ||
+          ! -f "$TILE6_STATIC_CHECKPOINT" ]]; then
+      echo "tile 2/3/4/5/6 8,000-step checkpoints are required" >&2
+      exit 1
+    fi
+    "$PYTHON" "$REPO_ROOT/scripts/run_stage_h3_tbv_three_tile_drive.py" \
+      --tile "tile_2,160,260,$TILE2_STATIC_CONFIG,$TILE23_DATA_ROOT" \
+      --tile "tile_3,240,340,$TILE3_STATIC_CONFIG,$TILE23_DATA_ROOT" \
+      --tile "tile_4,320,420,$TILE4_STATIC_CONFIG,$DATA_ROOT" \
+      --tile "tile_5,400,500,$TILE5_STATIC_CONFIG,$TILE5_DATA_ROOT" \
+      --tile "tile_6,480,580,$TILE6_STATIC_CONFIG,$TILE6_DATA_ROOT" \
+      --lateral-amplitude-meters 3.0 \
+      --diagnostic-half-width-meters 4.0 \
+      --output-dir "$FIVE_TILE_LATERAL_PROBE_ROOT"
+    ;;
   masked-seam-2000)
     if [[ ! -f "$TILE2_MASKED_CONFIG" ||
           ! -f "$TILE2_MASKED_CHECKPOINT" ||
@@ -747,6 +767,7 @@ case "$MODE" in
     echo "three-tile drive evidence: $THREE_TILE_DRIVE_ROOT"
     echo "four-tile drive evidence: $FOUR_TILE_DRIVE_ROOT"
     echo "five-tile drive evidence: $FIVE_TILE_DRIVE_ROOT"
+    echo "five-tile lateral probe: $FIVE_TILE_LATERAL_PROBE_ROOT"
     ;;
   *)
     echo "Usage: $0 MODE" >&2
@@ -761,7 +782,7 @@ case "$MODE" in
     echo "       cross-visit-quality-ab-2" >&2
     echo "       seam-8000 seam-3-4-8000 continuous-8000" >&2
     echo "       three-tile-drive-8000 four-tile-drive-8000" >&2
-    echo "       five-tile-drive-8000 paths" >&2
+    echo "       five-tile-drive-8000 five-tile-lateral-probe-8000 paths" >&2
     echo "       masked-2 masked-3 masked-seam-2000 masked-continuous-2000" >&2
     echo "       joint-masked-2 joint-masked-3 joint-masked-seam-2000" >&2
     echo "       joint-masked-continuous-2000" >&2

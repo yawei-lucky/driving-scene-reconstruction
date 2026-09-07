@@ -1,6 +1,6 @@
 # Project State — Driving Scene Reconstruction
 
-Last updated: 2026-09-05
+Last updated: 2026-09-07
 
 ## 1. Product Goal
 
@@ -1250,6 +1250,31 @@ This extends the offline coverage/control regression, not equivalent realism
 or live tile streaming. Exact evidence is in
 `experiments/stage_h3_tbv_five_tile_drive.md`.
 
+### Stage H3 Level 9X — TbV +/-3 m lateral stress test
+
+Completed on the RTX 4090 D host on 2026-09-07:
+
+- added an explicit diagnostic envelope that can exercise out-of-support poses
+  without changing the five `SceneTile` declarations or their truthful +/-1 m
+  support boundary;
+- completed the 420 m route at 12.0 m/s with +2.984/-2.985 m excursions,
+  264/761 frames outside the trusted tube, zero mechanical boundary hits, and
+  761/761 decoded H.264 frames;
+- retained continuous 20 fps playback and continuous road topology. Temporal
+  RGB MAE p50/p95/maximum rose from 6.281/11.857/15.811 in the small-offset
+  baseline to 6.714/12.655/17.314 per 255;
+- rejected +/-3 m for content plausibility: the right peak exposes a large
+  malformed dark foreground region and floating sign, the tile-4/tile-5 entry
+  delta rises from 5.667 to 13.854, and road texture, parked vehicles, wires,
+  and foliage visibly stretch or morph;
+- produced a 17.4 MB full side-by-side baseline comparison plus left-sweep,
+  right-sweep/tile-4-to-5, and tile-5-to-6 representative clips.
+
+This is a useful negative result: control and frame delivery remain smooth,
+but rendering unsupported lateral viewpoints does not create reliable driving
+coverage. Keep the TbV acceptance tube at +/-1 m. Exact evidence is in
+`experiments/stage_h3_tbv_lateral_3m_probe.md`.
+
 ## 3. What The System Can Do Now
 
 ```text
@@ -1354,6 +1379,12 @@ one 610 m repeated real route
 This is an offline coverage/runtime pilot. It does not yet keep adjacent
 checkpoints resident, prefetch/evict them live, render the full cockpit, or
 establish free-space/collision truth.
+
+An explicit diagnostic mode can mechanically query the same route out to a
++/-3 m lateral programme, but it does not expand the manifest support. That
+probe keeps motion continuous while exposing severe hidden-surface and
+foreground deformation, so it is a regression artifact rather than a
+drivability promotion.
 
 This is the first repository state where simulated ego motion changes pixels
 produced by the trained reconstruction checkpoint. The logged browser loop now
@@ -1507,6 +1538,10 @@ Stage H3 now has a real long-route result rather than only a candidate. The
 checkpoints, all four adjacent seams have evidence, and a kinematic simulated
 driver completed their 420 m union at 12 m/s with four bounded overlap
 transitions and zero support-boundary hits.
+The separate +/-3 m diagnostic completes mechanically but fails content
+plausibility. It confirms that large lateral freedom requires laterally offset
+real observations or adjacent-lane traversals; the current five checkpoints
+must retain their +/-1 m accepted support.
 The prescribed-path smoke, control/support adapter, and simulated-driver MTGS
 render loop remain complete for the released 84 m Singapore block. The MTGS
 path now also has two separable LAN applications and a passed localhost
